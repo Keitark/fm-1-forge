@@ -1,14 +1,14 @@
 # FM1 Forge
 
-FM1 Forge **3.0.1** is the renamed private FM1 App Library plugin. Its existing plugin ID,
+FM1 Forge **3.1.0** is the renamed private FM1 App Library plugin. Its existing plugin ID,
 Site URL and local bridge remain in use. Open the installed plugin's newest app
 card in Codex's side panel. The primary interface is the native MCP App panel.
 
-The current resource is `ui://fm1/forge-panel-v2.html`; older resource aliases
-remain available. The final private Site deployment succeeded with MCP enabled.
-The newest native card has not yet been expanded, and older expanded panels
-remain cached App Library UI. Confirm the **FM1 Forge** header and module
-designer in the newest card before treating the native view as current.
+The current resource is `ui://fm1/forge-panel-v3.html`; older resource aliases
+remain available. Open the newest Forge card for its current extension controls.
+The [native extensions guide](MCP_EXTENSIONS.md) describes the official SDK,
+settings, drafts, file editing, mentions, forms and chat handoff. Dated
+deployment and actual native-host checks are in [verification](VERIFICATION.md).
 
 Diagnostics installation is still pending. Runtime elevation was canceled;
 no new protected helper or firmware write resulted. A ready protected helper

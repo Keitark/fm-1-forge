@@ -1,5 +1,27 @@
 # FM1 Codex integration handoff
 
+## FM1 Forge official SDK release 3.1.0 (2026-10-11)
+
+The current source integrates the official OpenAI MCP Extensions SDK 0.2.0,
+packaged from immutable upstream revision
+`0d606217705e0e71eb21fff009619b67b80611dc`. See [the extension guide](MCP_EXTENSIONS.md)
+and [package provenance](../site/vendor/openai-mcp-extensions.ORIGIN.md).
+The canonical resource is now `ui://fm1/forge-panel-v3.html`; all earlier aliases
+remain. The same plugin identity, private Site, bridge and saved transfers are
+retained. New migration `0003_equal_sage.sql` adds owner-scoped settings and
+configuration draft tables without changing existing job or proof data.
+
+Native settings, mentions, resources, extended forms, deep links, file editing,
+model context, current/new messages and drafts, file opening and onboarding are
+implemented with capability checks. Configuration drafts may be saved before
+hardware qualification; the existing firmware project handoff still requires
+the authoritative diagnostic baseline. No extension action bypasses the
+protected writer, approves a transfer or performs a hardware operation.
+
+Current release/deployment IDs, complete check results and actual native-host
+observations are recorded in the dated 3.1.0 entry in [VERIFICATION.md](VERIFICATION.md).
+The previous entries below are historical evidence.
+
 ## FM1 Forge final release 3.0.1 (2026-10-11)
 
 The same owner-private plugin remains

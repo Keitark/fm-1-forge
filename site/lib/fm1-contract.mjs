@@ -1,5 +1,6 @@
 import { ICONS } from './fm1-icon.mjs';
-export const RESOURCE_URI = 'ui://fm1/forge-panel-v2.html';
+import { OpenAIUiToolMetadataSchema } from '@openai/mcp-extensions';
+export const RESOURCE_URI = 'ui://fm1/forge-panel-v3.html';
 export const PROFILES = [
   {profile:'diagnostics',title:'Forge diagnostics',description:'Test inputs, LCD and audio before starting your firmware project.',symbol:'F'},
   {profile:'nes',title:'NES',description:'Play your prepared cartridge collection.',symbol:'N'},
@@ -48,7 +49,7 @@ const definitions = [
 export const TOOLS = definitions.map(([name,title,description,fields,readOnly])=>({
   name,title,description,inputSchema:{type:'object',properties:Object.fromEntries(fields.map(key=>[key,schemas[key]])),required:fields,additionalProperties:false},
   annotations:{readOnlyHint:readOnly,destructiveHint:name.startsWith('confirm_'),idempotentHint:readOnly,openWorldHint:false},
-  ...(name==='open_fm1_library'?{icons:ICONS,_meta:{ui:{resourceUri:RESOURCE_URI},'openai/ui':{entrypoints:[{type:'global'},{type:'thread'}]}}}:{}),
+  ...(name==='open_fm1_library'?{icons:ICONS,_meta:{ui:{resourceUri:RESOURCE_URI},'openai/ui':OpenAIUiToolMetadataSchema.parse({entrypoints:[{type:'global',quickAction:{title:'Configure firmware',icons:ICONS,target:{type:'tool',name:'configure_fm1_project',arguments:{}}}},{type:'thread'}],preferredModelDisplayMode:'fullscreen'})}}:{}),
   ...(name.startsWith('confirm_')?{_meta:{ui:{visibility:['app']}}}:{}),
 }));
 const PRIVATE = /^(image|image_hex|firmware|firmware_bytes|baseline|baseline_sha256|token|credential|authorization|session_root|path|request_digest|target|PNPDeviceID|serial_number|private.*)$/i;

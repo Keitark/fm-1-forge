@@ -8,7 +8,7 @@ import {projectConfig,projectPrompt,verifiedDiagnostics,verifiedBaseline} from '
 
 const tick=()=>new Promise(resolve=>setTimeout(resolve,15));
 async function until(predicate){for(let attempt=0;attempt<100;attempt++){if(predicate())return;await tick();}assert.fail('Panel did not reach the expected state.');}
-async function panel({embedded=false,initial=true,serverTools=true,hostMessages=false,hostRejectMessage=false,baseline=null,catalogValue=null,inventory=null,official=false,loseConfirmationReply=false,jobData=null,beforeCall=null,nativeControls=false,omitPlanJobId=false,preferences=null,storageBlocked=false,legacyPreferences=null}={}){
+async function panel({embedded=false,initial=true,serverTools=true,hostMessages=false,hostRejectMessage=false,baseline=null,catalogValue=null,inventory=null,official=false,loseConfirmationReply=false,jobData=null,beforeCall=null,nativeControls=false,omitPlanJobId=false,preferences=null,storageBlocked=false,legacyPreferences=null,nativeExtensions=false,initialFile=null,fileInputFirst=true,initialToolResult=null}={}){
   const env=database();connect(env,true,official);cacheCatalog(env,'alice',catalogValue||undefined);if(inventory)cacheInventory(env,'alice',inventory);
   const seededTasks=env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY id').all();
   const nodes=new Map(),registered=new Map(),requests=[],requestArgs=[],events=new Map(),notifications=[],timers=new Map(),delays=[],storage=new Map(),storageWrites=[];
@@ -23,18 +23,23 @@ async function panel({embedded=false,initial=true,serverTools=true,hostMessages=
   const parent=embedded?{postMessage(message){notifications.push(message);if(message.id===undefined||!message.method)return;queueMicrotask(async()=>{
     let response;
     try{
-      const result=message.method==='ui/initialize'?{protocolVersion:'2026-01-26',hostInfo:{name:'FM1 fixture host',version:'1'},hostCapabilities:{...(serverTools?{serverTools:{}}:{}),...(hostMessages?{message:{text:{}}}:{})},hostContext:{theme:'light',displayMode:'fullscreen'}}:message.method==='ui/message'?{isError:hostRejectMessage}:toolResult(await backend(message.params.name,message.params.arguments));
+      const result=message.method==='ui/initialize'?{protocolVersion:'2026-01-26',hostInfo:{name:'FM1 fixture host',version:'1'},hostCapabilities:{...(serverTools?{serverTools:{}}:{}),...(hostMessages?{message:{text:{}}}:{}),...(nativeExtensions?{experimental:{'openai/message':{}}}:{})},hostContext:{theme:'light',displayMode:'fullscreen'}}:message.method==='ui/message'?{isError:hostRejectMessage}:toolResult(await backend(message.params.name,message.params.arguments));
       if(loseConfirmationReply&&message.params?.name?.startsWith('confirm_'))throw new Error('Confirmation reply lost.');
       response={result};
     }catch(error){response={error:{code:-32000,message:error.message}};}
     events.get('message')?.({source:parent,data:{jsonrpc:'2.0',id:message.id,...response}});
-    if(message.method==='ui/initialize'&&initial)events.get('message')?.({source:parent,data:{jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{content:[],structuredContent:initialData}}});
+    if(message.method==='ui/initialize'){
+      const emit=(method,params)=>events.get('message')?.({source:parent,data:{jsonrpc:'2.0',method,params}});
+      if(initialFile&&fileInputFirst)emit('ui/notifications/tool-input',{arguments:{file:initialFile}});
+      if(initial)emit('ui/notifications/tool-result',{content:[],structuredContent:initialFile?{file:initialFile,mode:'project_file'}:initialToolResult||initialData});
+      if(initialFile&&!fileInputFirst)emit('ui/notifications/tool-input',{arguments:{file:initialFile}});
+    }
   });}}:window;
   window.parent=parent;
   function toolResult(answer){const {_approval,...data}=answer;return {content:[],structuredContent:data,...(_approval?{_meta:{approval_id:_approval}}:{})};}
   async function backend(name,args){requests.push(name);requestArgs.push({name,args});await beforeCall?.(name,args);const answer=await callTool(env,'alice',name,args);if(name==='open_fm1_library'&&baseline)answer.forge={diagnostic_baseline:baseline};if(answer.request_id){const defaultJob={id:args.job_id||answer.job_id||answer.request_id,status:'succeeded',simulation:true},data=jobData?await jobData({name,args,answer,defaultJob}):defaultJob;if(data!==null)env.DB.sqlite.prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=?').run('succeeded',JSON.stringify({status:'succeeded',data}),answer.request_id);}if(omitPlanJobId&&name==='plan_fm1_app'){const {job_id,...queued}=answer;return queued;}return answer;}
   const properties=new Map();
-  const document={documentElement:{style:{}},body:{classList:{add(){}},dataset:{},style:{setProperty(name,value){properties.set(name,String(value));},getPropertyValue(name){return properties.get(name)??'';}}},getElementById:node,modelContext:{async registerTool(tool,{signal}){registered.set(tool.name,tool);signal.addEventListener('abort',()=>registered.delete(tool.name));}}};
+  const document={documentElement:{style:{setProperty(name,value){properties.set(name,String(value));}}},body:{classList:{add(){}},dataset:{},style:{setProperty(name,value){properties.set(name,String(value));},getPropertyValue(name){return properties.get(name)??'';}}},getElementById:node,createElement(tag){return {tag,textContent:'',style:{}};},modelContext:{async registerTool(tool,{signal}){registered.set(tool.name,tool);signal.addEventListener('abort',()=>registered.delete(tool.name));}}};
   const context=vm.createContext({document,window,AbortController,Map,Object,Number,JSON,RegExp,String,Error,URL,TextEncoder,TextDecoder,crypto,queueMicrotask,setTimeout:(fn,ms)=>{delays.push(ms);const timer=setTimeout(()=>{timers.delete(timer);fn();},ms>=10000?500:1);timers.set(timer,ms);return timer;},clearTimeout:timer=>{timers.delete(timer);clearTimeout(timer);},fetch:async(_url,options)=>{const input=JSON.parse(options.body);try{const answer=await backend(input.name,input.arguments);if(loseConfirmationReply&&input.name.startsWith('confirm_'))throw new Error('Confirmation reply lost.');return {ok:true,json:async()=>({structuredContent:answer})};}catch(error){return {ok:false,json:async()=>({error:error.message})};}}});
   for(const script of UI_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(script[1],context);
   await tick();
@@ -579,7 +584,7 @@ test('Ask Codex uses the supported native message method once and never submits 
 test('missing message capability and standalone Site keep a copyable prompt without pretending to build',async()=>{
   for(const embedded of [true,false]){
     const p=await panel({embedded,baseline:forgeBaseline});const requests=p.requests.length;p.node('forge-ask').onclick({isTrusted:true});await tick();
-    assert.match(p.node('forge-project-status').textContent,/cannot send a project message/);assert.match(p.node('forge-prompt').value,/Create and build/);
+    assert.match(p.node('forge-project-status').textContent,embedded?/does not support this conversation action/:/cannot send a project message/);assert.match(p.node('forge-prompt').value,/Create and build/);
     assert.equal(p.node('forge-output').open,true);assert.equal(p.requests.length,requests);assert.ok(!p.notifications.some(message=>message.method==='ui/message'));p.dispose();
   }
 });
@@ -628,4 +633,35 @@ test('the persisted diagnostics baseline remains usable after recent-request his
     assert.match(p.node('diagnostics-status').textContent,new RegExp(id));
   }
   assert.ok(!p.requests.includes('confirm_fm1_switch'));p.dispose();
+});
+
+
+test('native message controls use all official extension targets without submitting a device job',async()=>{
+  for(const [mode,target,send] of [['active-send','active',true],['active-draft','active',false],['new-send','new',true],['new-draft','new',false]]){
+    const p=await panel({embedded:true,nativeExtensions:true,baseline:forgeBaseline});p.node('forge-message-mode').value=mode;p.node('forge-ask').onclick({isTrusted:true});await tick();
+    const messages=p.notifications.filter(message=>message.method==='ui/message');assert.equal(messages.length,1);assert.deepEqual(JSON.parse(JSON.stringify(messages[0].params._meta['openai/message'])),{target,send});
+    assert.equal(p.requests.length,0);assert.deepEqual(p.env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY id').all(),p.seededTasks);p.dispose();
+  }
+});
+test('native file input/result ordering opens file mode without status, catalog or relay calls',async()=>{
+  for(const fileInputFirst of [true,false]){
+    const p=await panel({embedded:true,initialFile:{name:'selected.fm1-forge.json',resourceUri:'host-resource:opaque-file'},fileInputFirst});
+    assert.equal(p.requests.length,0);assert.equal(p.node('forge-extension-panel').open,true);assert.match(p.node('forge-file-status').textContent,/cannot read selected resources/);
+    assert.deepEqual(p.env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY id').all(),p.seededTasks);p.dispose();
+  }
+});
+
+
+test('native quick action initial form result restores accepted goal and config before build handoff',async()=>{
+  const config=projectConfig({...defaultProject,module:'user',slug:'quick-action',displayName:'Quick Action'}),goal='Make a pad-controlled synthesizer from the native form.';
+  const p=await panel({embedded:true,hostMessages:true,initialToolResult:{action:'accept',config,goal,clock_opt_in:false,project:{id:'a'.repeat(32),config},forge:{diagnostic_baseline:forgeBaseline}}});
+  assert.equal(p.node('forge-project-goal').value,goal);assert.equal(p.node('forge-project-slug').value,'quick-action');assert.equal(p.node('forge-module').value,'user');assert.match(p.node('forge-prompt').value,/Make a pad-controlled synthesizer from the native form/);
+  p.node('forge-ask').onclick({isTrusted:true});await tick();assert.match(p.notifications.find(m=>m.method==='ui/message').params.content[0].text,/Make a pad-controlled synthesizer from the native form/);assert.deepEqual(p.requests,[]);p.dispose();
+});
+
+
+test('initial native form gate cannot fabricate diagnostic proof or start hardware work',async()=>{
+  const config=projectConfig({...defaultProject,module:'user'}),p=await panel({embedded:true,hostMessages:true,initialToolResult:{action:'accept',config,goal:'A new synthesizer',gate:{diagnostics_verified:true,can_start_project:true},project:{id:'b'.repeat(32),config}}});
+  assert.equal(p.node('forge-ask').disabled,true);p.node('forge-ask').onclick({isTrusted:true});await tick();assert.match(p.node('forge-project-status').textContent,/verify the diagnostics baseline/);
+  assert.equal(p.requests.length,0);assert.ok(!p.notifications.some(m=>m.method==='ui/message'));assert.deepEqual(p.env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY id').all(),p.seededTasks);p.dispose();
 });

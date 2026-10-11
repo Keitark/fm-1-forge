@@ -1,7 +1,7 @@
 // Intentionally empty by default.
 // Add Drizzle tables here when the site actually needs a database.
 // See examples/d1/db/schema.ts for an opt-in example.
-import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const tasks = sqliteTable("relay_tasks", {
   id: text("id").primaryKey(),
@@ -34,3 +34,15 @@ export const forgeBaselines = sqliteTable("forge_baselines", {
   userId: text("user_id").primaryKey(), jobId: text("job_id").notNull(),
   sha256: text("sha256").notNull(), verifiedAt: integer("verified_at").notNull(),
 });
+
+export const forgeSettings = sqliteTable("forge_settings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull(), settingKey: text("setting_key").notNull(),
+  value: text("value").notNull(), updated: integer("updated").notNull(),
+}, (table) => [uniqueIndex("forge_settings_owner_key").on(table.userId, table.settingKey)]);
+
+export const forgeProjects = sqliteTable("forge_projects", {
+  id: text("id").primaryKey(), userId: text("user_id").notNull(),
+  title: text("title").notNull(), slug: text("slug").notNull(), config: text("config").notNull(),
+  created: integer("created").notNull(), updated: integer("updated").notNull(),
+}, (table) => [index("forge_projects_owner_updated").on(table.userId, table.updated)]);

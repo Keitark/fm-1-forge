@@ -1,5 +1,83 @@
 # Integration verification
 
+## FM1 Forge official SDK release 3.1.0, 2026-10-11
+
+The owner-private Site source `010f44ac2e2baac5495a5afcdf6ce08ec8869d69`
+was pushed and packaged from the validated build. Private deployment
+`appgdep_6acb96d71d4c81919523e3309a7aa184` succeeded with MCP enabled and
+environment revision 1. Its saved version is
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_55ee6bb025008191a6f805b9fa3213f2`.
+The Site archive SHA256 is
+`b0bae1aba3c0d3859b92a3ddd0afe196e6130f27ca8ff9cdfbb6e1eddbfe42c2`.
+
+The existing private plugin `plugins_6ac9ad3fc1c8819195580a4747c50052`
+was updated to **3.1.0**, release
+`pluginrel_6acb96f97b648191bda9f413986e1d6f`. Account readback and the local
+installed cache both confirm 3.1.0. The setup skill exists and is referenced
+through `extensions.com.openai.onboardingSkill`; the account normalizer mirrors
+this reference into the compatibility manifest. Original presentation,
+default prompt, account attribution, MCP connection and assets remain intact.
+No plugin was deleted, recreated or uninstalled.
+
+The unmodified official OpenAI MCP Extensions SDK is **0.2.0**, source
+`0d606217705e0e71eb21fff009619b67b80611dc`; npm still supplied 0.1.0 when checked.
+The vendored package SHA256 is
+`79a1cc9e6832f557ea9f46c8925fdbeb82ba80247a60824666b14cf90cf1b755`.
+See [provenance](../site/vendor/openai-mcp-extensions.ORIGIN.md) for packaging
+and the upstream declaration-export correction. No SDK runtime was modified.
+
+| Check | Result |
+| --- | --- |
+| Upstream official SDK | 41 tests passed |
+| Final Site suites | 171 tests passed; none skipped |
+| TypeScript and production build | Passed |
+| Backend, relay, recovery and updater integration | 190 Python tests passed |
+| Browser store | 10 JavaScript tests passed |
+| Real SDK modern/legacy discovery | In-memory transports pass; 18 tools, settings and mentions advertised |
+| Private Site deployment | Succeeded; MCP enabled |
+| Account release and installed cache | 3.1.0, same private plugin identity |
+| Native panel rendering | Forge v3 controls, COM10, connected relay; HTML/body both black |
+| Native model context | Attach and clear both succeeded; original draft retained |
+| Native local file opening | Host opened the existing extension guide |
+| New server tools in this chat's native panel | Host rejected `settings.read` as outside its trusted tool scope |
+| Other native entrypoints, forms, mentions and file editing | Implemented and tested; end-to-end host acceptance remains pending metadata refresh/platform support |
+| Real send/new-chat/draft actions | Capability and regression tests passed; no real message or new chat submitted |
+| Hardware transfer/qualification | Not performed by this release |
+
+The native panel's settings initially load from the opening tool's server
+snapshot. That proves storage and rendering, but not a subsequent settings RPC:
+**Reload defaults** produced `MCP app cannot call tool outside its trusted tool
+scope: settings.read`. This turn's available connector catalog still contains
+the earlier FM1 tool set. Inspection of the installed Codex host implementation
+locates this exact rejection in its trusted connector/target catalog lookup,
+before a server call; it does not inspect `_meta.ui.visibility` there. The
+official specification already defaults omitted visibility to model and app.
+Stale discovery is a supported explanation, not a confirmed refresh outcome.
+
+The [official connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt)
+documents refreshing directly connected custom MCP metadata and rerunning
+affected tests in a new conversation. Its
+[review guide](https://developers.openai.com/plugins/deploy/app-review)
+also distinguishes newly approved tools from live/cached UI resources. No
+permission was broadened or host restriction bypassed. The user was asked to
+refresh the existing connection; that final native acceptance is outstanding.
+The [actual native screenshot](evidence/fm1-forge-native-3.1.0-20261011.jpg)
+shows the new black panel controls and the host's settings-tool rejection.
+An authenticated direct SDK probe also received an HTTP authentication
+rejection, so it does not establish live modern-protocol discovery acceptance.
+
+The canonical resource is `ui://fm1/forge-panel-v3.html`, with previous aliases
+retained. Configuration drafts, settings and mention resources are owner-scoped
+in D1. File writes require the exact opened opaque resource, advertised
+writability and ETag, and preserve unsaved text on conflict. Tests include
+cancelled forms, invalid data, no automatic relay calls when file/form results
+open a panel, and rejection of a forged project gate without persisted proof.
+
+Native status still reports no accepted diagnostic baseline and both relay
+write flags disabled. No protected helper was elevated, no updater was launched
+and no device was flashed. The previous unqualified diagnostics candidate and
+physical LCD/input/audio/UAC/clock acceptance boundaries remain unchanged.
+
 ## FM1 Forge final release 3.0.1, 2026-10-11
 
 Final Site source `3e97b09eaa41515deda1401cd46d42397ee479ed` deployed privately

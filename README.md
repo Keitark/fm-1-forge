@@ -1,24 +1,27 @@
 # FM1 Forge
 
-The private FM1 App Library plugin is now **FM1 Forge 3.0.1**: install an asset-free
+The private FM1 App Library plugin is now **FM1 Forge 3.1.0**: install an asset-free
 diagnostic baseline, test hardware, configure USB/HAL/user modules graphically,
 then ask Codex to create and build a firmware project. It preserves the existing
 plugin ID, hosted MCP endpoint, local protected writer and saved-job history.
-The panel defaults to a plain, opaque black background.
+The panel defaults to a plain, opaque black background. It uses the official
+OpenAI MCP Extensions SDK for native settings, project file editing, composer
+mentions, configuration forms, deep links and chat context/message actions.
 
 Read the current [Forge guide](docs/FORGE_GUIDE.md). The owner-private Site's
 final Forge release is deployed with MCP enabled at the existing endpoint. Its
-resource is `ui://fm1/forge-panel-v2.html`. The same private
+resource is `ui://fm1/forge-panel-v3.html`. The same private
 [FM1 Forge plugin](https://chatgpt.com/plugins/plugins_6ac9ad3fc1c8819195580a4747c50052)
 was updated in place.
 
-The full final Site tests, typecheck and production build passed, along with
-181 integration tests. Diagnostics installation and physical acceptance remain
-pending. Runtime elevation was canceled: no new protected helper was started
-and no firmware write occurred. Expand the newest Forge card to inspect the
-native interface; that card has not yet been expanded and older expanded panels
-still show cached App Library UI. A package release does not establish native
-rendering or device qualification.
+Read [the extension guide](docs/MCP_EXTENSIONS.md) for the exact official SDK
+source, implemented surfaces and host capability checks. Dated test/deployment
+and native-host evidence lives in [verification](docs/VERIFICATION.md).
+Diagnostics installation and physical acceptance remain pending. Runtime
+elevation was canceled: no new protected helper was started and no firmware
+write occurred. Older expanded cards can retain a previous UI; inspect the
+newest Forge card for the current extension controls. A package release does
+not establish device qualification.
 
 The experimental `sdk-320` clock supports stock DMA only. Its SDK table supplies
 a 53 MHz LSB, incompatible with the 15/30 MHz RGB444 LCD presets' required 60 MHz LSB;
@@ -129,6 +132,13 @@ Use Python 3.11 or newer and a Node.js runtime with `node:test`. The tests use s
 python -m unittest discover -s tools/jieli-wl82 -p 'test_*.py'
 node --test tools/jieli-wl82/test_remote_store.cjs
 ```
+
+The 3.1.0 release passed **171 Site tests**, TypeScript checking and the production
+build, plus **190 Python integration tests**. The official upstream SDK's
+**41 tests** passed before packaging. Native context attachment/clearing and
+local file opening succeeded. New server-tool actions still require the
+host's trusted metadata to be refreshed; see the current
+[verification receipt](docs/VERIFICATION.md).
 
 The historical v6 checks passed **189 Python tests**, **62 focused relay tests**,
 **10 browser-store JavaScript tests**, and **100 Site tests**: 40 server, 52 UI,

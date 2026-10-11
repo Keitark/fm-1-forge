@@ -2,6 +2,8 @@ import { ID, PublicError, PROFILES, RESOURCE_URI, TOOLS, sanitize, validate } fr
 import { UI_HTML } from './fm1-ui.mjs';
 import { ICONS } from './fm1-icon.mjs';
 import { diagnosticProof } from './fm1-forge-baseline.mjs';
+import { EXTENSION_TOOLS, callExtensionTool, forgeSnapshot, registerForgeExtensions } from './fm1-extensions.mjs';
+import { OpenAIUiResourceMetadataSchema } from '@openai/mcp-extensions';
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/server/validators/cf-worker';
 import { registerAppResource, registerAppTool } from '@modelcontextprotocol/ext-apps/server';
@@ -30,7 +32,7 @@ async function latest(env,owner,operation){const row=await db(env).prepare("SELE
 async function library(env,owner){
   const baseline=await db(env).prepare('SELECT job_id,sha256,verified_at FROM forge_baselines WHERE user_id=?').bind(owner).first();
   return {profiles:PROFILES,relay:await relayState(env),catalog:await latest(env,owner,'catalog'),inventory:await latest(env,owner,'status'),
-    forge:{diagnostic_baseline:baseline?{...baseline,catalog_id:'factory-diag',write_verified:true,full_readback_verified:true,boot_verified:true}:null},
+    forge:{diagnostic_baseline:baseline?{...baseline,catalog_id:'factory-diag',write_verified:true,full_readback_verified:true,boot_verified:true}:null,...await forgeSnapshot(env,owner)},
     recent_requests:(await db(env).prepare('SELECT * FROM relay_tasks WHERE user_id=? ORDER BY created DESC,rowid DESC LIMIT 12').bind(owner).all()).results.map(parse)};
 }
 async function rememberDiagnostics(env,task,clean){
@@ -122,6 +124,7 @@ async function commitSwitch(env,owner,args){
   return {request_id:saved.id,job_id:saved.id,delivery:saved.state,message:'Confirmed request saved. Follow this job ID; do not resubmit after a disconnect.'};
 }
 export async function callTool(env,owner,name,input){
+  if(EXTENSION_TOOLS.includes(name))return callExtensionTool(env,owner,name,input);
   const args=validate(name,input);
   if(name==='open_fm1_library')return library(env,owner);
   if(name==='get_fm1_request'){
@@ -180,13 +183,14 @@ async function mcp(request,env){
   // Authentication remains the Sites boundary's responsibility, not the SDK's.
   if(request.method==='POST'){
     const rpc=await body(request.clone());
-    if(rpc?.method==='tools/call')user(request);
+    if(rpc?.method==='tools/call'||(rpc?.method==='resources/read'&&String(rpc.params?.uri||'').startsWith('fm1-forge:')))user(request);
   }
   const handler=createMcpHandler(()=>{
-    const server=new McpServer({name:'FM1 Forge',version:'3.0.1',icons:ICONS},{
+    const server=new McpServer({name:'FM1 Forge',version:'3.1.0',icons:ICONS},{
       jsonSchemaValidator:new CfWorkerJsonSchemaValidator(),
       instructions:'Open FM1 Forge through this installed plugin. Install and verify diagnostics, inspect hardware, then configure USB/system, HAL and user modules and ask Codex to build. Inspect saved request IDs after a disconnect. Offline planning does not authorize app switching. Switching requires human confirmation and enabled bench capability. Higher clock/LCD presets require a device test.',
     });
+    registerForgeExtensions(server,env,()=>user(request));
     for(const tool of TOOLS){
       const shape=Object.fromEntries(Object.entries(tool.inputSchema.properties).map(([key,schema])=>[
         key,schema.enum?z.enum(schema.enum):z.string().regex(new RegExp(schema.pattern)),
@@ -206,15 +210,19 @@ async function mcp(request,env){
     }
     // Older installed descriptors can still fetch the current panel at their
     // original URI. New descriptors exclusively advertise RESOURCE_URI.
-    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
+    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
       registerAppResource(server,'FM1 Forge',uri,{},async()=>({contents:[{
         uri,mimeType:'text/html;profile=mcp-app',text:UI_HTML,
-        _meta:{ui:{prefersBorder:true,csp:{connectDomains:[],resourceDomains:[]}},'openai/ui':{availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'fullscreen'}},
+        _meta:{ui:{prefersBorder:true,csp:{connectDomains:[],resourceDomains:[]}},'openai/ui':OpenAIUiResourceMetadataSchema.parse({availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'fullscreen'})},
       }]}));
     }
     return server;
   },{legacy:'stateless',responseMode:'auto',maxRequestBodySize:65536,onerror:error=>console.error('FM1 MCP serving failure:',sanitize(error.message))});
-  return handler.fetch(request);
+  const response=await handler.fetch(request);
+  const headers=new Headers(response.headers);
+  headers.set('Cache-Control','private, no-store');
+  headers.set('X-Content-Type-Options','nosniff');
+  return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
 }
 export async function handleFm1Request(request,env){
   const path=new URL(request.url).pathname;

@@ -1,6 +1,6 @@
 ---
 name: fm1-app-library
-description: Open FM1 Forge in the native ChatGPT or Codex plugin panel, inspect hardware and saved transfers, install diagnostic firmware, configure HAL and user modules, or create a custom firmware project.
+description: Open FM1 Forge in its native plugin panel, inspect hardware and saved transfers, configure firmware drafts, use native settings and project files, attach composer references, or create and build a custom firmware project.
 ---
 
 # FM1 Forge
@@ -32,3 +32,27 @@ The pinned SDK uses `system_clock_set` for real clock changes; `clk_set` is a st
 The default panel is opaque black with a plain background. Version-1 preferences migrate once to that requested default; later selections preserve optional palettes, patterns and custom colours. These preferences send no firmware command.
 
 Report the authoritative saved job and progress separately from physical acceptance. Preserve unknown/failed jobs and rollback evidence. A compiled binary, screenshot, successful readback or advancing counter alone does not establish that all hardware works.
+
+## Native extension workflow
+
+The panel uses the official OpenAI MCP Extensions SDK. Discover the actual
+schemas for settings, project drafts and native configuration forms before
+calling them. Saving a configuration draft only saves design data in the
+owner's library; it does not create a local directory, build or flash firmware.
+The diagnostic baseline still gates the existing firmware project handoff.
+
+Use native plugin settings for the owner's appearance and project defaults.
+Composer mentions reference the owner's saved projects, packages or job data.
+Opening a `.fm1-forge.json` file invokes the native Forge editor; host-managed
+resources use opaque URIs, writable metadata and ETags. Do not turn those URIs
+into local paths. Preserve unsaved edits when a resource changes or conflicts.
+
+Attach or clear a reviewed configuration in chat context explicitly. Current
+and new conversation actions distinguish sending a message from preparing an
+editable draft. Never silently send a draft or open a new conversation merely
+to demonstrate the feature. If the host lacks the required capability, keep
+the panel's copy/download fallback and describe the limitation accurately.
+
+Deep links navigate within the Forge panel; they do not approve a transfer.
+Opening a local source file is a separate host capability and requires a real,
+user-selected path. Do not invent paths to cloud drafts or build artifacts.

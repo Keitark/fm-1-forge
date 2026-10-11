@@ -16,8 +16,13 @@
     "longDescription": "Install the diagnostic baseline, test controls, LCD and audio, configure USB/system and user modules graphically, and ask Codex to build a custom firmware project. The native panel has a plain black default, optional colours and saved transfer progress. Serial-to-UBOOT and direct UBOOT use validated private application packages; official .fwsc/SysEx updates use the vendor updater.",
     "shortDescription": "Build and test FM1 firmware"
   },
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/fm1-forge-setup/SKILL.md"
+    }
+  },
   "name": "fm1-app-library",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "description": "FM1 diagnostic firmware, module configuration and custom firmware projects through the hosted Forge plugin panel.",
   "author": {
     "name": "Keitarou Kondou"
