@@ -56,6 +56,16 @@ reflects the absence of its stop marker; its recorded helper PID 240396 is dead.
 The old verified baseline is usable for offline packaging, but that status field
 alone does not establish an available protected helper.
 
+The validated default diagnostic bundle was subsequently installed through the
+authenticated local catalog endpoint as `factory-diag` / `diagnostics`, SHA256
+`e52573f32d27a68e016d7aa36ac65ff254a6a8bada9c5f0fd70c4365f4f60a8c`.
+Its 1 MiB container changes 53 application sectors (`0x4000` through `0x38000`,
+directory written last) against rollback SHA256
+`4d4da3ab34b643034ea91ddb670fd3556b737a05835ed77fced687eae6ad345c`.
+The protected-worker pure candidate validator independently confirmed protected
+boot/config/reserved bytes are identical. No device I/O or firmware write was
+requested; catalog readiness establishes compatibility only.
+
 ## FM1 appearance update, 2026-10-10
 
 Site v6 adds twelve prepared palettes and five independently selectable
