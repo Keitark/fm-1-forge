@@ -19,7 +19,7 @@ The Site URL, `/mcp` endpoint and owner-private access remain unchanged.
 | Primary backend suite | 35 tests passed |
 | Private Site publication | Succeeded; MCP enabled |
 | Private plugin update | Same ID; release 3.0.1 |
-| Newest native Forge card | Not yet expanded; older expanded panels remain cached App Library UI |
+| Native Forge card | Verified in Codex: Forge branding/onboarding, diagnostic catalog, COM10 and black HTML/body background |
 | New protected helper | Not started; runtime elevation canceled |
 | Diagnostics transfer / candidate qualification | Not accepted; no firmware write occurred |
 | Physical LCD, inputs, audio, USB and stability | Pending device tests |
@@ -40,8 +40,13 @@ reject that combination. `sdk-320` with stock DMA and `sdk-default` with each
 LCD preset remain selectable. Higher FPS and clock stability are not accepted
 from compilation or offline tests.
 
-The newest native card still needs expansion and inspection. Prior screenshots
-and older expanded App Library panels do not establish final Forge rendering.
+The current native Forge card was subsequently inspected in Codex. Its DOM
+contains diagnostic onboarding, module options and the exact diagnostic catalog;
+the HTML and body backgrounds both compute to `rgb(0, 0, 0)`. FM1 is detected
+on COM10 and transfer actions remain disabled. An actual native screenshot
+confirmed the black cards and mint accents. This does not establish firmware
+or physical hardware acceptance. The hosted service title was also renamed from
+FM1 App Library to FM1 Forge, preserving its project, URL and private audience.
 Runtime elevation was canceled, leaving no new protected helper and no writes.
 Existing snapshots, receipts and saved job IDs are preserved. The diagnostics
 baseline and physical tests remain separate prerequisites; no firmware
