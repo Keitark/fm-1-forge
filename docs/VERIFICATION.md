@@ -1,5 +1,42 @@
 # Integration verification
 
+## Native background contrast correction, 2026-10-12
+
+The user-provided native thread-panel screenshot showed white host background
+behind dark-palette headings, summary, Refresh button and gaps. The loaded
+native document uses `backgroundMode=transparent`; the app previously relied
+on body/canvas painting while cards had their own opaque backgrounds.
+
+`#fm1-shell` now owns the full-width, minimum-viewport-height opaque background
+for header, main, gaps, footer and dialog. Palette variables still inherit from
+body; all non-solid pattern rules paint the shell. Host styling, safe-area
+padding, selected appearance, drafts and confirmation gates remain intact.
+The canonical resource is v5; v4 and all earlier aliases remain served. This is
+a Site UI correction; the installed plugin package stays at 3.1.3.
+
+All 212 Site tests, TypeScript checking and the production build passed. Actual
+browser QA used a white outer iframe with html/body forced transparent via
+`!important`: the shell remained opaque and covered viewport width/height.
+Heading, summary, Refresh and footer were measured across all 13 palettes;
+their minimum actual text contrast was 5.76:1. All five patterns painted the
+shell as selected. Reset returned to Forge Black/Solid.
+
+Pushed Site source `931c1a0977c89ceb6870f59cb91277896d05e414` deployed privately
+with MCP enabled, environment revision 1, terminal status **succeeded**:
+deployment `appgdep_6acc4e4f2c3c81919566b0bf3fbe0ea1`, saved version
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_b5d54beaea508191b694f5b2db360b59`.
+Archive SHA256:
+`08ba5328d8729db639b3ca159fe272c93e9c0c781eddfaa12d013afc9d654d04`.
+
+A newly opened model-tool native MCP App loaded `#fm1-shell` in Codex with
+`data-host-theme:light` and Forge Black/Solid selected. Its computed background
+was opaque `rgb(0,0,0)`; width equaled the 966 px viewport and content height
+3354 px exceeded the 1143 px viewport. Heading and summary used the expected
+light/muted Forge foregrounds, and footer remained within the shell. Screenshot:
+`F:\dev\fm1\tmp\fm1-forge-native-owned-background.png`. The previously opened
+native thread tab still contains older HTML and needs reopening. This check
+covers the model-tool native MCP App route; no Codex theme setting was changed.
+
 ## Native timer correction 3.1.3, 2026-10-12
 
 The first actual 3.1.2 MCP App opening displayed **Illegal invocation** and

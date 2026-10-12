@@ -93,12 +93,15 @@ export const appearanceCss=String.raw`
 html{background:#000000;min-height:100%;color-scheme:dark}
 html,body{min-height:100vh;min-height:100dvh}
 body[data-appearance]{background-color:var(--paper);color:var(--ink);background-image:none}
+/* Native hosts can make the document canvas transparent. Paint an app-owned
+   surface so headings, controls and gaps always use the selected palette. */
+#fm1-shell{display:flow-root;width:100%;min-height:100vh;min-height:100dvh;background-color:var(--paper,#000000);color:var(--ink,#ecf7f1);background-image:none;color-scheme:inherit}
 body[data-appearance][data-scheme="dark"]{color-scheme:dark}
 body[data-appearance][data-scheme="light"]{color-scheme:light}
-body[data-appearance][data-pattern="circuit-grid"]{background-image:linear-gradient(rgba(var(--pattern-rgb),var(--pattern-opacity)) 1px,transparent 1px),linear-gradient(90deg,rgba(var(--pattern-rgb),var(--pattern-opacity)) 1px,transparent 1px);background-size:24px 24px}
-body[data-appearance][data-pattern="dots"]{background-image:radial-gradient(circle,rgba(var(--pattern-rgb),var(--pattern-opacity)) 1.5px,transparent 1.6px);background-size:15px 15px}
-body[data-appearance][data-pattern="scanlines"]{background-image:repeating-linear-gradient(0deg,rgba(var(--pattern-rgb),var(--pattern-opacity)),rgba(var(--pattern-rgb),var(--pattern-opacity)) 1px,transparent 1px,transparent 5px);background-size:auto}
-body[data-appearance][data-pattern="diagonal-stripes"]{background-image:repeating-linear-gradient(135deg,rgba(var(--pattern-rgb),var(--pattern-opacity)),rgba(var(--pattern-rgb),var(--pattern-opacity)) 4px,transparent 4px,transparent 18px);background-size:auto}
+body[data-appearance][data-pattern="circuit-grid"] #fm1-shell{background-image:linear-gradient(rgba(var(--pattern-rgb),var(--pattern-opacity)) 1px,transparent 1px),linear-gradient(90deg,rgba(var(--pattern-rgb),var(--pattern-opacity)) 1px,transparent 1px);background-size:24px 24px}
+body[data-appearance][data-pattern="dots"] #fm1-shell{background-image:radial-gradient(circle,rgba(var(--pattern-rgb),var(--pattern-opacity)) 1.5px,transparent 1.6px);background-size:15px 15px}
+body[data-appearance][data-pattern="scanlines"] #fm1-shell{background-image:repeating-linear-gradient(0deg,rgba(var(--pattern-rgb),var(--pattern-opacity)),rgba(var(--pattern-rgb),var(--pattern-opacity)) 1px,transparent 1px,transparent 5px);background-size:auto}
+body[data-appearance][data-pattern="diagonal-stripes"] #fm1-shell{background-image:repeating-linear-gradient(135deg,rgba(var(--pattern-rgb),var(--pattern-opacity)),rgba(var(--pattern-rgb),var(--pattern-opacity)) 4px,transparent 4px,transparent 18px);background-size:auto}
 body[data-appearance] header{background:var(--header);border-color:var(--line)}
 body[data-appearance] .brand span{color:var(--ink)}
 body[data-appearance] .brand>span:last-child>span:last-child{color:var(--muted)!important}

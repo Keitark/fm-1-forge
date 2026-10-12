@@ -3,7 +3,7 @@
 For the current **3.1.3** diagnostic-to-project workflow, black default panel,
 graphical module configuration and all transfer methods, read
 [FORGE_GUIDE.md](FORGE_GUIDE.md). The final private service and plugin release
-are updated. The current resource is `ui://fm1/forge-panel-v4.html`. Open the
+are updated. The current resource is `ui://fm1/forge-panel-v5.html`. Open the
 native conversation tab through **New Tab (+) → More tools… → Plugins and MCPs
 → FM1 Forge** to see configuration drafts, native settings, file editing and
 chat context/draft actions. Read [MCP_EXTENSIONS.md](MCP_EXTENSIONS.md)

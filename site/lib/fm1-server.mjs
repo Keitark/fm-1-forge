@@ -246,7 +246,7 @@ async function mcp(request,env){
     }
     // Older installed descriptors can still fetch the current panel at their
     // original URI. New descriptors exclusively advertise RESOURCE_URI.
-    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
+    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
       registerAppResource(server,'FM1 Forge',uri,{},async()=>({contents:[{
         uri,mimeType:'text/html;profile=mcp-app',text:UI_HTML,
         _meta:{ui:{prefersBorder:true,csp:{connectDomains:[],resourceDomains:[]}},'openai/ui':OpenAIUiResourceMetadataSchema.parse({availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'fullscreen'})},

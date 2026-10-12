@@ -1,5 +1,17 @@
 # FM1 Codex integration handoff
 
+## Native background contrast correction (2026-10-12)
+
+The current UI resource is `ui://fm1/forge-panel-v5.html`. An app-owned,
+full-viewport shell paints the selected opaque palette and pattern even when
+Codex makes html/body transparent. Standalone headings, Refresh, card gaps and
+footer use this surface. All 13 palettes and five patterns were checked against
+a white transparent-host fixture; package identity/version stays 3.1.3.
+Reopen an existing tab to load the updated UI; if registered entrypoints still
+select an older resource, refresh the existing connection metadata.
+The published model-tool native MCP App was checked with Codex's light host
+theme and an opaque black shell covering the viewport; see verification.
+
 ## Native timer correction 3.1.3 (2026-10-12)
 
 The first real 3.1.2 native opening exposed **Illegal invocation** in the
