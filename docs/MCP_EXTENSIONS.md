@@ -136,3 +136,5 @@ and teardown. Deployment and actual native-host evidence are recorded in
 and platform support; passing a mocked host test is reported separately from
 a successful action in Codex. No extension test authorizes or performs a
 firmware flash.
+
+The hardware activity view uses `get_fm1_input_snapshot`, a no-argument saved read-only request. It remains separate from passive `get_fm1_status`. Input observations are scoped to their owner, coalesced per pending request, normalized to fixed metadata, and aged from validated local sampling timestamps plus the immutable first Site receipt. Replayed acknowledgments cannot renew a sample. The canonical panel resource is v9; v8 and earlier aliases remain readable.

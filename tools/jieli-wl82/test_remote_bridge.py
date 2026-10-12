@@ -12,6 +12,7 @@ import threading
 import time
 import unittest
 import uuid
+from unittest.mock import patch
 
 import remote_bridge as bridge
 
@@ -54,6 +55,9 @@ class FakeBackend:
 
     def status(self):
         return {'device_io': False, 'session_configured': True}
+
+    def input_snapshot(self):
+        return bridge.input_refusal()
 
     def execute(self, operation, request=None, loader_state=None, catalog_id=None, entry_method=None,
                 expected_sha256=None):
@@ -152,6 +156,76 @@ class BridgeTests(unittest.TestCase):
         response = b''.join(chunks)
         self.assertTrue(response.startswith(b'HTTP/'), response)
         return int(response.split(b' ', 2)[1]), response
+
+    def test_input_route_is_authenticated_no_arguments_and_outside_jobs(self):
+        with patch.object(self.backend, 'input_snapshot', return_value=bridge.input_refusal()) as sample:
+            status, _, raw = self.request('GET', '/v1/input_snapshot', token=None)
+            self.assertEqual(status, 401)
+            sample.assert_not_called()
+            for route in ('/v1/input_snapshot?port=COM4', '/v1/input_snapshot?command=FORGE%20STOP'):
+                status, _, raw = self.request('GET', route)
+                self.assertEqual(status, 400)
+            status, _, raw = self.request('POST', '/v1/input_snapshot', {})
+            self.assertEqual(status, 404)
+            sample.assert_not_called()
+            status, _, raw = self.request('GET', '/v1/input_snapshot')
+            self.assertEqual(status, 200, raw)
+            self.assertEqual(json.loads(raw)['data']['state'], 'unavailable')
+            self.assertEqual(sample.call_count, 1)
+        self.assertNotIn('input_snapshot', bridge.OPERATIONS)
+        self.assertFalse(self.manager._jobs)
+
+    def test_input_manager_refuses_all_device_ownership_gates_before_backend(self):
+        fields = ({'_closed': True}, {'_storage_fault': True}, {'_active': 'a' * 32})
+        with patch.object(self.backend, 'input_snapshot', side_effect=AssertionError('No device I/O')):
+            for field in fields:
+                name, value = next(iter(field.items()))
+                with self.subTest(name=name), patch.object(self.manager, name, value):
+                    self.assertEqual(self.manager.input_snapshot()['state'], 'busy')
+            for operation, status in (('flash', 'unknown'), ('official_updater', 'succeeded')):
+                with self.subTest(operation=operation):
+                    self.manager._jobs['a' * 32] = {'operation': operation, 'status': status}
+                    try:
+                        self.assertEqual(self.manager.input_snapshot()['state'], 'busy')
+                    finally:
+                        del self.manager._jobs['a' * 32]
+
+    def test_input_failure_has_no_unknown_job_latch_and_preserves_passive_status(self):
+        with patch.object(self.backend, 'input_snapshot', side_effect=OSError('Private COM detail')) as sample:
+            self.manager.status()
+            sample.assert_not_called()
+            result = self.manager.input_snapshot()
+            self.assertEqual(result['state'], 'unavailable')
+            self.assertNotIn('Private', repr(result))
+        self.assertFalse(self.manager._jobs)
+        self.assertFalse(self.manager.status()['engine']['blocked_unknown'])
+
+    def test_input_mutex_covers_sampling_until_close_before_submit(self):
+        entered, release, submitted = threading.Event(), threading.Event(), threading.Event()
+        def sampler():
+            entered.set()
+            if not release.wait(3):
+                raise TimeoutError('Test gate')
+            self.assertIsNone(self.manager._active)
+            return bridge.input_refusal()
+        def submitter():
+            self.manager.submit(job('environment'))
+            submitted.set()
+        with patch.object(self.backend, 'input_snapshot', side_effect=sampler):
+            sampling = threading.Thread(target=self.manager.input_snapshot)
+            sampling.start()
+            self.assertTrue(entered.wait(1))
+            submitting = threading.Thread(target=submitter)
+            submitting.start()
+            try:
+                self.assertFalse(submitted.wait(.05))
+            finally:
+                release.set()
+                sampling.join(2)
+                submitting.join(2)
+        self.assertTrue(submitted.is_set())
+        self.assertFalse(sampling.is_alive())
+        self.assertFalse(submitting.is_alive())
 
     def test_api_routes_require_bearer_authentication(self):
         identifier = uuid.uuid4().hex

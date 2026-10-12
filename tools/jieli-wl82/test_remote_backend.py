@@ -266,6 +266,39 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(result['update_mode']['app_entry_method'], 'serial')
         self.assertFalse(result['update_mode']['official_available'])
 
+    def test_input_preflight_refuses_absent_and_unknown_or_reserved_sessions(self):
+        absent = backend.WindowsBackend(self.repo)
+        self.assertEqual(absent._input_readiness(), 'unavailable')
+        safe = {'operation': 'idle', 'blocked': False, 'reset_pending': False,
+                'needs_observation': False, 'loader_running': False}
+        self.write_state(safe)
+        self.assertEqual(self.adapter._input_readiness(), 'ready')
+        for changes in ({'operation': 'flash'}, {'blocked': True}, {'reset_pending': True},
+                        {'needs_observation': True}, {'loader_running': True},
+                        {'stopped': True}, {'blocked': None}, {'operation': None}):
+            with self.subTest(changes=changes):
+                self.write_state(dict(safe, **changes))
+                self.assertEqual(self.adapter._input_readiness(), 'busy')
+        for key in safe:
+            state = dict(safe)
+            del state[key]
+            self.write_state(state)
+            with self.subTest(missing=key):
+                self.assertEqual(self.adapter._input_readiness(), 'busy')
+        self.write_state(safe)
+        (self.session / 'stopped.txt').write_text('stopped', encoding='utf-8')
+        self.assertEqual(self.adapter._input_readiness(), 'busy')
+        (self.session / 'stopped.txt').unlink()
+        (self.session / 'state.json').write_text('not-json', encoding='utf-8')
+        self.assertEqual(self.adapter._input_readiness(), 'busy')
+
+    def test_input_snapshot_uses_local_fixed_sampler_without_broker_execution(self):
+        result = {'state': 'busy'}
+        with patch.object(backend, 'sample_inputs', return_value=result) as sample, \
+             patch.object(backend.subprocess, 'run', side_effect=AssertionError('No broker command')):
+            self.assertEqual(self.adapter.input_snapshot(), result)
+        self.assertEqual(sample.call_args.kwargs, {'preflight': self.adapter._input_readiness})
+
     def test_status_observation_bounds_all_passive_enumeration_and_state_metadata(self):
         events = []
         state = backend.read_json(self.session / 'state.json')

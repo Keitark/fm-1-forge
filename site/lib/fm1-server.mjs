@@ -2,6 +2,7 @@ import { ID, PublicError, PROFILES, RESOURCE_URI, TOOLS, sanitize, validate } fr
 import { UI_HTML } from './fm1-ui.mjs';
 import { ICONS } from './fm1-icon.mjs';
 import { diagnosticProof } from './fm1-forge-baseline.mjs';
+import { inputSample, inputActivity } from './fm1-input-contract.mjs';
 import { EXTENSION_TOOLS, callExtensionTool, forgeSnapshot, registerForgeExtensions } from './fm1-extensions.mjs';
 import { OpenAIUiResourceMetadataSchema } from '@openai/mcp-extensions';
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
@@ -24,7 +25,7 @@ const INVENTORY_MAX_AGE_SECONDS=15;
 // This timestamp belongs to the Site receipt, never to caller-controlled data,
 // queue creation or a retried dispatch. Keep it private to the cache contract.
 const INVENTORY_OBSERVED_FIELD='_site_inventory_observed_at';
-function publicResult(encoded){const value=JSON.parse(encoded);delete value[INVENTORY_OBSERVED_FIELD];return value;}
+function publicResult(encoded){const value=JSON.parse(encoded);delete value[INVENTORY_OBSERVED_FIELD];delete value._site_input_observed_at;return value;}
 const parse=(row)=>row?{id:row.id,operation:row.operation,state:row.state,created:row.created,...(row.result?publicResult(row.result):{})}:null;
 function db(env){if(!env.DB)throw new PublicError('Saved requests are unavailable.',503);return env.DB;}
 function user(request){const value=request.headers.get('oai-authenticated-user-id');if(!value)throw new PublicError('Sign in to use your FM1 library.',401);return value;}
@@ -65,7 +66,8 @@ async function inventorySnapshot(env,owner,connection){
 async function library(env,owner){
   const baseline=await db(env).prepare('SELECT job_id,sha256,verified_at FROM forge_baselines WHERE user_id=?').bind(owner).first();
   const connection=await relayState(env),inventory=await inventorySnapshot(env,owner,connection);
-  return {profiles:PROFILES,relay:connection,catalog:await latest(env,owner,'catalog'),...inventory,
+  const input=await db(env).prepare("SELECT id,state,result,created FROM relay_tasks WHERE user_id=? AND operation='input_snapshot' AND state IN ('succeeded','failed','unknown') ORDER BY created DESC,rowid DESC LIMIT 1").bind(owner).first();
+  return {profiles:PROFILES,relay:connection,catalog:await latest(env,owner,'catalog'),...inventory,input_activity:inputActivity(input,connection,now()),
     forge:{diagnostic_baseline:baseline?{...baseline,catalog_id:'factory-diag',write_verified:true,full_readback_verified:true,boot_verified:true}:null,...await forgeSnapshot(env,owner)},
     recent_requests:(await db(env).prepare('SELECT * FROM relay_tasks WHERE user_id=? ORDER BY created DESC,rowid DESC LIMIT 12').bind(owner).all()).results.map(parse)};
 }
@@ -98,6 +100,16 @@ async function enqueue(env,owner,operation,args,taskId=ident()){
       if(pending)return {request_id:pending.id,delivery:pending.state,message:'Resume the existing passive status request by this ID.'};
     }
     throw new PublicError('The previous status refresh finished while queuing. Refresh the saved library before requesting another observation.',409);
+  }
+  if(operation==='input_snapshot'){
+    // One bounded sample per owner. Multiple panels resume the same saved ID.
+    for(let attempt=0;attempt<2;attempt++){
+      const inserted=await db(env).prepare("INSERT INTO relay_tasks(id,user_id,operation,arguments,state,created) SELECT ?,?,'input_snapshot',?,'pending',? WHERE NOT EXISTS(SELECT 1 FROM relay_tasks WHERE user_id=? AND operation='input_snapshot' AND state IN ('pending','dispatched'))").bind(taskId,owner,JSON.stringify(args),now(),owner).run();
+      if(inserted.meta?.changes)return {request_id:taskId,delivery:'pending',message:'Saved read-only input sample. Inspect this ID after a timeout; do not resubmit it.'};
+      const pending=await db(env).prepare("SELECT id,state FROM relay_tasks WHERE user_id=? AND operation='input_snapshot' AND state IN ('pending','dispatched') ORDER BY created DESC,rowid DESC LIMIT 1").bind(owner).first();
+      if(pending)return {request_id:pending.id,delivery:pending.state,message:'Resume this saved input sample by its request ID.'};
+    }
+    throw new PublicError('The previous input sample finished while queuing. Refresh the saved library before requesting another sample.',409);
   }
   if(operation==='open_local_import'){
     // Concurrent panels share one pending launch for this owner. Opening the
@@ -194,7 +206,7 @@ export async function callTool(env,owner,name,input){
   if(name==='confirm_fm1_switch')return commitSwitch(env,owner,args);
   if(name==='prepare_fm1_official_update')return stagedOfficial(env,owner);
   if(name==='confirm_fm1_official_update')return commitOfficial(env,owner,args);
-  return enqueue(env,owner,{get_fm1_status:'status',list_fm1_apps:'catalog',open_fm1_local_import:'open_local_import',plan_fm1_app:'plan_app',get_fm1_job:'job'}[name],args);
+  return enqueue(env,owner,{get_fm1_status:'status',get_fm1_input_snapshot:'input_snapshot',list_fm1_apps:'catalog',open_fm1_local_import:'open_local_import',plan_fm1_app:'plan_app',get_fm1_job:'job'}[name],args);
 }
 function localImportReceipt(value,id){
   if(!value||typeof value!=='object'||Array.isArray(value)||value.id!==id||typeof value.opened!=='boolean'||value.device_io!==false||!Number.isInteger(value.expires_in)||value.expires_in<0||value.expires_in>300||(value.error!==undefined&&(typeof value.error!=='string'||!/^[a-z_]{1,80}$/.test(value.error))))throw new PublicError('Invalid local importer receipt.');
@@ -227,11 +239,12 @@ async function relayRequest(request,env,path){
     if(!value||!ID.test(value.id||'')||!['succeeded','failed','unknown'].includes(value.status)||Object.keys(value).some(key=>!['id','status','data','error'].includes(key)))throw new PublicError('Invalid relay result.');
     const task=await db(env).prepare('SELECT * FROM relay_tasks WHERE id=?').bind(value.id).first();
     if(!task||task.state==='pending')throw new PublicError('Request was not dispatched.',409);
-    const clean={status:value.status,...(value.data!==undefined?{data:task.operation==='open_local_import'?localImportReceipt(value.data,task.id):sanitize(value.data)}:{}),...(value.error?{error:sanitize(String(value.error))}:{})};
+    const clean={status:value.status,...(value.data!==undefined?{data:task.operation==='open_local_import'?localImportReceipt(value.data,task.id):task.operation==='input_snapshot'?inputSample(value.data):sanitize(value.data)}:{}),...(value.error?{error:sanitize(String(value.error))}:{})};
     const encoded=JSON.stringify(clean);
     if(encoded.length>60000)throw new PublicError('Result is too large.',413);
     if(task.result){if(JSON.stringify(publicResult(task.result))!==encoded)throw new PublicError('A different result is already saved.',409);await rememberDiagnostics(env,task,clean);return json({saved:true});}
-    const persisted=task.operation==='status'&&clean.status==='succeeded'?JSON.stringify({...clean,[INVENTORY_OBSERVED_FIELD]:now()}):encoded;
+    const receipt=task.operation==='status'?INVENTORY_OBSERVED_FIELD:task.operation==='input_snapshot'?'_site_input_observed_at':null;
+    const persisted=receipt&&clean.status==='succeeded'?JSON.stringify({...clean,[receipt]:now()}):encoded;
     const saved=await db(env).prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=? AND result IS NULL').bind(value.status,persisted,value.id).run();
     if(!saved.meta?.changes){const current=await db(env).prepare('SELECT result FROM relay_tasks WHERE id=?').bind(value.id).first();if(!current?.result||JSON.stringify(publicResult(current.result))!==encoded)throw new PublicError('A different result is already saved.',409);}
     await rememberDiagnostics(env,task,clean);
@@ -273,7 +286,7 @@ async function mcp(request,env){
     }
     // Older installed descriptors can still fetch the current panel at their
     // original URI. New descriptors exclusively advertise RESOURCE_URI.
-    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v7.html','ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
+    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v8.html','ui://fm1/forge-panel-v7.html','ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
       registerAppResource(server,'FM1 Forge',uri,{},async()=>({contents:[{
         uri,mimeType:'text/html;profile=mcp-app',text:UI_HTML,
         _meta:{ui:{prefersBorder:true,csp:{connectDomains:[],resourceDomains:[]}},'openai/ui':OpenAIUiResourceMetadataSchema.parse({availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'fullscreen'})},

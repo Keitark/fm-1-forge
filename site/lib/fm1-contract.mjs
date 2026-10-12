@@ -1,6 +1,6 @@
 import { ICONS } from './fm1-icon.mjs';
 import { OpenAIUiToolMetadataSchema } from '@openai/mcp-extensions';
-export const RESOURCE_URI = 'ui://fm1/forge-panel-v8.html';
+export const RESOURCE_URI = 'ui://fm1/forge-panel-v9.html';
 export const PROFILES = [
   {profile:'diagnostics',title:'Forge diagnostics',description:'Test inputs, LCD and audio before starting your firmware project.',symbol:'F'},
   {profile:'nes',title:'NES',description:'Play your prepared cartridge collection.',symbol:'N'},
@@ -15,7 +15,7 @@ export class PublicError extends Error { constructor(message,status=400){super(m
 export function validate(name,input={}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new PublicError('Arguments must be an object.');
   const fields = {
-    open_fm1_library:[], get_fm1_status:[], list_fm1_apps:[], open_fm1_local_import:[],
+    open_fm1_library:[], get_fm1_status:[], get_fm1_input_snapshot:[], list_fm1_apps:[], open_fm1_local_import:[],
     plan_fm1_app:['catalog_id'], get_fm1_job:['job_id'], get_fm1_request:['request_id'],
     prepare_fm1_switch:['catalog_id','entry_method'], confirm_fm1_switch:['approval_id'],
     prepare_fm1_official_update:[], confirm_fm1_official_update:['approval_id'],
@@ -37,6 +37,7 @@ const schemas = {
 const definitions = [
   ['open_fm1_library','FM1 Forge','Open the installed FM1 Forge plugin panel: diagnostic onboarding, graphical module configuration, packages and saved jobs.',[],true],
   ['get_fm1_status','Refresh bench status','Request inventory and persisted bridge/session state. No device I/O.',[],true],
+  ['get_fm1_input_snapshot','Sample hardware inputs','Request one bounded read-only serial input sample from the locally selected FM1. Reports supported keys, encoders and volume; never changes firmware, clocks, sound or recovery mode. Inspect its saved request ID after a timeout.',[],true],
   ['list_fm1_apps','Refresh app packages','Request validated package metadata and readiness; never returns firmware bytes.',[],true],
   ['open_fm1_local_import','Add local app set','Open the local companion importer so the user can choose built FM1 package JSON files and save a named app set. Firmware bytes remain local. No device I/O. Inspect the saved request ID after a timeout.',[],false],
   ['plan_fm1_app','Plan app change','Submit an offline plan for an existing catalog ID. No device I/O. Returns a saved request ID; inspect it with get_fm1_request.',['catalog_id'],false],

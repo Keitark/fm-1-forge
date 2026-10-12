@@ -132,3 +132,13 @@ verified rollback receipts; inspect their exact IDs before another operation.
 The current module action unlocks from authoritative saved diagnostic transfer
 proof, not a browser preference, app card or simulated preview. Physical control,
 sound and screen acceptance remains a device observation.
+
+## Sampled hardware activity
+
+Open **Hardware activity → Start monitoring** in the native Forge panel. The panel displays 41 button/key indicators, seven encoder edge counters and their change between valid samples, and the physical volume ADC/gain. Held and seen-since-boot are different indicators. This is sampled telemetry; a brief press can occur between samples. Seen coverage is reported by firmware and does not establish physical acceptance.
+
+Monitoring starts paused, uses bounded read-only serial queries, and pauses when the panel is hidden, the relay is offline or a device job is active. Stale samples lose held lights and encoder deltas. Stop monitoring closes no persistent hardware stream: each sample opens and closes its own guarded serial handle. No monitoring command changes firmware, volume, clock or recovery mode.
+
+Full key/encoder reporting requires firmware with the **FM1-FORGE/1** telemetry protocol. **MOD-EDITOR/1** exposes volume only; the other controls are labelled unavailable. Use the reviewed diagnostics installation flow to enable the full hardware dashboard. Passive automatic connection detection remains a separate PnP observation and never opens serial.
+
+Finish a local RAM import or export before starting monitoring. Opening a new CDC session on MOD firmware cancels an unfinished RAM transfer; playback and the loaded document remain intact. The local bridge serializes input samples with its own device jobs, and each sample uses fixed serial settings without reconfiguring the open connection.

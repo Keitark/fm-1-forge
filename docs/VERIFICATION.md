@@ -1,5 +1,46 @@
 # Integration verification
 
+## Sampled hardware activity, 2026-10-12
+
+The panel previously had no knob/key activity display. Resource v9 adds an
+explicit Start/Stop monitoring action, 41 held/seen key indicators, seven
+encoder counters and deltas, and a volume ADC/gain meter. MOD-EDITOR reports
+volume only; full controls require the FM1-FORGE diagnostic telemetry protocol.
+Sampling is bounded and observational, pauses for device ownership, and clears
+held lights and deltas when its validated source/first-receipt age expires.
+Short presses can occur between samples. Firmware seen coverage is not physical
+control acceptance.
+
+All **289 Site tests**, **240 Python tests**, **15 local-store/UI tests**,
+TypeScript checking and the production build passed. Coverage includes strict
+fixed telemetry rows, invalid data and clocks, immutable replay, owner
+isolation, bridge job arbitration, finite serial closure, native lifecycle and
+preserved drafts/variants/job progress. Test fixtures now wait for native
+startup and synchronize simulated browser/source/Site clocks; production
+freshness validation was not relaxed.
+
+The live Windows reader initially lost its second response because pyserial
+timeout setters reconfigured an open CDC connection. Fixed settings before
+open and two bounded 150 ms handshake intervals corrected that. The guarded
+authenticated local HTTP route returned MOD-EDITOR/1 on COM4, ADC **433/1023**,
+gain **54/127**, valid=true and **zero ADC errors**. Keys and encoders were
+correctly marked unsupported. Only HELLO and MOD VOL were sent; no firmware,
+clock, volume or recovery-mode change was made. Finish unfinished local RAM
+imports/exports before monitoring because a new MOD CDC session cancels those
+transfer sessions while retaining playback and the loaded document.
+
+Pushed Site source `f9a9223e9bfd142cfb1d8d6af4fdd4a95047351a` deployed
+owner-private with MCP enabled as `appgdep_6accbf45249c81918c30c7898c8f4295`.
+Its built archive SHA-256 is
+`6afc4994043ef873897fa43eada7537ca7d12f4683780a53b101765431ebf94f`.
+The existing native tab still has its cached prior resource and needs reopening;
+native v9 activity UI acceptance is pending. The normal-user bridge and relay
+were updated with their original journals, credentials and permissions retained;
+the protected helper and restored MOD firmware were preserved. Windows
+PowerShell 5 startup preparation also passed after removing nested quoting
+from its Python token check. No host reboot or physical key/knob exercise was
+performed during this implementation.
+
 ## Automatic detection and local startup recovery, 2026-10-12
 
 The user reported a connected FM1 that the panel did not detect automatically.

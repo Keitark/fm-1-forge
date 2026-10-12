@@ -33,6 +33,7 @@ import webbrowser
 from remote_catalog import _plain_path, MAX_SET_BYTES
 
 from job_progress import validate_terminal_progress
+from input_telemetry import snapshot as input_refusal
 
 
 FIRMWARE_SIZE = 0x100000
@@ -470,6 +471,21 @@ class JobManager:
                     'boot_verified': False, 'failed': public['status'] in {'failed', 'unknown'}}
         return public
 
+    def input_snapshot(self) -> dict[str, Any]:
+        # Hold ownership from the first preflight through port close. A queued
+        # flash, updater or reset cannot race a read-only telemetry handle.
+        with self._mutex:
+            if (self._closed or self._storage_fault or self._active is not None
+                    or self._blocked_jobs()):
+                return input_refusal('busy')
+            try:
+                result = self.backend.input_snapshot()
+                if not isinstance(result, dict):
+                    raise TypeError('invalid input sample')
+                return _copy_json(_without_images(result))
+            except Exception:
+                return input_refusal()
+
     def status(self) -> dict[str, Any]:
         with self._mutex:
             unknown = self._blocked_jobs()
@@ -825,6 +841,8 @@ def make_server(manager: JobManager, token: str, port: int = DEFAULT_PORT) -> Th
                         raise BridgeError(400, "GET requests must not contain a body")
                     if path == "/v1/status":
                         data = manager.status()
+                    elif path == '/v1/input_snapshot':
+                        data = manager.input_snapshot()
                     elif path == "/v1/catalog":
                         data = manager.catalog()
                     elif path == "/v1/baseline":

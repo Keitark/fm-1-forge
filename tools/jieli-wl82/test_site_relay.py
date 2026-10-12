@@ -163,6 +163,27 @@ def metadata_at_budget(sample, max_bytes=relay.MAX_METADATA_BYTES):
 
 
 class ValidationTests(unittest.TestCase):
+    def test_input_snapshot_accepts_no_cloud_port_or_command_arguments(self):
+        self.assertEqual(relay.normalize_task(task('input_snapshot'))['arguments'], {})
+        self.assertNotIn('input_snapshot', relay.JOB_OPERATIONS)
+        for arguments in ({'port': 'COM4'}, {'command': 'FORGE STOP'}, {'path': '/v1/status'},
+                          {'firmware': 'FM1-FORGE/1'}):
+            with self.subTest(arguments=arguments), self.assertRaises(relay.RelayError):
+                relay.normalize_task(task('input_snapshot', **arguments))
+
+    def test_normalized_firmware_identity_and_volume_value_survive_metadata_scrub(self):
+        value = {'firmware': 'FM1-FORGE/1', 'volume': {'value': 501, 'gain': 62},
+                 'keys': {'pressed': '0000000000000002'}, 'raw': 'private bytes',
+                 'firmware_image': 'private bytes'}
+        result = relay.metadata_only(value)
+        self.assertEqual(result['firmware'], 'FM1-FORGE/1')
+        self.assertEqual(result['volume']['value'], 501)
+        self.assertNotIn('raw', result)
+        self.assertNotIn('firmware_image', result)
+        self.assertEqual(relay.metadata_only({'firmware': 'MOD-EDITOR/1'})['firmware'], 'MOD-EDITOR/1')
+        self.assertIsNone(relay.metadata_only({'firmware': None})['firmware'])
+        self.assertNotIn('firmware', relay.metadata_only({'firmware': 'private firmware blob'}))
+
     def test_exact_task_schema_rejects_device_or_arbitrary_paths(self):
         bad = [task("reset"), task("read_firmware"), task("status", url="https://other.example"),
                task("status", path="/v1/baseline"), task("plan_app", catalog_id="../escape"),
@@ -309,6 +330,24 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(self.bridge.calls, [("GET", "/v1/status", None), ("GET", "/v1/catalog", None),
                                             ("GET", "/v1/jobs/" + job_id, None)])
         self.assertEqual(result["data"]["status"], "unknown")
+
+    def test_input_snapshot_uses_fixed_get_and_saved_read_only_result(self):
+        value = task('input_snapshot')
+        self.bridge.metadata = {'state': 'unsupported', 'firmware': 'MOD-EDITOR/1',
+            'port': 'COM4', 'capabilities': {'keys': False, 'encoders': False, 'volume': True},
+            'keys': None, 'encoders': None,
+            'volume': {'value': 501, 'gain': 62, 'valid': True, 'samples': 5, 'errors': 0},
+            'observation': {'started_at': 100, 'completed_at': 101},
+            'message': 'This firmware exposes volume only; keys and encoders require Forge diagnostics.'}
+        first = self.relay.handle_task(value)
+        self.assertEqual(first['status'], 'succeeded')
+        self.assertEqual(first['data'], self.bridge.metadata)
+        self.assertEqual(self.bridge.calls, [('GET', '/v1/input_snapshot', None)])
+        self.assertEqual(self.relay.handle_task(value), first)
+        self.restart()
+        self.assertEqual(self.relay.handle_task(value), first)
+        self.assertEqual(len(self.bridge.calls), 1)
+        self.assertFalse(self.bridge.jobs)
 
     def test_local_import_launch_is_saved_before_fixed_post_and_cached_across_restart(self):
         value = task("open_local_import")

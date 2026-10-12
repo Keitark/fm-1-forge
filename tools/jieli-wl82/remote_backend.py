@@ -12,6 +12,7 @@ import time
 from remote_catalog import Catalog, rebase
 from job_progress import progress_for_job
 from update_mode import classify_update_mode, enumerate_midi_endpoints
+from input_telemetry import sample as sample_inputs
 
 SIZE = 0x100000
 PS = r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
@@ -65,6 +66,26 @@ class WindowsBackend:
             if Path(config['root']).resolve() != self.session:
                 raise ValueError('Protected session descriptor belongs to another directory')
             read_json(self.session / 'state.json')
+
+    def _input_readiness(self):
+        """Persisted state only; reject unknown or reserved device ownership."""
+        if not self.session:
+            return 'unavailable'
+        try:
+            state = read_json(self.session / 'state.json')
+            if (type(state) is not dict or state.get('operation') != 'idle'
+                    or any(state.get(key) is not False for key in
+                           ('blocked', 'reset_pending', 'needs_observation', 'loader_running'))
+                    or state.get('stopped', False) is not False
+                    or (self.session / 'stopped.txt').exists()):
+                return 'busy'
+        except (OSError, ValueError, TypeError):
+            return 'busy'
+        return 'ready'
+
+    def input_snapshot(self):
+        """Sample fixed read-only input queries while the bridge mutex is held."""
+        return sample_inputs(preflight=self._input_readiness)
 
     def status(self):
         """PnP enumeration and persisted state; no USB/serial handles are opened."""

@@ -131,7 +131,7 @@ foreach ($path in @($repo, $bridgeState, $relayState, $credentials)) { Assert-Pl
 foreach ($path in @($runtime, $bridgeScript, $relayScript)) { Assert-PlainPath $path -File }
 foreach ($path in @($bridgeTokenFile, $relayTokenFile, $sitesTokenFile)) { Assert-PrivateFile $path }
 # Read-only dependency/origin/credential validation. -B avoids bytecode writes.
-& $runtime -B -c 'import sys,pathlib,yaml,tqdm,crcmod,colorama,serial; sys.path.insert(0,sys.argv[2]); import site_relay as r; assert sys.version_info >= (3,11); r.normalize_origin(sys.argv[1],site=True); [r.load_token("",pathlib.Path(p)) for p in sys.argv[3:]]' $SiteUrl $PSScriptRoot $bridgeTokenFile $relayTokenFile $sitesTokenFile
+& $runtime -B -c 'import sys,pathlib,yaml,tqdm,crcmod,colorama,serial; sys.path.insert(0,sys.argv[2]); import site_relay as r; assert sys.version_info >= (3,11); r.normalize_origin(sys.argv[1],site=True); [r.load_token(str(),pathlib.Path(p)) for p in sys.argv[3:]]' $SiteUrl $PSScriptRoot $bridgeTokenFile $relayTokenFile $sitesTokenFile
 if ($LASTEXITCODE -ne 0) { throw 'Forge runtime, origins, or private credentials failed validation.' }
 
 # Verify both recorded processes before making any service change.

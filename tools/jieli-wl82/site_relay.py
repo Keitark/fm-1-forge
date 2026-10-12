@@ -31,7 +31,7 @@ MAX_METADATA_BYTES = 58_000
 ID = re.compile(r"[0-9a-f]{32}\Z")
 SHA = re.compile(r"[0-9a-f]{64}\Z")
 SLUG = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
-OPERATIONS = frozenset({"status", "catalog", "plan_app", "job", "switch_app", "official_updater", "open_local_import"})
+OPERATIONS = frozenset({"status", "input_snapshot", "catalog", "plan_app", "job", "switch_app", "official_updater", "open_local_import"})
 JOB_OPERATIONS = frozenset({"plan_app", "switch_app", "official_updater"})
 JOB_STATUSES = frozenset({"queued", "running", "succeeded", "failed", "unknown"})
 SENSITIVE_KEY = re.compile(
@@ -195,6 +195,11 @@ def metadata_only(value: Any, secrets: tuple[str, ...] = (), depth: int = 0,
                     any(secret in key for secret in secrets)):
                 continue
             compact = re.sub(r"[^a-z0-9]", "", key.lower())
+            if key == 'firmware' and item in ('FM1-FORGE/1', 'MOD-EDITOR/1', None):
+                # A normalized protocol identity is descriptive metadata. All
+                # other firmware/payload fields retain the existing scrubber.
+                result[key] = item
+                continue
             # Inventory can contain a unit's persistent physical identity even
             # when the value is plain text rather than a detectable local path.
             # Match whole normalized field names so port/model/readiness data
