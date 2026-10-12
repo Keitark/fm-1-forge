@@ -83,7 +83,7 @@ ${libraryHtml}
     localLibrary?.availability();
     const connected=!!state.relay?.connected;
     const observation=window.FM1Inventory.freshness(state),hardware=connected&&observation.fresh&&observation.present;
-    const checking=connected&&window.navigator?.onLine!==false&&!document.hidden&&!observation.fresh&&!!(inventoryMonitor?.inFlight||inventoryMonitor?.pendingRequestId);
+    const checking=connected&&window.navigator?.onLine!==false&&!document.hidden&&!observation.fresh&&!!(inventoryMonitor?.checking||inventoryMonitor?.pendingRequestId);
     el('connection').className='badge'+(connected?' online':'');el('connection-label').textContent=connected?'Bench connected':'Bench disconnected';
     el('relay-state').textContent=connected?'Connected':'Offline';el('switch-state').textContent=connected&&state.relay.allow_switch?'Enabled':'Disabled';
     const inv=state.inventory, engine=inv?.engine||inv;

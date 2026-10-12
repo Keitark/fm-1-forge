@@ -12,12 +12,12 @@ function inventoryFreshness(snapshot,now=Date.now()){
 }
 /** A single unresolved status request survives ticks, timeouts and manual refreshes. */
 function createInventoryMonitor({call,readSnapshot,getSnapshot,onError=()=>{},onAge=()=>{},canRun=()=>true,signal,clock={setTimeout:(fn,ms)=>globalThis.setTimeout(fn,ms),clearTimeout:timer=>globalThis.clearTimeout(timer)},interval=5000,pendingInterval=1000,initialDelay=1500}){
-  let enabled=false,disposed=false,timer=null,inflight=null,pending=null,failures=0,relayConnected=false,carrySnapshot=null;
+  let enabled=false,disposed=false,timer=null,inflight=null,refreshActive=false,pending=null,failures=0,relayConnected=false,carrySnapshot=null;
   const clear=()=>{if(timer!==null){clock.clearTimeout(timer);timer=null;}};
   const alive=()=>!disposed&&!signal?.aborted;
   const now=()=>clock.now?.()??Date.now();
   function adoptPending(){if(pending)return;const task=getSnapshot()?.recent_requests?.find(item=>item.operation==='status'&&['pending','dispatched'].includes(item.state)&&/^[a-f0-9]{32}$/.test(item.id||''));if(task)pending=task.id;}
-  function schedule(delay=interval){clear();if(!enabled||!alive()||!canRun())return;timer=clock.setTimeout(function inventoryTick(){timer=null;onAge();void refresh().catch(()=>{});schedule(interval);},delay);}
+  function schedule(delay=interval){clear();if(!enabled||!alive()||!canRun())return;timer=clock.setTimeout(function inventoryTick(){timer=null;void refresh().catch(()=>{});onAge();schedule(interval);},delay);}
   async function cycle(options,outcome){
     onAge();
     adoptPending();
@@ -47,16 +47,19 @@ function createInventoryMonitor({call,readSnapshot,getSnapshot,onError=()=>{},on
   }
   function refresh({manual=false}={}){
     if(!alive()||!canRun({manual}))return Promise.resolve(getSnapshot());
-    if(inflight)return inflight;clear();
+    if(inflight){refreshActive=true;return inflight;}clear();
     if(manual)carrySnapshot=null;const started=now(),outcome={succeeded:false};
-    inflight=(async()=>{try{const result=await cycle({manual},outcome);failures=0;return result;}catch(error){if(alive()){failures++;onError(error,pending);}throw error;}finally{inflight=null;if(alive()){onAge();const elapsed=now()-started;const delay=failures?Math.min(60000,interval*2**Math.min(failures,4)):!relayConnected?interval:outcome.succeeded?(elapsed>0?0:pendingInterval):pending?pendingInterval:interval;if(outcome.succeeded&&delay===0)carrySnapshot={snapshot:outcome.snapshot,at:now()};schedule(delay);}}})();schedule(interval);return inflight;
+    // cycle() paints synchronously before its first await. Publish the checking
+    // phase first, rather than deriving it from a not-yet-assigned promise.
+    refreshActive=true;
+    inflight=(async()=>{try{const result=await cycle({manual},outcome);failures=0;return result;}catch(error){if(alive()){failures++;onError(error,pending);}throw error;}finally{inflight=null;if(alive()){const elapsed=now()-started;const delay=failures?Math.min(60000,interval*2**Math.min(failures,4)):!relayConnected?interval:outcome.succeeded?(elapsed>0?0:pendingInterval):pending?pendingInterval:interval;refreshActive=outcome.succeeded&&delay===0&&enabled&&canRun()&&relayConnected;if(outcome.succeeded&&delay===0)carrySnapshot={snapshot:outcome.snapshot,at:now()};schedule(delay);onAge();}else refreshActive=false;}})();schedule(interval);return inflight;
   }
   function start(){if(enabled||!alive())return;enabled=true;schedule(initialDelay);}
-  function wake(){clear();carrySnapshot=null;if(!alive())return;onAge();if(enabled&&canRun())void refresh().catch(()=>{});}
-  function pause(){clear();carrySnapshot=null;if(alive())onAge();}
-  function close(){if(disposed)return;disposed=true;enabled=false;carrySnapshot=null;clear();}
+  function wake(){clear();carrySnapshot=null;if(!alive())return;if(enabled&&canRun())void refresh().catch(()=>{});else refreshActive=false;onAge();}
+  function pause(){clear();carrySnapshot=null;refreshActive=false;if(alive())onAge();}
+  function close(){if(disposed)return;disposed=true;enabled=false;refreshActive=false;carrySnapshot=null;clear();}
   signal?.addEventListener('abort',close,{once:true});
-  return {start,refresh,wake,pause,close,get pendingRequestId(){return pending;},get inFlight(){return !!inflight;}};
+  return {start,refresh,wake,pause,close,get pendingRequestId(){return pending;},get inFlight(){return !!inflight;},get checking(){return refreshActive;}};
 }
 export {inventoryFreshness,createInventoryMonitor};
 export const inventoryRuntime='window.FM1Inventory={freshness:'+inventoryFreshness.toString()+',monitor:'+createInventoryMonitor.toString()+'};';

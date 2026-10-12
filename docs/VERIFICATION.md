@@ -1,5 +1,33 @@
 # Integration verification
 
+## Refresh transition flicker, 2026-10-12
+
+Starting an automatic refresh could paint an expired observation before the
+monitor's asynchronous work was assigned. With no pending saved request yet,
+that synchronous redraw briefly showed **Connection status unavailable**.
+The monitor now publishes a separate checking phase before its first redraw,
+including timer, manual and wake entrypoints. Immediate successful resampling
+retains that phase through the timer handoff. Fresh observations keep their
+device label; expired ones show **Checking connection** while checking. Real
+failure, relay loss and pauses still end the checking phase. The 15-second
+freshness ceiling and disabled actions for expired observations are unchanged.
+
+All **293 Site tests**, TypeScript checking and the production build passed.
+Deterministic monitor and native-host regressions inspect every heading paint
+during a delayed stale refresh, zero-delay renewal, failure and relay loss;
+they also preserve drafts, selected variants and saved job progress. No local
+backend or firmware source changed for this correction.
+
+Pushed Site source `9c6b3b004f2bda2489742bebce77774edd3a049e` deployed
+owner-private with MCP enabled as `appgdep_6accd86970ec8191b77743c4e6575c1d`.
+The archive SHA-256 is
+`b97233a3e6b25f2c29cb063d9d28b80c91ccd241a39e724156f1bfcd1da408c1`.
+Resource v10 retains v9 and earlier aliases. Actual new-tab visual acceptance
+remains pending: the current task's native MCP Apps inventory had zero open
+tabs after calling Forge's open tool, and the available browser controls cannot
+create a native outer Codex tab. Open Forge through the side-panel Plugins and
+MCPs selector to load the updated resource.
+
 ## Sampled hardware activity, 2026-10-12
 
 The panel previously had no knob/key activity display. Resource v9 adds an

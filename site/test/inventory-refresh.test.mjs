@@ -113,6 +113,30 @@ test('closed monitor has no timers, hook calls, or late response updates',async(
 test('unsupported native host never schedules an auto observation',async()=>{
   const p=fixture({canRun:()=>false});p.monitor.start();await p.clock.advance(60000);assert.equal(p.calls.length,0);assert.equal(p.clock.size,0);p.controller.abort();
 });
+test('stale automatic, manual and wake refreshes publish checking before every synchronous age paint',async()=>{
+  for(const mode of ['automatic','manual','wake']){
+    const clock=fakeClock(),epoch=1000000,paints=[];let monitor,release,snapshot=fresh({inventory_status:{state:'stale',observed_at:980,age_seconds:20,max_age_seconds:15},_inventory_received_at:epoch});
+    const paint=()=>{const observation=inventoryFreshness(snapshot,epoch+clock.now());paints.push(!snapshot.relay.connected?'Connection status unavailable':observation.fresh?'FM1 on COM10':monitor.checking||monitor.pendingRequestId?'Checking connection':'Connection status unavailable');};
+    monitor=createInventoryMonitor({clock,getSnapshot:()=>snapshot,readSnapshot:()=>new Promise(resolve=>{release=()=>{paint();resolve(snapshot);};}),call:async name=>name==='get_fm1_status'?{request_id:id}:{id,operation:'status',state:'pending'},onAge:paint});monitor.start();
+    if(mode==='automatic')await clock.advance(1500);else if(mode==='manual')void monitor.refresh({manual:true});else monitor.wake();await flush();
+    assert.equal(monitor.checking,true);assert.ok(paints.length>=1);assert.ok(paints.every(value=>value==='Checking connection'),mode+' must not flash unavailable before its heartbeat resolves');
+    await clock.advance(20000);assert.ok(paints.length>=4,'independent age checks continue while the heartbeat is slow');assert.ok(paints.every(value=>value==='Checking connection'));
+    release();await flush();assert.equal(monitor.pendingRequestId,id);assert.ok(paints.every(value=>value==='Checking connection'));monitor.close();
+  }
+});
+test('successful immediate resampling keeps checking between cycles without renewing stale observation data',async()=>{
+  const clock=fakeClock(),epoch=1000000,paints=[];let monitor,enqueues=0,snapshot=fresh({inventory_status:{state:'stale',observed_at:980,age_seconds:20,max_age_seconds:15},_inventory_received_at:epoch});
+  const paint=()=>{const current=inventoryFreshness(snapshot,epoch+clock.now());assert.equal(current.fresh,false);paints.push(monitor.checking||monitor.pendingRequestId?'Checking connection':'Connection status unavailable');};
+  monitor=createInventoryMonitor({clock,getSnapshot:()=>snapshot,readSnapshot:()=>new Promise(resolve=>clock.setTimeout(()=>{paint();resolve(snapshot);},10)),call:async name=>name==='get_fm1_status'?{request_id:++enqueues===1?id:nextId}:{id:enqueues===1?id:nextId,operation:'status',state:enqueues===1?'succeeded':'pending'},onAge:paint});monitor.start();await clock.advance(1520);
+  assert.equal(enqueues,2);assert.equal(monitor.pendingRequestId,nextId);assert.ok(paints.every(value=>value==='Checking connection'));assert.equal(snapshot.inventory_status.observed_at,980);monitor.close();
+});
+test('genuine refresh failure and offline heartbeat clear checking after completion',async()=>{
+  for(const mode of ['error','offline']){
+    const clock=fakeClock();let snapshot=fresh({inventory_status:{state:'stale',observed_at:980,age_seconds:20,max_age_seconds:15},_inventory_received_at:1000000}),monitor;
+    const paints=[];monitor=createInventoryMonitor({clock,getSnapshot:()=>snapshot,readSnapshot:async()=>{if(mode==='offline')snapshot={...snapshot,relay:{connected:false}};return snapshot;},call:async()=>{throw new Error('Real delivery failure');},onAge:()=>paints.push(snapshot.relay.connected&&(monitor.checking||monitor.pendingRequestId)?'Checking connection':'Connection status unavailable')});monitor.start();await clock.advance(1500);
+    assert.equal(monitor.checking,false);assert.equal(monitor.pendingRequestId,null);assert.equal(paints.at(-1),'Connection status unavailable');monitor.close();
+  }
+});
 test('mismatched response cannot release the selected pending ID or paint new inventory',async()=>{
   const p=fixture({backend:name=>name==='get_fm1_status'?{request_id:id}:{id:nextId,operation:'status',state:'succeeded'}});await assert.rejects(p.monitor.refresh(),/match/);assert.equal(p.monitor.pendingRequestId,id);assert.equal(p.snapshots.length,1);p.controller.abort();
 });

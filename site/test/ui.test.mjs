@@ -781,6 +781,22 @@ test('pending automatic observations expire instead of indefinitely presenting t
   assert.equal(p.node('device-heading').textContent,'Checking connection');assert.equal(p.node('physical-device').textContent,'Checking connection');assert.match(p.node('inventory-freshness').textContent,/Last seen FM1 on COM10.*checking connection.*check \d+s old/);assert.equal(p.node('switch-nes').disabled,true);assert.equal(p.node('official-state').textContent,'Unavailable');assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
   const id=p.requestArgs.find(item=>item.name==='get_fm1_status');assert.ok(id);const deliveries=p.requestArgs.filter(item=>item.name==='get_fm1_request');assert.ok(deliveries.length>=3);assert.equal(new Set(deliveries.map(item=>item.args.request_id)).size,1);p.dispose();
 });
+test('a stale native heading never flashes unavailable when a delayed automatic refresh begins',async t=>{
+  t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,9,12,12,0,0)});
+  let hold=true,release;
+  const p=await panel({embedded:true,nativeControls:true,beforeCall:name=>name==='open_fm1_library'&&hold?new Promise(resolve=>{release=resolve;}):undefined,jobData:({name,defaultJob})=>name==='get_fm1_status'?null:defaultJob});
+  try{
+    const stale=await callTool(p.env,'alice','open_fm1_library',{});stale.inventory_status={...stale.inventory_status,state:'stale',age_seconds:20,observed_at:Math.floor(Date.now()/1000)-20};
+    p.events.get('message')({source:p.parent,data:{jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{content:[],structuredContent:stale}}});
+    await until(()=>p.node('device-heading').textContent==='Connection status unavailable');
+    p.node('forge-project-goal').value='Keep the unsaved firmware draft';p.node('job-id').value='e'.repeat(32);p.node('detail').textContent='Saved sector progress';p.node('variant-nes').value='nes-test';const cards=p.node('library').innerHTML;
+    p.node('device-heading').history.length=0;p.node('physical-device').history.length=0;
+    p.events.get('focus')();await tick();assert.ok(release);assert.equal(p.node('device-heading').textContent,'Checking connection');assert.equal(p.node('switch-nes').disabled,true);
+    await p.advancePoll(5000);assert.ok(p.node('device-heading').history.length>=2);assert.ok(p.node('device-heading').history.every(label=>label==='Checking connection'),JSON.stringify(p.node('device-heading').history));assert.ok(p.node('physical-device').history.every(label=>label==='Checking connection'),JSON.stringify(p.node('physical-device').history));
+    hold=false;release();await until(()=>p.node('device-heading').textContent==='FM1 on COM10');
+    assert.ok(!p.node('device-heading').history.includes('Connection status unavailable'));assert.ok(!p.node('physical-device').history.includes('Connection status unavailable'));assert.equal(p.node('forge-project-goal').value,'Keep the unsaved firmware draft');assert.equal(p.node('job-id').value,'e'.repeat(32));assert.equal(p.node('detail').textContent,'Saved sector progress');assert.equal(p.node('variant-nes').value,'nes-test');assert.equal(p.node('library').innerHTML,cards);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
+  }finally{hold=false;release?.();p.dispose();}
+});
 test('slow native startup cannot let the fixture advance observation time before its first monitor timer exists',async()=>{
   const p=await panel({embedded:true,nativeControls:true,nativeStartupDelay:60,jobData:({name,defaultJob})=>name==='get_fm1_status'?null:defaultJob});
   try{await p.advancePoll(16500);assert.equal(p.node('device-heading').textContent,'Checking connection');assert.equal(p.node('switch-nes').disabled,true);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);}finally{p.dispose();}
