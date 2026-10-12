@@ -1,5 +1,64 @@
 # Integration verification
 
+## Automatic connection refresh 3.1.2, 2026-10-12
+
+The opening panel consumed saved inventory without an automatic status request.
+A fresh relay heartbeat was incorrectly enough to display cached COM ports as
+current. A passive live check at the start of this correction, request
+`8f535a1dc6c14baba97c8db6e26ff9cc`, completed with no serial ports, MIDI endpoints
+or UBOOT disks and `update_mode.mode:disconnected`. It performed no device I/O.
+
+Normal panels now check passive device inventory on a five-second visible
+schedule, shortly after opening and on visibility/focus/network recovery.
+Hidden/offline panels pause checks and teardown clears timers and listeners.
+One unresolved status ID is reused across ticks and manual refresh; the server
+also coalesces concurrent panels per owner. Background refresh only renders
+connection fields and availability, preserving package selection, open approval,
+project/appearance edits and selected job progress. File/form-only entrypoints
+do not start polling.
+
+The server adds an explicit 15-second freshness contract. Receipt timestamps
+cannot be supplied by the caller or renewed by duplicate ACKs. Original request
+age bounds delayed relay journal delivery; cached initial/tool payloads also
+expire by both server age and elapsed/wall time in the panel. New failed/unknown
+observations invalidate older success. Enumeration failures and RPC timeouts
+show unavailable/stale status rather than physical disconnection. Old ports
+remain only as clearly labeled last-seen history. No D1 schema, relay setup,
+permissions or hardware transport changes were needed.
+
+Validation: **211 final Site tests passed**, with zero failures/skips; TypeScript
+checking and the final production build passed. Focused tests cover COM10
+disconnection/reconnection, delayed/cached observations, enumeration failure,
+owner isolation, duplicate ACKs, multiple panels, pending request reuse,
+manual/automatic overlap, visibility/offline/teardown and preservation of
+drafts, themes, package variants, approvals and saved progress. Offline backend
+safety tests confirm passive inventory opens no device transport or helper.
+Logs: `F:/dev/fm1/tmp/fm1-forge-autorefresh-3.1.2-tests.tap`,
+`F:/dev/fm1/tmp/fm1-forge-autorefresh-3.1.2-typecheck.log`, and
+`F:/dev/fm1/tmp/fm1-forge-autorefresh-3.1.2-build.log`.
+
+Private Site source `014d98e65b6db8e36bc46623e41f5570b950043f` deployed as
+`appgdep_6acc466e05c88191b89cd6befa5089e8`, succeeded with MCP enabled and
+environment revision 1. Its saved version is
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_6fe7c835c63081919530000f67c92017`.
+Site archive SHA256:
+`71f30676bb1b82321156638738c1bd8a2563e288f8b829d0cb62c1476064e111`.
+
+The same private plugin was updated to **3.1.2**, release
+`pluginrel_6acc4699b57481919edaab8351426ddc`. Readback verifies both manifest
+versions and every other field is unchanged. The two-file manifest overlay
+SHA256 is `23464a5ba55b5db6870875d0e89349ecf0f9cc238d7d9de89bb8bc0553cc27f2`.
+Post-deployment passive request `5954313f4aec405182328604af3ac0bb` succeeded
+with no device interfaces. A subsequent saved snapshot aged correctly to
+`inventory_status.state:stale` after 21 seconds despite a connected relay.
+
+The already loaded native tab needs reopening once to load the new code.
+Actual native automatic polling acceptance is recorded separately from the
+passing VM tests and live server checks; at publication it remains pending
+that reopen. The earlier settings trusted-tool scope and native tab icon are
+separate outstanding checks. No physical unplug/replug was requested for
+this release, and no firmware transfer was performed.
+
 ## FM1 Forge native panel patch 3.1.1, 2026-10-12
 
 The ProTracker width was caused by `.card:last-child` spanning `1/-1` across

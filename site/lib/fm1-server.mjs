@@ -20,7 +20,12 @@ async function body(request) {
   const raw=new TextDecoder().decode(bytes);
   try{return JSON.parse(raw);}catch{throw new PublicError('Invalid JSON.');}
 }
-const parse=(row)=>row?{id:row.id,operation:row.operation,state:row.state,created:row.created,...(row.result?JSON.parse(row.result):{})}:null;
+const INVENTORY_MAX_AGE_SECONDS=15;
+// This timestamp belongs to the Site receipt, never to caller-controlled data,
+// queue creation or a retried dispatch. Keep it private to the cache contract.
+const INVENTORY_OBSERVED_FIELD='_site_inventory_observed_at';
+function publicResult(encoded){const value=JSON.parse(encoded);delete value[INVENTORY_OBSERVED_FIELD];return value;}
+const parse=(row)=>row?{id:row.id,operation:row.operation,state:row.state,created:row.created,...(row.result?publicResult(row.result):{})}:null;
 function db(env){if(!env.DB)throw new PublicError('Saved requests are unavailable.',503);return env.DB;}
 function user(request){const value=request.headers.get('oai-authenticated-user-id');if(!value)throw new PublicError('Sign in to use your FM1 library.',401);return value;}
 function safeOrigin(request,env){const origin=request.headers.get('origin');if(origin&&origin!==(env.SITE_ORIGIN||new URL(request.url).origin))throw new PublicError('Origin is not permitted.',403);}
@@ -29,9 +34,26 @@ async function relayState(env) {
   return {connected:!!row&&now()-row.last_seen<30,last_seen:row?.last_seen??null,allow_switch:!!row?.allow_switch,allow_official_update:!!row?.allow_official_update};
 }
 async function latest(env,owner,operation){const row=await db(env).prepare("SELECT result FROM relay_tasks WHERE user_id=? AND operation=? AND state='succeeded' ORDER BY created DESC,rowid DESC LIMIT 1").bind(owner,operation).first();return row?.result?JSON.parse(row.result).data:null;}
+async function inventorySnapshot(env,owner,connection){
+  const row=await db(env).prepare("SELECT id,state,result,created FROM relay_tasks WHERE user_id=? AND operation='status' AND state IN ('succeeded','failed','unknown') ORDER BY created DESC,rowid DESC LIMIT 1").bind(owner).first();
+  const status={state:'unavailable',observed_at:null,age_seconds:null,max_age_seconds:INVENTORY_MAX_AGE_SECONDS,request_id:row?.id||null};
+  if(!row?.result)return {inventory:null,inventory_status:status};
+  const saved=JSON.parse(row.result);
+  if(row.state!=='succeeded'||saved.status!=='succeeded')return {inventory:null,inventory_status:{...status,state:'error'}};
+  if(!saved.data||typeof saved.data!=='object'||Array.isArray(saved.data))return {inventory:null,inventory_status:status};
+  const observed=saved[INVENTORY_OBSERVED_FIELD],valid=Number.isSafeInteger(observed)&&observed>0;
+  const createdValid=Number.isSafeInteger(row.created)&&row.created>0,instant=now();
+  // Receipt time alone could renew an hours-old relay outbox entry. The original
+  // queue creation bounds how old the physical sample can conservatively be.
+  const age=valid&&createdValid?Math.max(0,instant-observed,instant-row.created):null;
+  const fresh=valid&&createdValid&&observed<=instant&&row.created<=instant&&age<=INVENTORY_MAX_AGE_SECONDS&&connection.connected;
+  const enumerationError=saved.data.device&&Object.hasOwn(saved.data.device,'inventory_error')&&saved.data.device.inventory_error!==null;
+  return {inventory:saved.data,inventory_status:{...status,state:enumerationError?'error':fresh?'fresh':'stale',observed_at:valid?observed:null,age_seconds:age}};
+}
 async function library(env,owner){
   const baseline=await db(env).prepare('SELECT job_id,sha256,verified_at FROM forge_baselines WHERE user_id=?').bind(owner).first();
-  return {profiles:PROFILES,relay:await relayState(env),catalog:await latest(env,owner,'catalog'),inventory:await latest(env,owner,'status'),
+  const connection=await relayState(env),inventory=await inventorySnapshot(env,owner,connection);
+  return {profiles:PROFILES,relay:connection,catalog:await latest(env,owner,'catalog'),...inventory,
     forge:{diagnostic_baseline:baseline?{...baseline,catalog_id:'factory-diag',write_verified:true,full_readback_verified:true,boot_verified:true}:null,...await forgeSnapshot(env,owner)},
     recent_requests:(await db(env).prepare('SELECT * FROM relay_tasks WHERE user_id=? ORDER BY created DESC,rowid DESC LIMIT 12').bind(owner).all()).results.map(parse)};
 }
@@ -53,6 +75,18 @@ async function enqueue(env,owner,operation,args,taskId=ident()){
   if(operation==='official_updater'&&!connection.allow_official_update)throw new PublicError('Official updating is disabled at the bench.',403);
   const existing=await db(env).prepare('SELECT * FROM relay_tasks WHERE id=? AND user_id=?').bind(taskId,owner).first();
   if(existing)return {request_id:existing.id,delivery:existing.state};
+  if(operation==='status'){
+    // Coalesce passive refreshes from multiple native panels for this owner.
+    // The INSERT predicate is atomic in D1; concurrent callers cannot both add
+    // a refresh. A finished request can be followed by a new observation.
+    for(let attempt=0;attempt<2;attempt++){
+      const inserted=await db(env).prepare("INSERT INTO relay_tasks(id,user_id,operation,arguments,state,created) SELECT ?,?,'status',?,'pending',? WHERE NOT EXISTS(SELECT 1 FROM relay_tasks WHERE user_id=? AND operation='status' AND state IN ('pending','dispatched'))").bind(taskId,owner,JSON.stringify(args),now(),owner).run();
+      if(inserted.meta?.changes)return {request_id:taskId,delivery:'pending',message:'Saved passive status request. Inspect this ID; do not submit another request after a timeout.'};
+      const pending=await db(env).prepare("SELECT id,state FROM relay_tasks WHERE user_id=? AND operation='status' AND state IN ('pending','dispatched') ORDER BY created DESC,rowid DESC LIMIT 1").bind(owner).first();
+      if(pending)return {request_id:pending.id,delivery:pending.state,message:'Resume the existing passive status request by this ID.'};
+    }
+    throw new PublicError('The previous status refresh finished while queuing. Refresh the saved library before requesting another observation.',409);
+  }
   await db(env).prepare('INSERT INTO relay_tasks(id,user_id,operation,arguments,state,created) VALUES(?,?,?,?,?,?)').bind(taskId,owner,operation,JSON.stringify(args),'pending',now()).run();
   return {request_id:taskId,delivery:'pending',...(['plan_app','switch_app','official_updater'].includes(operation)?{job_id:taskId}:{}),message:'Saved request. Inspect this ID; do not submit another request after a timeout.'};
 }
@@ -62,15 +96,16 @@ async function stagedSwitch(env,owner,args){
   const catalog=await latest(env,owner,'catalog');
   const variant=catalog?.apps?.flatMap(app=>app.variants||[]).find(item=>item.id===args.catalog_id);
   if(!variant||!variant.ready||!/^[a-f0-9]{64}$/.test(variant.sha256))throw new PublicError('Refresh packages and choose a validated, ready variant.',409);
-  const inventory=await latest(env,owner,'status');
+  const status=await inventorySnapshot(env,owner,connection),inventory=status.inventory;
   const mode=inventory?.device?.update_mode;
-  if(args.entry_method==='auto'&&!['serial','already_uboot'].includes(mode?.app_entry_method))throw new PublicError('Refresh the device: automatic app routing needs one recognized serial or UBOOT device.',409);
+  if(args.entry_method==='auto'&&(status.inventory_status.state!=='fresh'||!['serial','already_uboot'].includes(mode?.app_entry_method)))throw new PublicError('Refresh the device: automatic app routing needs fresh inventory and one recognized serial or UBOOT device.',409);
   const approval=ident();
   await db(env).prepare('INSERT INTO switch_approvals(id,user_id,catalog_id,digest,entry_method,expires,used) VALUES(?,?,?,?,?,?,0)').bind(approval,owner,args.catalog_id,variant.sha256,args.entry_method,now()+180).run();
   return {review:{title:variant.title,variant:variant.variant,sha256:variant.sha256,catalog_id:variant.id,entry_method:args.entry_method,...(args.entry_method==='auto'?{detected_method:mode.app_entry_method}:{}),expires:now()+180},_approval:approval,message:'Review the variant in the library and click Confirm app switch. No device write has been submitted.'};
 }
 async function officialState(env,owner){
-  const inventory=await latest(env,owner,'status');
+  const status=await inventorySnapshot(env,owner,await relayState(env)),inventory=status.inventory;
+  if(status.inventory_status.state!=='fresh')throw new PublicError('Refresh the device: official updating needs fresh FM1 MIDI/SysEx inventory.',409);
   const engine=inventory?.engine;
   if(engine?.active||engine?.blocked_unknown||engine?.storage_fault||engine?.updater_handoff)throw new PublicError('Resolve the saved bench job or updater handoff before another official update.',409);
   const update=inventory?.device?.official_update;
@@ -168,9 +203,10 @@ async function relayRequest(request,env,path){
     const clean={status:value.status,...(value.data!==undefined?{data:sanitize(value.data)}:{}),...(value.error?{error:sanitize(String(value.error))}:{})};
     const encoded=JSON.stringify(clean);
     if(encoded.length>60000)throw new PublicError('Result is too large.',413);
-    if(task.result){if(task.result!==encoded)throw new PublicError('A different result is already saved.',409);await rememberDiagnostics(env,task,clean);return json({saved:true});}
-    const saved=await db(env).prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=? AND result IS NULL').bind(value.status,encoded,value.id).run();
-    if(!saved.meta?.changes){const current=await db(env).prepare('SELECT result FROM relay_tasks WHERE id=?').bind(value.id).first();if(current?.result!==encoded)throw new PublicError('A different result is already saved.',409);}
+    if(task.result){if(JSON.stringify(publicResult(task.result))!==encoded)throw new PublicError('A different result is already saved.',409);await rememberDiagnostics(env,task,clean);return json({saved:true});}
+    const persisted=task.operation==='status'&&clean.status==='succeeded'?JSON.stringify({...clean,[INVENTORY_OBSERVED_FIELD]:now()}):encoded;
+    const saved=await db(env).prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=? AND result IS NULL').bind(value.status,persisted,value.id).run();
+    if(!saved.meta?.changes){const current=await db(env).prepare('SELECT result FROM relay_tasks WHERE id=?').bind(value.id).first();if(!current?.result||JSON.stringify(publicResult(current.result))!==encoded)throw new PublicError('A different result is already saved.',409);}
     await rememberDiagnostics(env,task,clean);
     return json({saved:true});
   }
@@ -186,7 +222,7 @@ async function mcp(request,env){
     if(rpc?.method==='tools/call'||(rpc?.method==='resources/read'&&String(rpc.params?.uri||'').startsWith('fm1-forge:')))user(request);
   }
   const handler=createMcpHandler(()=>{
-    const server=new McpServer({name:'FM1 Forge',version:'3.1.1',icons:ICONS},{
+    const server=new McpServer({name:'FM1 Forge',version:'3.1.2',icons:ICONS},{
       jsonSchemaValidator:new CfWorkerJsonSchemaValidator(),
       instructions:'Open FM1 Forge through this installed plugin. Install and verify diagnostics, inspect hardware, then configure USB/system, HAL and user modules and ask Codex to build. Inspect saved request IDs after a disconnect. Offline planning does not authorize app switching. Switching requires human confirmation and enabled bench capability. Higher clock/LCD presets require a device test.',
     });

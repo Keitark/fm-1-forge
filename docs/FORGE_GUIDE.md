@@ -1,6 +1,6 @@
 # FM1 Forge
 
-FM1 Forge **3.1.1** is the renamed private FM1 App Library plugin. Its existing plugin ID,
+FM1 Forge **3.1.2** is the renamed private FM1 App Library plugin. Its existing plugin ID,
 Site URL and local bridge remain in use. While the conversation is active, use
 **Side-panel New Tab (+) → More tools… → Plugins and MCPs → FM1 Forge**.
 This opens Forge's native conversation tab. The global shortcut opens a separate
@@ -11,6 +11,14 @@ remain available. Reopen the native conversation tab after an update.
 The [native extensions guide](MCP_EXTENSIONS.md) describes the official SDK,
 settings, drafts, file editing, mentions, forms and chat handoff. Dated
 deployment and actual native-host checks are in [verification](VERIFICATION.md).
+
+Connection status refreshes automatically every five seconds while the normal
+panel is visible, and checks again when you return to it. **Bench connected**
+means the local relay is running; the separate FM1 status reports USB, MIDI or
+UBOOT presence. Failed checks and inventory older than 15 seconds show an
+unavailable/stale status rather than a current COM port. Hidden panels pause
+polling. **Refresh** also reloads package metadata before reviewing a transfer.
+These checks use passive inventory and do not open or program the device.
 
 Diagnostics installation is still pending. Runtime elevation was canceled;
 no new protected helper or firmware write resulted. A ready protected helper

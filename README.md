@@ -1,6 +1,6 @@
 # FM1 Forge
 
-The private FM1 App Library plugin is now **FM1 Forge 3.1.1**: install an asset-free
+The private FM1 App Library plugin is now **FM1 Forge 3.1.2**: install an asset-free
 diagnostic baseline, test hardware, configure USB/HAL/user modules graphically,
 then ask Codex to create and build a firmware project. It preserves the existing
 plugin ID, hosted MCP endpoint, local protected writer and saved-job history.

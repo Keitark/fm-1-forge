@@ -1,6 +1,6 @@
 # FM1 Forge user guide
 
-For the current **3.1.1** diagnostic-to-project workflow, black default panel,
+For the current **3.1.2** diagnostic-to-project workflow, black default panel,
 graphical module configuration and all transfer methods, read
 [FORGE_GUIDE.md](FORGE_GUIDE.md). The final private service and plugin release
 are updated. The current resource is `ui://fm1/forge-panel-v3.html`. Open the
@@ -188,7 +188,11 @@ restore the prerequisites through the established bench workflow. The Site
 does not prepare that session. See [SITE_RELAY.md](SITE_RELAY.md) for connection
 and recovery details.
 
-1. Click **Refresh** to load current inventory and package metadata.
+1. The visible panel checks connection inventory automatically every five seconds
+   and checks again when you return. **Bench connected** describes the relay;
+   FM1 presence is shown separately. A failed/old check is marked unavailable or
+   stale, with the last known port kept only as history. Click **Refresh** to also
+   load package metadata before reviewing an operation.
 2. Choose a package variant on its app card. Check its **Ready/Blocked** state
    and displayed **SHA256**. A blocked package needs bench-side attention.
 3. Click **View plan** to check the selected package offline. This creates a

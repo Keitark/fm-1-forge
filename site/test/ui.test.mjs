@@ -9,9 +9,10 @@ import {projectConfig,projectPrompt,verifiedDiagnostics,verifiedBaseline} from '
 const tick=()=>new Promise(resolve=>setTimeout(resolve,15));
 async function until(predicate){for(let attempt=0;attempt<100;attempt++){if(predicate())return;await tick();}assert.fail('Panel did not reach the expected state.');}
 async function panel({embedded=false,initial=true,serverTools=true,hostMessages=false,hostRejectMessage=false,baseline=null,catalogValue=null,inventory=null,official=false,loseConfirmationReply=false,jobData=null,beforeCall=null,nativeControls=false,omitPlanJobId=false,preferences=null,storageBlocked=false,legacyPreferences=null,nativeExtensions=false,initialFile=null,fileInputFirst=true,initialToolResult=null}={}){
-  const env=database();connect(env,true,official);cacheCatalog(env,'alice',catalogValue||undefined);if(inventory)cacheInventory(env,'alice',inventory);
+  const normalInventory=inventory||{device:{serial_ports:[{port:'COM10'}],update_mode:{mode:'serial',app_entry_method:'serial'},official_update:{configured:true,available:false,sha256:digest}},engine:{active:null,blocked_unknown:false}};
+  const env=database();connect(env,true,official);cacheCatalog(env,'alice',catalogValue||undefined);cacheInventory(env,'alice',normalInventory);
   const seededTasks=env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY id').all();
-  const nodes=new Map(),registered=new Map(),requests=[],requestArgs=[],events=new Map(),notifications=[],timers=new Map(),delays=[],storage=new Map(),storageWrites=[];
+  const nodes=new Map(),registered=new Map(),requests=[],requestArgs=[],events=new Map(),notifications=[],timers=new Map(),pollTimers=new Map(),delays=[],storage=new Map(),storageWrites=[];let panelNow=Date.now(),pollKey=0;
   if(preferences!==null)storage.set('fm1.appearance.v2',typeof preferences==='string'?preferences:JSON.stringify(preferences));
   if(legacyPreferences!==null)storage.set('fm1.appearance.v1',JSON.stringify(legacyPreferences));
   const initialValues={'forge-project-name':'My FM1 firmware','forge-project-slug':'my-fm1-firmware','forge-project-goal':'','forge-clock-preset':'sdk-default','forge-lcd-preset':'stock-dma','forge-module':'diagnostics','diag-entry-method':'auto'};
@@ -37,13 +38,14 @@ async function panel({embedded=false,initial=true,serverTools=true,hostMessages=
   });}}:window;
   window.parent=parent;
   function toolResult(answer){const {_approval,...data}=answer;return {content:[],structuredContent:data,...(_approval?{_meta:{approval_id:_approval}}:{})};}
-  async function backend(name,args){requests.push(name);requestArgs.push({name,args});await beforeCall?.(name,args);const answer=await callTool(env,'alice',name,args);if(name==='open_fm1_library'&&baseline)answer.forge={diagnostic_baseline:baseline};if(answer.request_id){const defaultJob={id:args.job_id||answer.job_id||answer.request_id,status:'succeeded',simulation:true},data=jobData?await jobData({name,args,answer,defaultJob}):defaultJob;if(data!==null)env.DB.sqlite.prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=?').run('succeeded',JSON.stringify({status:'succeeded',data}),answer.request_id);}if(omitPlanJobId&&name==='plan_fm1_app'){const {job_id,...queued}=answer;return queued;}return answer;}
+  async function backend(name,args){requests.push(name);requestArgs.push({name,args});await beforeCall?.(name,args);const answer=await callTool(env,'alice',name,args);if(name==='open_fm1_library'&&baseline)answer.forge={diagnostic_baseline:baseline};if(answer.request_id){const defaultJob={id:args.job_id||answer.job_id||answer.request_id,status:'succeeded',simulation:true},data=jobData?await jobData({name,args,answer,defaultJob}):defaultJob;if(data!==null)env.DB.sqlite.prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=?').run('succeeded',JSON.stringify({status:'succeeded',data,...(name==='get_fm1_status'?{_site_inventory_observed_at:Math.floor(Date.now()/1000)}:{})}),answer.request_id);}if(omitPlanJobId&&name==='plan_fm1_app'){const {job_id,...queued}=answer;return queued;}return answer;}
   const properties=new Map();
   const document={documentElement:{style:{setProperty(name,value){properties.set(name,String(value));}}},body:{classList:{add(){}},dataset:{},style:{setProperty(name,value){properties.set(name,String(value));},getPropertyValue(name){return properties.get(name)??'';}}},getElementById:node,createElement(tag){return {tag,textContent:'',style:{}};},modelContext:{async registerTool(tool,{signal}){registered.set(tool.name,tool);signal.addEventListener('abort',()=>registered.delete(tool.name));}}};
-  const context=vm.createContext({document,window,AbortController,Map,Object,Number,JSON,RegExp,String,Error,URL,TextEncoder,TextDecoder,crypto,queueMicrotask,setTimeout:(fn,ms)=>{delays.push(ms);const timer=setTimeout(()=>{timers.delete(timer);fn();},ms>=10000?500:1);timers.set(timer,ms);return timer;},clearTimeout:timer=>{timers.delete(timer);clearTimeout(timer);},fetch:async(_url,options)=>{const input=JSON.parse(options.body);try{const answer=await backend(input.name,input.arguments);if(loseConfirmationReply&&input.name.startsWith('confirm_'))throw new Error('Confirmation reply lost.');return {ok:true,json:async()=>({structuredContent:answer})};}catch(error){return {ok:false,json:async()=>({error:error.message})};}}});
+  document.hidden=false;document.addEventListener=(name,fn,options)=>window.addEventListener(name,fn,options);window.navigator={onLine:true};
+  const context=vm.createContext({document,window,AbortController,Map,Object,Number,JSON,RegExp,String,Error,URL,TextEncoder,TextDecoder,crypto,queueMicrotask,Date:class PanelDate extends Date{static now(){return panelNow;}},setTimeout:(fn,ms)=>{delays.push(ms);if(fn.name==='inventoryTick'){const timer='poll-'+(++pollKey);pollTimers.set(timer,{fn,time:panelNow+ms});return timer;}const timer=setTimeout(()=>{timers.delete(timer);fn();},ms>=10000?500:1);timers.set(timer,ms);return timer;},clearTimeout:timer=>{if(pollTimers.delete(timer))return;timers.delete(timer);clearTimeout(timer);},fetch:async(_url,options)=>{const input=JSON.parse(options.body);try{const answer=await backend(input.name,input.arguments);if(loseConfirmationReply&&input.name.startsWith('confirm_'))throw new Error('Confirmation reply lost.');return {ok:true,json:async()=>({structuredContent:answer})};}catch(error){return {ok:false,json:async()=>({error:error.message})};}}});
   for(const script of UI_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(script[1],context);
   await tick();
-  return {env,nodes,registered,requests,requestArgs,events,notifications,timers,delays,parent,window,document,storage,storageWrites,seededTasks,node,async invoke(name,args){return registered.get(name).execute(args);},dispose(){events.get('pagehide')?.();}};
+  return {env,nodes,registered,requests,requestArgs,events,notifications,timers,pollTimers,delays,parent,window,document,storage,storageWrites,seededTasks,node,async advancePoll(ms){const end=panelNow+ms;let count=0;while(true){const next=[...pollTimers].sort((a,b)=>a[1].time-b[1].time).find(([,timer])=>timer.time<=end);if(!next)break;if(++count>100)throw new Error('Polling timer storm.');panelNow=next[1].time;pollTimers.delete(next[0]);next[1].fn();await tick();}panelNow=end;await tick();},async invoke(name,args){return registered.get(name).execute(args);},dispose(){events.get('pagehide')?.();}};
 }
 test('host initial tool result renders without a duplicate library request',async()=>{const p=await panel({embedded:true});assert.equal(p.node('relay-state').textContent,'Connected');assert.equal(p.requests.length,0);assert.equal(p.registered.size,0);p.dispose();});
 test('initial host result renders even without serverTools capability',async()=>{const p=await panel({embedded:true,serverTools:false});assert.equal(p.node('relay-state').textContent,'Connected');assert.equal(p.requests.length,0);p.dispose();});
@@ -647,7 +649,7 @@ test('native file input/result ordering opens file mode without status, catalog 
   for(const fileInputFirst of [true,false]){
     const p=await panel({embedded:true,initialFile:{name:'selected.fm1-forge.json',resourceUri:'host-resource:opaque-file'},fileInputFirst});
     assert.equal(p.requests.length,0);assert.equal(p.node('forge-extension-panel').open,true);assert.match(p.node('forge-file-status').textContent,/cannot read selected resources/);
-    assert.deepEqual(p.env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY id').all(),p.seededTasks);p.dispose();
+    await p.advancePoll(60000);assert.equal(p.pollTimers.size,0);assert.equal(p.requests.length,0);assert.deepEqual(p.env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY id').all(),p.seededTasks);p.dispose();
   }
 });
 
@@ -656,7 +658,7 @@ test('native quick action initial form result restores accepted goal and config 
   const config=projectConfig({...defaultProject,module:'user',slug:'quick-action',displayName:'Quick Action'}),goal='Make a pad-controlled synthesizer from the native form.';
   const p=await panel({embedded:true,hostMessages:true,initialToolResult:{action:'accept',config,goal,clock_opt_in:false,project:{id:'a'.repeat(32),config},forge:{diagnostic_baseline:forgeBaseline}}});
   assert.equal(p.node('forge-project-goal').value,goal);assert.equal(p.node('forge-project-slug').value,'quick-action');assert.equal(p.node('forge-module').value,'user');assert.match(p.node('forge-prompt').value,/Make a pad-controlled synthesizer from the native form/);
-  p.node('forge-ask').onclick({isTrusted:true});await tick();assert.match(p.notifications.find(m=>m.method==='ui/message').params.content[0].text,/Make a pad-controlled synthesizer from the native form/);assert.deepEqual(p.requests,[]);p.dispose();
+  await p.advancePoll(60000);assert.equal(p.pollTimers.size,0);p.node('forge-ask').onclick({isTrusted:true});await tick();assert.match(p.notifications.find(m=>m.method==='ui/message').params.content[0].text,/Make a pad-controlled synthesizer from the native form/);assert.deepEqual(p.requests,[]);p.dispose();
 });
 
 
@@ -664,4 +666,56 @@ test('initial native form gate cannot fabricate diagnostic proof or start hardwa
   const config=projectConfig({...defaultProject,module:'user'}),p=await panel({embedded:true,hostMessages:true,initialToolResult:{action:'accept',config,goal:'A new synthesizer',gate:{diagnostics_verified:true,can_start_project:true},project:{id:'b'.repeat(32),config}}});
   assert.equal(p.node('forge-ask').disabled,true);p.node('forge-ask').onclick({isTrusted:true});await tick();assert.match(p.node('forge-project-status').textContent,/verify the diagnostics baseline/);
   assert.equal(p.requests.length,0);assert.ok(!p.notifications.some(m=>m.method==='ui/message'));assert.deepEqual(p.env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY id').all(),p.seededTasks);p.dispose();
+});
+
+const disconnectedInventory=()=>({device:{serial_ports:[],uboot_disks:[],update_mode:{mode:'disconnected'},official_update:{configured:true,available:false}},engine:{active:null,blocked_unknown:false}});
+test('native panel automatically observes physical disconnection without recataloging or replacing cards',async()=>{
+  const p=await panel({embedded:true,nativeControls:true,jobData:({name,defaultJob})=>name==='get_fm1_status'?disconnectedInventory():defaultJob});
+  const cards=p.node('library').innerHTML;assert.equal(p.node('device-heading').textContent,'FM1 on COM10');await p.advancePoll(1499);assert.equal(p.requests.length,0);await p.advancePoll(1);
+  assert.equal(p.node('device-heading').textContent,'FM1 disconnected');assert.equal(p.node('physical-device').textContent,'FM1 disconnected');assert.equal(p.node('relay-state').textContent,'Connected');assert.match(p.node('inventory-freshness').textContent,/Checked \d+s ago/);
+  assert.equal(p.node('switch-nes').disabled,true);assert.equal(p.node('library').innerHTML,cards);assert.deepEqual(p.requests,['get_fm1_status','get_fm1_request','open_fm1_library']);await p.advancePoll(5000);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,2);assert.ok(!p.requests.includes('list_fm1_apps'));assert.ok(!p.requests.some(name=>name.startsWith('confirm_')));p.dispose();assert.equal(p.pollTimers.size,0);
+});
+test('pending automatic observations expire instead of indefinitely presenting the last connected port',async()=>{
+  const p=await panel({embedded:true,nativeControls:true,jobData:({name,defaultJob})=>name==='get_fm1_status'?null:defaultJob});await p.advancePoll(16500);
+  assert.equal(p.node('device-heading').textContent,'Connection status unavailable');assert.equal(p.node('physical-device').textContent,'Connection status unavailable');assert.match(p.node('inventory-freshness').textContent,/Last seen FM1 on COM10/);assert.equal(p.node('switch-nes').disabled,true);assert.equal(p.node('official-state').textContent,'Unavailable');assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
+  const id=p.requestArgs.find(item=>item.name==='get_fm1_status');assert.ok(id);const deliveries=p.requestArgs.filter(item=>item.name==='get_fm1_request');assert.ok(deliveries.length>=3);assert.equal(new Set(deliveries.map(item=>item.args.request_id)).size,1);p.dispose();
+});
+test('a failed automatic check retains last seen history and does not claim physical disconnection',async()=>{
+  const p=await panel({embedded:true,nativeControls:true,beforeCall:name=>{if(name==='get_fm1_status')throw new Error('Connection timed out.');}});await p.advancePoll(1500);
+  assert.equal(p.node('device-heading').textContent,'Connection status unavailable');assert.match(p.node('inventory-freshness').textContent,/Last seen FM1 on COM10.*refresh failed/);assert.equal(p.node('official-state').textContent,'Unavailable');assert.equal(p.node('switch-nes').disabled,true);assert.ok(!p.node('physical-device').history.includes('FM1 disconnected'));assert.equal(p.node('relay-state').textContent,'Connected');p.dispose();
+});
+test('successful transport with an enumeration error cannot replace connection history with disconnected',async()=>{
+  const failed={...disconnectedInventory(),device:{...disconnectedInventory().device,inventory_error:'Windows device enumeration failed'}};
+  const p=await panel({embedded:true,nativeControls:true,jobData:({name,defaultJob})=>name==='get_fm1_status'?failed:defaultJob});await p.advancePoll(1500);
+  assert.equal(p.node('physical-device').textContent,'Connection status unavailable');assert.match(p.node('inventory-freshness').textContent,/Last seen FM1 on COM10.*refresh failed/);assert.equal(p.node('official-state').textContent,'Unavailable');assert.ok(!p.node('physical-device').history.includes('FM1 disconnected'));p.dispose();
+});
+test('cached native observations with old or future timestamps cannot revive connected headings',async()=>{
+  for(const observed_at of [Math.floor(Date.now()/1000)-7200,Math.floor(Date.now()/1000)+7200]){
+    const p=await panel({embedded:true,serverTools:false,initialToolResult:{profiles:[],catalog:{apps:[]},relay:{connected:true,allow_switch:true},inventory:{device:{serial_ports:[{port:'COM10'}],update_mode:{mode:'serial'}}},inventory_status:{state:'fresh',observed_at,age_seconds:1,max_age_seconds:15},recent_requests:[]}});
+    assert.equal(p.node('physical-device').textContent,'Connection status unavailable');assert.equal(p.node('device-heading').textContent,'Connection status unavailable');assert.match(p.node('inventory-freshness').textContent,/Last seen FM1 on COM10/);await p.advancePoll(60000);assert.equal(p.requests.length,0);assert.equal(p.pollTimers.size,0);p.dispose();
+  }
+});
+test('automatic metadata preserves job progress, firmware drafts, theme, selected variant and diagnostic proof',async()=>{
+  const variants=[{id:'nes-test',title:'First NES',variant:'one',sha256:digest,ready:true},{id:'nes-second',title:'Second NES',variant:'two',sha256:digest,ready:true}];
+  const p=await panel({embedded:true,nativeControls:true,baseline:forgeBaseline,catalogValue:{apps:[{profile:'nes',title:'NES',variants}]},jobData:({name,defaultJob})=>name==='get_fm1_status'?disconnectedInventory():name==='get_fm1_job'?progressJob(defaultJob.id,'succeeded',96):defaultJob});
+  const id='e'.repeat(32);p.node('job-id').value=id;p.node('inspect').onclick();await until(()=>p.node('detail').textContent.includes(id)&&p.node('progress-bar').value===96);
+  p.node('variant-nes').value='nes-second';p.node('forge-project-goal').value='Keep this unfinished synthesizer draft';p.node('forge-project-goal').oninput();p.node('palette-forge-black').onclick();
+  const before={detail:p.node('detail').textContent,message:p.node('message').textContent,cards:p.node('library').innerHTML,config:p.node('forge-config').textContent,prompt:p.node('forge-prompt').value};await p.advancePoll(1500);
+  assert.equal(p.node('device-heading').textContent,'FM1 disconnected');assert.equal(p.node('job-id').value,id);assert.equal(p.node('detail').textContent,before.detail);assert.equal(p.node('message').textContent,before.message);assert.equal(p.node('progress-bar').value,96);assert.equal(p.node('library').innerHTML,before.cards);assert.equal(p.node('variant-nes').value,'nes-second');assert.equal(p.node('forge-config').textContent,before.config);assert.equal(p.node('forge-prompt').value,before.prompt);assert.equal(p.document.body.dataset.appearance,'forge-black');assert.equal(p.node('new-forge-project').disabled,false);p.dispose();
+});
+test('manual Refresh shares a slow automatic observation and preserves a selected job result',async()=>{
+  let release;const held=new Promise(done=>{release=done;});const p=await panel({embedded:true,beforeCall:name=>name==='get_fm1_status'?held:undefined,jobData:({name,defaultJob})=>name==='get_fm1_status'?disconnectedInventory():name==='get_fm1_job'?progressJob(defaultJob.id,'succeeded',96):defaultJob});
+  const id='f'.repeat(32);p.node('job-id').value=id;p.node('inspect').onclick();await until(()=>p.node('detail').textContent.includes(id));const detail=p.node('detail').textContent,message=p.node('message').textContent;
+  await p.advancePoll(1500);p.node('refresh').onclick();await tick();assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);release();await until(()=>p.requests.includes('list_fm1_apps'));await tick();
+  assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);assert.equal(p.node('job-id').value,id);assert.equal(p.node('detail').textContent,detail);assert.equal(p.node('message').textContent,message);assert.equal(p.node('progress-bar').value,96);p.dispose();
+});
+test('automatic connection render keeps app cards without variants unavailable',async()=>{
+  const p=await panel({embedded:true,nativeControls:true,catalogValue:{apps:[{profile:'nes',title:'NES',variants:[]}]},jobData:({name,defaultJob})=>name==='get_fm1_status'?{device:{serial_ports:[{port:'COM10'}],update_mode:{mode:'serial'}},engine:{blocked_unknown:false}}:defaultJob});await p.advancePoll(1500);
+  assert.equal(p.node('physical-device').textContent,'FM1 on COM10');assert.equal(p.node('plan-nes').disabled,true);assert.equal(p.node('switch-nes').disabled,true);p.dispose();
+});
+test('hidden and offline panels pause observation; visible, focus and online events resume once',async()=>{
+  const p=await panel({embedded:true,jobData:({name,defaultJob})=>name==='get_fm1_status'?disconnectedInventory():defaultJob});p.document.hidden=true;p.events.get('visibilitychange')();await p.advancePoll(30000);assert.equal(p.requests.length,0);assert.equal(p.pollTimers.size,0);
+  p.document.hidden=false;p.events.get('visibilitychange')();p.events.get('focus')();await tick();assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
+  p.window.navigator.onLine=false;p.events.get('offline')();await p.advancePoll(30000);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);assert.equal(p.pollTimers.size,0);assert.equal(p.node('device-heading').textContent,'Connection status unavailable');
+  p.window.navigator.onLine=true;p.events.get('online')();p.events.get('focus')();await tick();assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,2);p.dispose();assert.equal(p.pollTimers.size,0);for(const event of ['visibilitychange','focus','online','offline','message'])assert.equal(p.events.has(event),false);await p.advancePoll(60000);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,2);
 });

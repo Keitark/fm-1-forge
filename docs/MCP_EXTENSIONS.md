@@ -1,6 +1,6 @@
 # FM1 Forge native extensions
 
-Forge 3.1.1 uses the official OpenAI MCP Extensions TypeScript SDK on both the
+Forge 3.1.2 uses the official OpenAI MCP Extensions TypeScript SDK on both the
 hosted MCP server and the native MCP App. ChatGPT Sites still hosts the server
 and UI. The local relay continues to connect saved requests to the FM1 bridge.
 Browser WebMCP is a separate interface and does not discover the native panel.
@@ -45,7 +45,7 @@ entrypoint. The global shortcut opens its own app view and conversation
 instance. Expanding a model-generated app card uses another host rendering
 route; its tab icon may be supplied by Codex rather than the tool's icons.
 
-Forge 3.1.1 advertises the existing 128×128 PNG device artwork for native
+Forge 3.1.2 advertises the existing 128×128 PNG device artwork for native
 entrypoints and server metadata. The earlier SVG declared `sizes:["any"]`,
 which Codex selected ahead of PNG even when PNG appeared first. PNG-only
 metadata avoids nested SVG decoding in the native tab mask. Codex controls
@@ -57,6 +57,26 @@ new icon must be checked in a fresh native tab; initial settings from the openin
 snapshot do not prove that a later settings RPC completed. An unavailable tool
 scope requires refreshing the existing connection metadata, not weakening
 permissions or recreating the plugin.
+
+## Connection freshness
+
+Normal Forge panels refresh passive inventory every five seconds while visible,
+share one unresolved status request, and check immediately on return or network
+recovery. Hidden panels pause network checks; closing the panel cancels timers
+and subscriptions. File and native-form entrypoints do not start device polling.
+The monitor preserves selected packages, project edits, approvals and saved-job
+progress, and does not fetch the package catalog every five seconds.
+
+`relay.connected` describes the local service heartbeat, not FM1 presence.
+`inventory_status` reports freshness separately, with a 15-second maximum age.
+Successful status results receive a Site-controlled receipt timestamp; freshness
+also considers original request creation, so journaled results first delivered
+after an outage cannot become current simply by arriving late. Failed/unknown
+newer observations invalidate an older success. Legacy results without a receipt
+timestamp remain saved history. RPC failures show unavailable/stale status, not
+proof that the physical device was unplugged. Automatic routing and official
+updater review require fresh inventory; confirmation and device-side checks
+remain necessary.
 
 ## Drafts and file editing
 

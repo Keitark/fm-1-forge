@@ -1,5 +1,21 @@
 # FM1 Codex integration handoff
 
+## Automatic connection refresh 3.1.2 (2026-10-12)
+
+The normal panel now refreshes passive FM1 presence while visible, on opening
+and on return/network recovery. Relay heartbeat and actual FM1 presence are
+separate. Inventory expires after 15 seconds; failed checks, old snapshots and
+delayed journal results cannot keep a COM port displayed as current. Hidden
+panels pause polling, teardown disposes it, and unresolved status requests are
+shared instead of resubmitted. Drafts, selected packages, approvals and progress
+remain intact. **Refresh** still reloads package metadata before a transfer.
+
+Reopen an already loaded native conversation tab once to load this release's
+code. Thereafter connection checks are automatic. See [the verification receipt](VERIFICATION.md)
+for exact publication and test evidence. The earlier native settings trusted-tool
+scope limitation and tab-icon acceptance remain separate outstanding items.
+No firmware write, official updater launch or helper elevation was performed.
+
 ## Native panel patch 3.1.1 (2026-10-12)
 
 The current private account release is 3.1.1. ProTracker's special last-card
