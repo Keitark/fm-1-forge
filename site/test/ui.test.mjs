@@ -1,14 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 import { UI_HTML } from '../lib/fm1-ui.mjs';
+import * as generated from '../lib/fm1-app-sdk.generated.mjs';
+import { appearanceRuntime } from '../lib/fm1-appearance.mjs';
+import { moduleGraphRuntime } from '../lib/fm1-module-graph.mjs';
+import { extensionRuntime } from '../lib/fm1-extension-ui.mjs';
+import { inventoryRuntime } from '../lib/fm1-inventory-refresh.mjs';
+import { libraryRuntime } from '../lib/fm1-library-ui.mjs';
+import { inputRuntime, INPUT_ENCODER_NAMES } from '../lib/fm1-input-ui.mjs';
 import { callTool } from '../lib/fm1-server.mjs';
 import { database, connect, cacheCatalog, cacheInventory, digest } from './d1.mjs';
-import {projectConfig,projectPrompt,verifiedDiagnostics,verifiedBaseline} from '../lib/fm1-forge-project.mjs';
+import {projectConfig,projectPrompt,verifiedDiagnostics,verifiedBaseline,forgeProjectRuntime} from '../lib/fm1-forge-project.mjs';
 
 const tick=()=>new Promise(resolve=>setTimeout(resolve,15));
 async function until(predicate){for(let attempt=0;attempt<100;attempt++){if(predicate())return;await tick();}assert.fail('Panel did not reach the expected state.');}
-async function panel({embedded=false,initial=true,serverTools=true,hostMessages=false,hostRejectMessage=false,baseline=null,catalogValue=null,inventory=null,official=false,loseConfirmationReply=false,jobData=null,beforeCall=null,nativeControls=false,omitPlanJobId=false,preferences=null,storageBlocked=false,legacyPreferences=null,nativeExtensions=false,initialFile=null,fileInputFirst=true,initialToolResult=null,nativeStartupDelay=1}={}){
+let productionHtml;
+function minifiedPanelHtml(){
+  return productionHtml??=(async()=>{
+    const built=await build({entryPoints:[fileURLToPath(new URL('../lib/fm1-ui.mjs',import.meta.url))],bundle:true,write:false,format:'esm',platform:'node',target:'node22',minify:true});
+    const {UI_HTML:html}=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
+    return html;
+  })();
+}
+async function panel({html=UI_HTML,embedded=false,initial=true,serverTools=true,hostMessages=false,hostRejectMessage=false,baseline=null,catalogValue=null,inventory=null,official=false,loseConfirmationReply=false,jobData=null,beforeCall=null,nativeControls=false,omitPlanJobId=false,preferences=null,storageBlocked=false,legacyPreferences=null,nativeExtensions=false,initialFile=null,fileInputFirst=true,initialToolResult=null,nativeStartupDelay=1}={}){
   const normalInventory=inventory||{device:{serial_ports:[{port:'COM10'}],update_mode:{mode:'serial',app_entry_method:'serial'},official_update:{configured:true,available:false,sha256:digest}},engine:{active:null,blocked_unknown:false}};
   const env=database();connect(env,true,official);cacheCatalog(env,'alice',catalogValue||undefined);cacheInventory(env,'alice',normalInventory);
   const seededTasks=env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY id').all();
@@ -43,7 +60,7 @@ async function panel({embedded=false,initial=true,serverTools=true,hostMessages=
   const document={documentElement:{style:{setProperty(name,value){properties.set(name,String(value));}}},body:{classList:{add(){}},dataset:{},style:{setProperty(name,value){properties.set(name,String(value));},getPropertyValue(name){return properties.get(name)??'';}}},getElementById:node,createElement(tag){return {tag,textContent:'',style:{}};},modelContext:{async registerTool(tool,{signal}){registered.set(tool.name,tool);signal.addEventListener('abort',()=>registered.delete(tool.name));}}};
   document.hidden=false;document.addEventListener=(name,fn,options)=>window.addEventListener(name,fn,options);window.navigator={onLine:true};
   const context=vm.createContext({document,window,AbortController,Map,Object,Number,JSON,RegExp,String,Error,URL,TextEncoder,TextDecoder,crypto,queueMicrotask,Date:class PanelDate extends Date{static now(){return panelNow;}},setTimeout:(fn,ms)=>{delays.push(ms);if(['inventoryTick','inputTick','inputAgeTick'].includes(fn.name)){const timer='poll-'+(++pollKey);pollTimers.set(timer,{fn,time:panelNow+ms});return timer;}const timer=setTimeout(()=>{timers.delete(timer);fn();},ms>=10000?500:ms===1000?nativeStartupDelay:1);timers.set(timer,ms);return timer;},clearTimeout:timer=>{if(pollTimers.delete(timer))return;timers.delete(timer);clearTimeout(timer);},fetch:async(_url,options)=>{const input=JSON.parse(options.body);try{const answer=await backend(input.name,input.arguments);if(loseConfirmationReply&&input.name.startsWith('confirm_'))throw new Error('Confirmation reply lost.');return {ok:true,json:async()=>({structuredContent:answer})};}catch(error){return {ok:false,json:async()=>({error:error.message})};}}});
-  for(const script of UI_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(script[1],context);
+  for(const script of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(script[1],context);
   await tick();
   // Native initialization may outlast one wall-clock tick under suite load.
   // Arm the expected inventory timer before advancing the simulated clock;
@@ -51,6 +68,44 @@ async function panel({embedded=false,initial=true,serverTools=true,hostMessages=
   if((!embedded||serverTools)&&!initialFile&&!initialToolResult?.action)await until(()=>[...pollTimers.values()].some(timer=>timer.fn.name==='inventoryTick'));
   return {env,nodes,registered,requests,requestArgs,events,notifications,timers,pollTimers,delays,parent,window,document,storage,storageWrites,seededTasks,node,async advancePoll(ms){const end=panelNow+ms;let count=0;while(true){const next=[...pollTimers].sort((a,b)=>a[1].time-b[1].time).find(([,timer])=>timer.time<=end);if(!next)break;if(++count>100)throw new Error('Polling timer storm.');panelNow=next[1].time;pollTimers.delete(next[0]);next[1].fn();await tick();}panelNow=end;await tick();},async invoke(name,args){return registered.get(name).execute(args);},dispose(){events.get('pagehide')?.();}};
 }
+for(const [name,runtime] of Object.entries({appearanceRuntime,forgeProjectRuntime,moduleGraphRuntime,extensionRuntime,inventoryRuntime,libraryRuntime,inputRuntime})){
+  test('generated '+name+' matches the current browser runtime source',()=>{
+    assert.equal(generated[name],runtime.replaceAll('</script','<\\/script'));
+  });
+}
+
+for(const mode of ['source','production minified']){
+  test(mode+' native panel starts with every injected runtime API available',async()=>{
+    const p=await panel({html:mode==='source'?UI_HTML:await minifiedPanelHtml(),embedded:true});
+    try{
+      for(const name of ['FM1PluginHost','FM1ExtensionUI'])assert.equal(typeof p.window[name],'function',name);
+      for(const [name,methods] of Object.entries({FM1Appearance:['resolveAppearance'],FM1Forge:['projectConfig','normalizeProjectConfig','projectPrompt','verifiedBaseline'],FM1ModuleGraph:['mount'],FM1Inventory:['freshness','monitor'],FM1Library:['filterLibrary','mount'],FM1InputActivity:['freshness','view','monitor','mount']})){
+        for(const method of methods)assert.equal(typeof p.window[name]?.[method],'function',name+'.'+method);
+      }
+      assert.equal(p.node('relay-state').textContent,'Connected');assert.equal(p.node('surface-label').textContent,'FM1 Forge plugin');
+      assert.equal(p.node('input-toggle').textContent,'Start monitoring');assert.equal(p.requests.length,0);
+    }finally{p.dispose();}
+  });
+
+  test(mode+' native monitoring renders fresh input and clears held activity when the sample expires',async t=>{
+    t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,9,12,12,0,0)});
+    const instant=Math.floor(Date.now()/1000),value={state:'available',firmware:'FM1-FORGE/1',port:'COM4',capabilities:{keys:true,encoders:true,volume:true},keys:{pressed:'0000010000000001',seen:'0000010000000003',scans:100,errors:0},encoders:INPUT_ENCODER_NAMES.map((name,id)=>({id,name,edges:id*10,invalid:0,seen:id>0})),volume:{value:512,gain:64,valid:true,samples:100,errors:0},observation:{started_at:instant,completed_at:instant},message:'Synthetic sampled input metadata.'};
+    const p=await panel({html:mode==='source'?UI_HTML:await minifiedPanelHtml(),embedded:true,jobData:({name,defaultJob})=>name==='get_fm1_input_snapshot'?value:defaultJob});
+    try{
+      p.node('input-toggle').onclick();await until(()=>p.node('input-volume-value').textContent.includes('ADC 512'));
+      assert.match(p.node('input-freshness').textContent,/Sample 0s old · FM1-FORGE\/1 · COM4/);
+      assert.equal(p.node('input-key-40').dataset.held,'true');assert.equal(p.node('input-key-1').dataset.held,'false');assert.equal(p.node('input-key-1').dataset.seen,'true');
+      assert.equal(p.node('input-encoder-edges-1').textContent,'10');assert.equal(p.node('input-volume-gauge').hidden,false);
+      assert.deepEqual(p.requestArgs.filter(item=>item.name==='get_fm1_input_snapshot').map(item=>JSON.parse(JSON.stringify(item.args))),[{}]);
+      p.node('input-toggle').onclick();await p.advancePoll(16000);p.events.get('focus')();
+      assert.match(p.node('input-freshness').textContent,/Stale sample · 16s old/);
+      assert.equal(p.node('input-key-40').dataset.held,'false');assert.equal(p.node('input-key-40').dataset.seen,'true');assert.equal(p.node('input-key-40').dataset.available,'false');
+      assert.equal(p.node('input-encoder-edges-1').textContent,'Unavailable');assert.equal(p.node('input-volume-gauge').hidden,true);assert.equal(p.node('input-volume-value').textContent,'Volume unavailable');
+      assert.equal(p.requests.filter(name=>name==='get_fm1_input_snapshot').length,1);
+    }finally{p.dispose();}
+  });
+}
+
 test('host initial tool result renders without a duplicate library request',async()=>{const p=await panel({embedded:true});assert.equal(p.node('relay-state').textContent,'Connected');assert.equal(p.requests.length,0);assert.equal(p.registered.size,0);p.dispose();});
 test('native hardware activity stays paused until Start and displays actual supported MOD volume without changing draft, variants or saved progress',async t=>{
   // The browser clock below is simulated. Keep the source/queue/Site clock on

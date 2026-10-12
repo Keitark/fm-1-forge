@@ -5,6 +5,12 @@ hosted MCP server and the native MCP App. ChatGPT Sites still hosts the server
 and UI. The local relay continues to connect saved requests to the FM1 bridge.
 Browser WebMCP is a separate interface and does not discover the native panel.
 
+The panel build freezes its browser runtime strings before production server
+minification. Changes to those source runtimes require `npm run build:panel`;
+contract tests reject stale generated strings and execute the minified UI.
+The canonical UI resource is `ui://fm1/forge-panel-v11.html`, with prior
+resource aliases retained.
+
 ## Official SDK source
 
 The exact unmodified SDK is version 0.2.0 at OpenAI revision

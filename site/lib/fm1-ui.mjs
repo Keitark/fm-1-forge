@@ -1,12 +1,10 @@
 import { ICON_DATA_URI, ICON_SVG, ICON_PNG_DATA_URI } from './fm1-icon.mjs';
-import { MCP_APPS_SCRIPT } from './fm1-app-sdk.generated.mjs';
-import { appearanceCss, appearanceRuntime, PRESETS, PATTERNS } from './fm1-appearance.mjs';
-import { forgeProjectRuntime } from './fm1-forge-project.mjs';
-import { extensionCss, extensionHtml, extensionRuntime } from './fm1-extension-ui.mjs';
-import { inventoryRuntime } from './fm1-inventory-refresh.mjs';
-import { moduleGraphHtml, moduleGraphCss, moduleGraphRuntime } from './fm1-module-graph.mjs';
-import { libraryHtml, libraryCss, libraryRuntime } from './fm1-library-ui.mjs';
-import { inputHtml, inputCss, inputRuntime } from './fm1-input-ui.mjs';
+import { MCP_APPS_SCRIPT, appearanceRuntime, forgeProjectRuntime, extensionRuntime, inventoryRuntime, moduleGraphRuntime, libraryRuntime, inputRuntime } from './fm1-app-sdk.generated.mjs';
+import { appearanceCss, PRESETS, PATTERNS } from './fm1-appearance.mjs';
+import { extensionCss, extensionHtml } from './fm1-extension-ui.mjs';
+import { moduleGraphHtml, moduleGraphCss } from './fm1-module-graph.mjs';
+import { libraryHtml, libraryCss } from './fm1-library-ui.mjs';
+import { inputHtml, inputCss } from './fm1-input-ui.mjs';
 export const UI_HTML = String.raw`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FM1 Forge</title><meta name="description" content="Install diagnostics, test your FM1 and build your own firmware with Codex."><link rel="icon" href="${ICON_DATA_URI}">
 <style>

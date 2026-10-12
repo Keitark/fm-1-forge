@@ -1,5 +1,31 @@
 # Integration verification
 
+## Blank native panel, 2026-10-12
+
+The Codex widget frame loaded, then its startup script failed with
+`ReferenceError: inputFreshness is not defined` and a fatal execution event.
+The connector ID in the host log matches the existing FM1 Site. Production
+minification renamed the serialized input functions, while their runtime
+exports still referenced the source identifiers. Source-only UI tests and a
+successful build did not exercise this compiled startup path.
+
+The panel build now freezes all seven browser runtime strings before server
+minification, alongside the official SDK bundle. The UI imports these literal
+strings instead of serializing compiled functions. Resource v11 retains v10
+and every earlier alias, so existing entrypoints remain valid.
+
+All **304 Site tests**, TypeScript checking and the production build passed.
+Eleven new regressions reject stale generated runtimes and execute full native
+startup and sampled activity through minified UI HTML. An in-memory mutation
+back to source runtime imports reproduces the exact `inputFreshness` failure.
+The native screenshot API still reports no accessible app tab in this chat;
+visual acceptance requires a successfully opened host panel.
+
+Pushed Site source `a85b9559e51cd15f16c338f8cd669b5c11a91282` deployed
+owner-private with MCP enabled as `appgdep_6acce358570481919a5607702b538f06`.
+The built archive SHA-256 is
+`5924e7d00872405607f30c643625327798e23138cdbdb04d4a07e4eb2835b752`.
+
 ## Refresh transition flicker, 2026-10-12
 
 Starting an automatic refresh could paint an expired observation before the

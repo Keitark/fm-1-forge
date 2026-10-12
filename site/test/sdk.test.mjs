@@ -21,7 +21,7 @@ for(const [era,revision] of [['modern','2026-07-28'],['legacy','2025-11-25']]){
       const tools=await client.listTools();
       assert.equal(tools.tools.length,20);
       const panel=tools.tools.find(tool=>tool.name==='open_fm1_library');
-      assert.equal(RESOURCE_URI,'ui://fm1/forge-panel-v10.html');
+      assert.equal(RESOURCE_URI,'ui://fm1/forge-panel-v11.html');
       assert.equal(panel._meta.ui.resourceUri,RESOURCE_URI);
       const boundTools=tools.tools.filter(tool=>tool._meta?.ui?.resourceUri);
       assert.deepEqual(boundTools.map(tool=>tool.name).sort(),['configure_fm1_project','open_fm1_library','open_fm1_project']);
@@ -38,7 +38,7 @@ for(const [era,revision] of [['modern','2026-07-28'],['legacy','2025-11-25']]){
       const resource=await client.readResource({uri:RESOURCE_URI});
       assert.equal(resource.contents[0].mimeType,'text/html;profile=mcp-app');
       assert.match(resource.contents[0].text,/FM1PluginHost/);
-      for(const uri of ['ui://fm1/forge-panel-v9.html','ui://fm1/forge-panel-v8.html','ui://fm1/forge-panel-v7.html','ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
+      for(const uri of ['ui://fm1/forge-panel-v10.html','ui://fm1/forge-panel-v9.html','ui://fm1/forge-panel-v8.html','ui://fm1/forge-panel-v7.html','ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
         const previous=await client.readResource({uri});
         assert.deepEqual(previous.contents,[{...resource.contents[0],uri}]);
       }
