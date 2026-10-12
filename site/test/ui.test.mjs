@@ -49,6 +49,26 @@ async function panel({embedded=false,initial=true,serverTools=true,hostMessages=
 }
 test('host initial tool result renders without a duplicate library request',async()=>{const p=await panel({embedded:true});assert.equal(p.node('relay-state').textContent,'Connected');assert.equal(p.requests.length,0);assert.equal(p.registered.size,0);p.dispose();});
 test('initial host result renders even without serverTools capability',async()=>{const p=await panel({embedded:true,serverTools:false});assert.equal(p.node('relay-state').textContent,'Connected');assert.equal(p.requests.length,0);p.dispose();});
+test('native library set selection filters variants and retains the selected set on refresh',async()=>{
+  const catalogValue={apps:[{profile:'nes',variants:[{id:'nes-test',title:'Local NES',variant:'One',sha256:digest,ready:true},{id:'nes-other',title:'Another NES',variant:'Two',sha256:'b'.repeat(64),ready:true}]}],sets:[{id:'set-one',name:'Local set',members:[{id:'nes-test',sha256:digest}]}]};
+  const p=await panel({embedded:true,catalogValue,nativeControls:true});
+  assert.match(p.node('library-sets').innerHTML,/Local set/);
+  p.node('library-set').value='set-one';p.node('library-set').onchange();
+  assert.match(p.node('library').innerHTML,/nes-test/);assert.ok(!p.node('library').innerHTML.includes('nes-other'));
+  p.node('library-set').onchange();assert.equal(p.node('library-set').value,'set-one');
+  p.dispose();
+});
+test('native local importer and metadata refresh preserve firmware draft and saved job progress',async()=>{
+  const catalogValue={apps:[{profile:'nes',variants:[{id:'nes-test',title:'Local NES',variant:'One',sha256:digest,ready:true}]}],sets:[]};
+  const p=await panel({embedded:true,catalogValue,jobData:({name,answer,defaultJob})=>name==='open_fm1_local_import'?{id:answer.request_id,opened:true,device_io:false}:name==='list_fm1_apps'?catalogValue:defaultJob});
+  p.node('forge-project-goal').value='Keep this unsaved firmware idea';p.node('job-id').value='e'.repeat(32);p.node('detail').textContent='Existing verified sector progress';
+  p.node('library-add').onclick();await tick();
+  assert.equal(p.requests.filter(name=>name==='open_fm1_local_import').length,1);
+  assert.equal(p.node('forge-project-goal').value,'Keep this unsaved firmware idea');
+  assert.equal(p.node('job-id').value,'e'.repeat(32));assert.equal(p.node('detail').textContent,'Existing verified sector progress');
+  assert.ok(!p.requests.some(name=>/^(confirm_|prepare_|plan_)/.test(name)));
+  p.dispose();
+});
 test('native plugin opens on device controls with detected port and no duplicate refresh',async()=>{const p=await panel({embedded:true,inventory:{device:{serial_ports:[{port:'COM7'}],session_configured:false},engine:{active:null,blocked_unknown:false}}});assert.equal(p.node('surface-label').textContent,'FM1 Forge plugin');assert.equal(p.node('device-heading').textContent,'FM1 on COM7');assert.equal(p.node('physical-device').textContent,'FM1 on COM7');assert.equal(p.requests.length,0);p.dispose();});
 test('host with serverTools falls back once if initial result absent',async()=>{const p=await panel({embedded:true,initial:false});assert.deepEqual(p.requests,['open_fm1_library']);p.dispose();});
 test('resource teardown is acknowledged and aborts the panel lifecycle',async()=>{const p=await panel({embedded:true});p.events.get('message')({source:p.parent,data:{jsonrpc:'2.0',id:91,method:'ui/resource-teardown',params:{}}});await tick();const ack=p.notifications.find(m=>m.id===91);assert.deepEqual(JSON.parse(JSON.stringify(ack)),{jsonrpc:'2.0',id:91,result:{}});const n=p.requests.length;p.node('refresh').onclick();await tick();assert.equal(p.requests.length,n);p.dispose();});
@@ -704,7 +724,7 @@ test('initial native form gate cannot fabricate diagnostic proof or start hardwa
 const disconnectedInventory=()=>({device:{serial_ports:[],uboot_disks:[],update_mode:{mode:'disconnected'},official_update:{configured:true,available:false}},engine:{active:null,blocked_unknown:false}});
 test('native panel automatically observes physical disconnection without recataloging or replacing cards',async()=>{
   const p=await panel({embedded:true,nativeControls:true,jobData:({name,defaultJob})=>name==='get_fm1_status'?disconnectedInventory():defaultJob});
-  const cards=p.node('library').innerHTML;assert.equal(p.node('device-heading').textContent,'FM1 on COM10');await p.advancePoll(1499);assert.equal(p.requests.length,0);await p.advancePoll(1);
+  const cards=p.node('library').innerHTML;assert.equal(p.node('device-heading').textContent,'FM1 on COM10');await p.advancePoll(1499);assert.equal(p.requests.length,0);await p.advancePoll(1);await until(()=>p.node('device-heading').textContent==='FM1 disconnected');
   assert.equal(p.node('device-heading').textContent,'FM1 disconnected');assert.equal(p.node('physical-device').textContent,'FM1 disconnected');assert.equal(p.node('relay-state').textContent,'Connected');assert.match(p.node('inventory-freshness').textContent,/Checked \d+s ago/);
   assert.equal(p.node('switch-nes').disabled,true);assert.equal(p.node('library').innerHTML,cards);assert.deepEqual(p.requests,['get_fm1_status','get_fm1_request','open_fm1_library']);await p.advancePoll(5000);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,2);assert.ok(!p.requests.includes('list_fm1_apps'));assert.ok(!p.requests.some(name=>name.startsWith('confirm_')));p.dispose();assert.equal(p.pollTimers.size,0);
 });

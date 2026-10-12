@@ -19,9 +19,9 @@ for(const [era,revision] of [['modern','2026-07-28'],['legacy','2025-11-25']]){
       assert.equal(client.getProtocolEra(),era);
       assert.equal(client.getNegotiatedProtocolVersion(),revision);
       const tools=await client.listTools();
-      assert.equal(tools.tools.length,18);
+      assert.equal(tools.tools.length,19);
       const panel=tools.tools.find(tool=>tool.name==='open_fm1_library');
-      assert.equal(RESOURCE_URI,'ui://fm1/forge-panel-v6.html');
+      assert.equal(RESOURCE_URI,'ui://fm1/forge-panel-v7.html');
       assert.equal(panel._meta.ui.resourceUri,RESOURCE_URI);
       const boundTools=tools.tools.filter(tool=>tool._meta?.ui?.resourceUri);
       assert.deepEqual(boundTools.map(tool=>tool.name).sort(),['configure_fm1_project','open_fm1_library','open_fm1_project']);
@@ -30,10 +30,15 @@ for(const [era,revision] of [['modern','2026-07-28'],['legacy','2025-11-25']]){
       assert.equal(panel._meta['openai/ui'].entrypoints[0].quickAction.target.name,'configure_fm1_project');
       assert.deepEqual(tools.tools.find(tool=>tool.name==='confirm_fm1_switch')._meta.ui.visibility,['app']);
       assert.deepEqual(tools.tools.find(tool=>tool.name==='confirm_fm1_official_update')._meta.ui.visibility,['app']);
+      const localImport=tools.tools.find(tool=>tool.name==='open_fm1_local_import');
+      assert.deepEqual(localImport._meta.ui.visibility,['app']);
+      assert.equal(localImport.annotations.readOnlyHint,false);
+      assert.equal(localImport.annotations.destructiveHint,false);
+      assert.deepEqual(localImport.inputSchema.properties,{});
       const resource=await client.readResource({uri:RESOURCE_URI});
       assert.equal(resource.contents[0].mimeType,'text/html;profile=mcp-app');
       assert.match(resource.contents[0].text,/FM1PluginHost/);
-      for(const uri of ['ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
+      for(const uri of ['ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
         const previous=await client.readResource({uri});
         assert.deepEqual(previous.contents,[{...resource.contents[0],uri}]);
       }
@@ -47,6 +52,16 @@ for(const [era,revision] of [['modern','2026-07-28'],['legacy','2025-11-25']]){
       assert.equal(requests.some(r=>r.method==='server/discover'),era==='modern');
       assert.equal(requests.some(r=>r.method==='initialize'),era==='legacy');
       connect(env,false,true);
+      const importer=await client.callTool({name:'open_fm1_local_import',arguments:{}});
+      assert.match(importer.structuredContent.request_id,/^[a-f0-9]{32}$/);
+      assert.equal(importer.structuredContent.delivery,'pending');
+      assert.equal(importer.structuredContent.job_id,undefined);
+      const launch=env.DB.sqlite.prepare("SELECT * FROM relay_tasks WHERE operation='open_local_import'").get();
+      assert.equal(launch.id,importer.structuredContent.request_id);
+      assert.equal(launch.arguments,'{}');
+      const unsafeImporter=await client.callTool({name:'open_fm1_local_import',arguments:{path:'F:\\private'}});
+      assert.equal(unsafeImporter.isError,true);
+      assert.equal(env.DB.sqlite.prepare("SELECT count(*) AS n FROM relay_tasks WHERE operation='open_local_import'").get().n,1);
       cacheInventory(env,'alice',{device:{official_update:{configured:true,available:true,sha256:digest},
         update_mode:{mode:'sysex',app_entry_method:null,official_available:true}}});
       const review=await client.callTool({name:'prepare_fm1_official_update',arguments:{}});

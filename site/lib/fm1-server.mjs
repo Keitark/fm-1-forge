@@ -87,6 +87,17 @@ async function enqueue(env,owner,operation,args,taskId=ident()){
     }
     throw new PublicError('The previous status refresh finished while queuing. Refresh the saved library before requesting another observation.',409);
   }
+  if(operation==='open_local_import'){
+    // Concurrent panels share one pending launch for this owner. Opening the
+    // local picker is a deliberate action; reading the library never launches it.
+    for(let attempt=0;attempt<2;attempt++){
+      const inserted=await db(env).prepare("INSERT INTO relay_tasks(id,user_id,operation,arguments,state,created) SELECT ?,?,'open_local_import',?,'pending',? WHERE NOT EXISTS(SELECT 1 FROM relay_tasks WHERE user_id=? AND operation='open_local_import' AND state IN ('pending','dispatched'))").bind(taskId,owner,JSON.stringify(args),now(),owner).run();
+      if(inserted.meta?.changes)return {request_id:taskId,delivery:'pending',message:'Saved local importer request. Choose packages in the local companion window; inspect this ID after a timeout. No device I/O.'};
+      const pending=await db(env).prepare("SELECT id,state FROM relay_tasks WHERE user_id=? AND operation='open_local_import' AND state IN ('pending','dispatched') ORDER BY created DESC,rowid DESC LIMIT 1").bind(owner).first();
+      if(pending)return {request_id:pending.id,delivery:pending.state,message:'Resume this local importer request by its saved ID.'};
+    }
+    throw new PublicError('The importer launch finished while queuing. Inspect the saved request before opening another window.',409);
+  }
   await db(env).prepare('INSERT INTO relay_tasks(id,user_id,operation,arguments,state,created) VALUES(?,?,?,?,?,?)').bind(taskId,owner,operation,JSON.stringify(args),'pending',now()).run();
   return {request_id:taskId,delivery:'pending',...(['plan_app','switch_app','official_updater'].includes(operation)?{job_id:taskId}:{}),message:'Saved request. Inspect this ID; do not submit another request after a timeout.'};
 }
@@ -171,7 +182,11 @@ export async function callTool(env,owner,name,input){
   if(name==='confirm_fm1_switch')return commitSwitch(env,owner,args);
   if(name==='prepare_fm1_official_update')return stagedOfficial(env,owner);
   if(name==='confirm_fm1_official_update')return commitOfficial(env,owner,args);
-  return enqueue(env,owner,{get_fm1_status:'status',list_fm1_apps:'catalog',plan_fm1_app:'plan_app',get_fm1_job:'job'}[name],args);
+  return enqueue(env,owner,{get_fm1_status:'status',list_fm1_apps:'catalog',open_fm1_local_import:'open_local_import',plan_fm1_app:'plan_app',get_fm1_job:'job'}[name],args);
+}
+function localImportReceipt(value,id){
+  if(!value||typeof value!=='object'||Array.isArray(value)||value.id!==id||typeof value.opened!=='boolean'||value.device_io!==false||!Number.isInteger(value.expires_in)||value.expires_in<0||value.expires_in>300||(value.error!==undefined&&(typeof value.error!=='string'||!/^[a-z_]{1,80}$/.test(value.error))))throw new PublicError('Invalid local importer receipt.');
+  return Object.fromEntries(['id','opened','device_io','expires_in','error'].filter(key=>key in value).map(key=>[key,value[key]]));
 }
 async function relayRequest(request,env,path){
   if(request.method!=='POST')return json({error:'POST required.'},405);
@@ -200,7 +215,7 @@ async function relayRequest(request,env,path){
     if(!value||!ID.test(value.id||'')||!['succeeded','failed','unknown'].includes(value.status)||Object.keys(value).some(key=>!['id','status','data','error'].includes(key)))throw new PublicError('Invalid relay result.');
     const task=await db(env).prepare('SELECT * FROM relay_tasks WHERE id=?').bind(value.id).first();
     if(!task||task.state==='pending')throw new PublicError('Request was not dispatched.',409);
-    const clean={status:value.status,...(value.data!==undefined?{data:sanitize(value.data)}:{}),...(value.error?{error:sanitize(String(value.error))}:{})};
+    const clean={status:value.status,...(value.data!==undefined?{data:task.operation==='open_local_import'?localImportReceipt(value.data,task.id):sanitize(value.data)}:{}),...(value.error?{error:sanitize(String(value.error))}:{})};
     const encoded=JSON.stringify(clean);
     if(encoded.length>60000)throw new PublicError('Result is too large.',413);
     if(task.result){if(JSON.stringify(publicResult(task.result))!==encoded)throw new PublicError('A different result is already saved.',409);await rememberDiagnostics(env,task,clean);return json({saved:true});}
@@ -246,7 +261,7 @@ async function mcp(request,env){
     }
     // Older installed descriptors can still fetch the current panel at their
     // original URI. New descriptors exclusively advertise RESOURCE_URI.
-    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
+    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
       registerAppResource(server,'FM1 Forge',uri,{},async()=>({contents:[{
         uri,mimeType:'text/html;profile=mcp-app',text:UI_HTML,
         _meta:{ui:{prefersBorder:true,csp:{connectDomains:[],resourceDomains:[]}},'openai/ui':OpenAIUiResourceMetadataSchema.parse({availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'fullscreen'})},

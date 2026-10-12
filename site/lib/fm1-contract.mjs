@@ -1,6 +1,6 @@
 import { ICONS } from './fm1-icon.mjs';
 import { OpenAIUiToolMetadataSchema } from '@openai/mcp-extensions';
-export const RESOURCE_URI = 'ui://fm1/forge-panel-v6.html';
+export const RESOURCE_URI = 'ui://fm1/forge-panel-v7.html';
 export const PROFILES = [
   {profile:'diagnostics',title:'Forge diagnostics',description:'Test inputs, LCD and audio before starting your firmware project.',symbol:'F'},
   {profile:'nes',title:'NES',description:'Play your prepared cartridge collection.',symbol:'N'},
@@ -15,7 +15,7 @@ export class PublicError extends Error { constructor(message,status=400){super(m
 export function validate(name,input={}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new PublicError('Arguments must be an object.');
   const fields = {
-    open_fm1_library:[], get_fm1_status:[], list_fm1_apps:[],
+    open_fm1_library:[], get_fm1_status:[], list_fm1_apps:[], open_fm1_local_import:[],
     plan_fm1_app:['catalog_id'], get_fm1_job:['job_id'], get_fm1_request:['request_id'],
     prepare_fm1_switch:['catalog_id','entry_method'], confirm_fm1_switch:['approval_id'],
     prepare_fm1_official_update:[], confirm_fm1_official_update:['approval_id'],
@@ -38,6 +38,7 @@ const definitions = [
   ['open_fm1_library','FM1 Forge','Open the installed FM1 Forge plugin panel: diagnostic onboarding, graphical module configuration, packages and saved jobs.',[],true],
   ['get_fm1_status','Refresh bench status','Request inventory and persisted bridge/session state. No device I/O.',[],true],
   ['list_fm1_apps','Refresh app packages','Request validated package metadata and readiness; never returns firmware bytes.',[],true],
+  ['open_fm1_local_import','Add local app set','Open the local companion importer so the user can choose built FM1 package JSON files and save a named app set. Firmware bytes remain local. No device I/O. Inspect the saved request ID after a timeout.',[],false],
   ['plan_fm1_app','Plan app change','Submit an offline plan for an existing catalog ID. No device I/O. Returns a saved request ID; inspect it with get_fm1_request.',['catalog_id'],false],
   ['get_fm1_job','Inspect saved job','Request a saved bridge job by its exact ID. Does not resubmit any operation.',['job_id'],true],
   ['get_fm1_request','Inspect relay request','Read the saved delivery outcome, including the authoritative bridge job status.',['request_id'],true],
@@ -50,7 +51,7 @@ export const TOOLS = definitions.map(([name,title,description,fields,readOnly])=
   name,title,description,inputSchema:{type:'object',properties:Object.fromEntries(fields.map(key=>[key,schemas[key]])),required:fields,additionalProperties:false},
   annotations:{readOnlyHint:readOnly,destructiveHint:name.startsWith('confirm_'),idempotentHint:readOnly,openWorldHint:false},
   ...(name==='open_fm1_library'?{icons:ICONS,_meta:{ui:{resourceUri:RESOURCE_URI},'openai/ui':OpenAIUiToolMetadataSchema.parse({entrypoints:[{type:'global',quickAction:{title:'Configure firmware',icons:ICONS,target:{type:'tool',name:'configure_fm1_project',arguments:{}}}},{type:'thread'}],preferredModelDisplayMode:'fullscreen'})}}:{}),
-  ...(name.startsWith('confirm_')?{_meta:{ui:{visibility:['app']}}}:{}),
+  ...(name.startsWith('confirm_')||name==='open_fm1_local_import'?{_meta:{ui:{visibility:['app']}}}:{}),
 }));
 const PRIVATE = /^(image|image_hex|firmware|firmware_bytes|baseline|baseline_sha256|token|credential|authorization|session_root|path|request_digest|target|PNPDeviceID|serial_number|private.*)$/i;
 export function sanitize(value,depth=0) {

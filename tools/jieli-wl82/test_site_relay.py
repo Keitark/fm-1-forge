@@ -37,6 +37,8 @@ class FakeBridge:
         self.post_error = None
         self.get_error = None
         self.jobs = {}
+        self.local_imports = {}
+        self.local_import_fields = {}
         self.post_status = "queued"
         self.post_fields = {}
         self.metadata = {"engine": {"blocked_unknown": True}, "device": {"device_io": False}}
@@ -49,12 +51,24 @@ class FakeBridge:
         if self.hook is not None:
             self.hook(method, route, body)
         if method == "POST":
+            if route == "/v1/library/open":
+                self.local_imports[body["id"]] = {"ok": True, "data": {
+                    "id": body["id"], "opened": True, "device_io": False,
+                    "expires_in": 300, **self.local_import_fields}}
+                if self.post_error is not None:
+                    raise self.post_error
+                return self.local_imports[body["id"]]
             self.jobs[body["id"]] = envelope(body["id"], self.post_status, **self.post_fields)
             if self.post_error is not None:
                 raise self.post_error
             return self.jobs[body["id"]]
         if self.get_error is not None:
             raise self.get_error
+        if route.startswith("/v1/library/open/"):
+            identifier = route.rsplit("/", 1)[-1]
+            if identifier not in self.local_imports:
+                raise relay.RelayError("http_rejected", 404)
+            return self.local_imports[identifier]
         if route.startswith("/v1/jobs/"):
             identifier = route.rsplit("/", 1)[-1]
             if identifier not in self.jobs:
@@ -155,6 +169,9 @@ class ValidationTests(unittest.TestCase):
                task("switch_app", catalog_id="nes-test", entry_method="guess"),
                task("switch_app", catalog_id="nes-test"), task("job", job_id="../escape"),
                task("catalog", command="rm"), task("status", identifier="A" * 32),
+               task("open_local_import", url="https://other.example"),
+               task("open_local_import", path="F:\\private"),
+               task("open_local_import", bundle={"image": "raw"}),
                dict(task(), payload={}), dict(task(), arguments=[])]
         for value in bad:
             with self.subTest(value=value), self.assertRaises(relay.RelayError):
@@ -292,6 +309,91 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(self.bridge.calls, [("GET", "/v1/status", None), ("GET", "/v1/catalog", None),
                                             ("GET", "/v1/jobs/" + job_id, None)])
         self.assertEqual(result["data"]["status"], "unknown")
+
+    def test_local_import_launch_is_saved_before_fixed_post_and_cached_across_restart(self):
+        value = task("open_local_import")
+        def inspect(method, route, body):
+            self.assertEqual(self.relay._load(value["id"])["phase"], "executing")
+            self.assertEqual((method, route, body), ("POST", "/v1/library/open", {"id": value["id"]}))
+        self.bridge.hook = inspect
+        first = self.relay.handle_task(value)
+        self.assertEqual(first, {"id": value["id"], "status": "succeeded", "data": {
+            "id": value["id"], "opened": True, "device_io": False, "expires_in": 300}})
+        self.assertEqual(self.relay.handle_task(value), first)
+        self.restart()
+        self.assertEqual(self.relay.handle_task(value), first)
+        self.assertEqual(len(self.bridge.calls), 1)
+        self.assertFalse(self.bridge.jobs)
+
+    def test_local_import_lost_reply_and_redirect_only_inspect_original_launch(self):
+        for error in (relay.RelayError("network_unavailable"), relay.RelayError("redirect_rejected", 302)):
+            with self.subTest(error=error.label):
+                self.bridge.calls.clear()
+                value = task("open_local_import")
+                self.bridge.post_error = error
+                result = self.relay.handle_task(value)
+                self.assertTrue(result["data"]["opened"])
+                self.assertEqual(self.bridge.calls, [("POST", "/v1/library/open", {"id": value["id"]}),
+                    ("GET", "/v1/library/open/" + value["id"], None)])
+
+    def test_local_import_missing_receipt_is_unknown_and_never_relaunches(self):
+        value = task("open_local_import")
+        self.bridge.post_error = relay.RelayError("network_unavailable")
+        self.bridge.get_error = relay.RelayError("http_rejected", 404)
+        result = self.relay.handle_task(value)
+        self.assertEqual(result, {"id": value["id"], "status": "unknown", "error": "local_import_outcome_unknown"})
+        self.restart()
+        self.assertEqual(self.relay.handle_task(value), result)
+        self.assertEqual(len(self.bridge.calls), 2)
+
+    def test_executing_local_import_recovers_by_get_only_even_without_receipt(self):
+        value = task("open_local_import")
+        record = self.relay._prepare(value)
+        record["phase"] = "executing"
+        relay.atomic_json(self.relay._path(value["id"]), record)
+        self.restart()
+        result = self.relay.handle_task(value)
+        self.assertEqual(result["status"], "unknown")
+        self.assertEqual(self.bridge.calls, [("GET", "/v1/library/open/" + value["id"], None)])
+
+    def test_local_import_receipt_is_metadata_allowlist_and_has_no_device_io(self):
+        self.bridge.local_import_fields = {"url": "http://127.0.0.1:9770/#private-token", "path": "F:\\private",
+            "token": BRIDGE_TOKEN, "image": "A" * 200, "request": {"payload": "bytes"}, "extra": "private"}
+        value = task("open_local_import")
+        result = self.relay.handle_task(value)
+        self.assertEqual(set(result["data"]), {"id", "opened", "device_io", "expires_in"})
+        for private in ("private", BRIDGE_TOKEN, "http://", "image", "payload"):
+            self.assertNotIn(private, self.relay._path(value["id"]).read_text())
+
+    def test_invalid_local_import_receipt_cannot_report_success(self):
+        for fields in ({"id": "f" * 32}, {"opened": "yes"}, {"device_io": True},
+                       {"expires_in": True}, {"expires_in": 301}, {"error": "arbitrary exception details"}):
+            with self.subTest(fields=fields):
+                self.bridge.local_import_fields = fields
+                result = self.relay.handle_task(task("open_local_import"))
+                self.assertEqual(result["status"], "unknown")
+        self.assertTrue(all(route.startswith("/v1/library/open") for _, route, _ in self.bridge.calls))
+
+    def test_local_import_known_failed_unknown_and_expired_receipts_remain_distinct(self):
+        for error, opened, status in (("local_import_launch_failed", False, "failed"),
+                ("local_import_launch_unknown", False, "unknown"), ("local_import_session_expired", True, "failed")):
+            with self.subTest(error=error):
+                self.bridge.local_import_fields = {"opened": opened, "error": error}
+                result = self.relay.handle_task(task("open_local_import"))
+                self.assertEqual(result["status"], status)
+                self.assertEqual(result["data"]["error"], error)
+
+    def test_catalog_set_metadata_survives_projection_without_local_package_material(self):
+        member = {"id": "nes-test", "profile": "nes", "title": "Local game", "variant": "personal",
+                  "sha256": EXPECTED_SHA, "image": "A" * 200, "path": "F:\\private\\game.json"}
+        self.bridge.catalog["sets"] = [{"id": "e" * 32, "name": "My apps", "members": [member],
+            "imported": 123, "device_io": False, "session_token": BRIDGE_TOKEN}]
+        result = self.relay.handle_task(task("catalog"))
+        self.assertEqual(result["data"]["apps"], self.bridge.catalog["apps"])
+        local_set = result["data"]["sets"][0]
+        self.assertEqual(local_set["name"], "My apps")
+        self.assertEqual(local_set["members"], [{key: value for key, value in member.items() if key not in {"image", "path"}}])
+        self.assertNotIn("session_token", local_set)
 
     def test_normalized_task_is_persisted_as_executing_before_submission(self):
         value = task("plan_app", catalog_id="nes-test")
@@ -912,6 +1014,9 @@ class HttpTransportTests(unittest.TestCase):
                     self.send_header("Location", "/credential-sink")
                 self.end_headers()
                 self.wfile.write(owner.payload)
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                self.do_GET()
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -940,6 +1045,13 @@ class HttpTransportTests(unittest.TestCase):
         with self.assertRaisesRegex(relay.RelayError, "redirect_rejected"):
             self.client.request("GET", "/v1/status")
         self.assertEqual(len(self.requests), 1)
+
+    def test_local_import_post_redirect_never_forwards_auth_or_launch_to_target(self):
+        self.code = 302
+        with self.assertRaisesRegex(relay.RelayError, "redirect_rejected"):
+            self.client.request("POST", "/v1/library/open", {"id": "a" * 32})
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(self.requests[0][0], "/v1/library/open")
 
     def test_response_bounds_type_duplicate_keys_and_nonfinite_numbers(self):
         for payload, content_type in ((b"x" * (relay.MAX_JSON_BYTES + 1), "application/json"),

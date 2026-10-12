@@ -145,6 +145,9 @@ class WindowsBackend:
     def install_catalog(self, bundle):
         return self.packages.install(bundle)
 
+    def install_library_set(self, name, bundles):
+        return self.packages.install_set(name, bundles)
+
     def execute(self, operation, request=None, loader_state=None, catalog_id=None, entry_method=None, expected_sha256=None):
         if expected_sha256 is not None and operation != 'official_updater':
             raise ValueError('Expected updater SHA256 is only accepted for official_updater')

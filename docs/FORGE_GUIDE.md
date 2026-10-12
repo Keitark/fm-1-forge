@@ -6,7 +6,7 @@ Site URL and local bridge remain in use. While the conversation is active, use
 This opens Forge's native conversation tab. The global shortcut opens a separate
 app view; returning to an earlier chat selects that chat's own panel instance.
 
-The current resource is `ui://fm1/forge-panel-v6.html`; older resource aliases
+The current resource is `ui://fm1/forge-panel-v7.html`; older resource aliases
 remain available. Reopen the native conversation tab after an update.
 The [native extensions guide](MCP_EXTENSIONS.md) describes the official SDK,
 settings, drafts, file editing, mentions, forms and chat handoff. Dated
@@ -19,6 +19,12 @@ UBOOT presence. Failed checks and inventory older than 15 seconds show an
 unavailable/stale status rather than a current COM port. Hidden panels pause
 polling. **Refresh** also reloads package metadata before reviewing a transfer.
 These checks use passive inventory and do not open or program the device.
+
+**Apps library → Add local set** opens the laptop's importer. Select a folder
+or exported app bundle JSON files, name the set and review it before adding.
+Saved sets filter the app variants in the panel. Package files stay local;
+importing does not transfer firmware. See [local app sets](LOCAL_APP_SETS.md)
+for supported formats, validation and connection requirements.
 
 Diagnostics installation is still pending. Runtime elevation was canceled;
 no new protected helper or firmware write resulted. A ready protected helper

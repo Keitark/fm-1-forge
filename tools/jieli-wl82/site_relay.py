@@ -31,7 +31,7 @@ MAX_METADATA_BYTES = 58_000
 ID = re.compile(r"[0-9a-f]{32}\Z")
 SHA = re.compile(r"[0-9a-f]{64}\Z")
 SLUG = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
-OPERATIONS = frozenset({"status", "catalog", "plan_app", "job", "switch_app", "official_updater"})
+OPERATIONS = frozenset({"status", "catalog", "plan_app", "job", "switch_app", "official_updater", "open_local_import"})
 JOB_OPERATIONS = frozenset({"plan_app", "switch_app", "official_updater"})
 JOB_STATUSES = frozenset({"queued", "running", "succeeded", "failed", "unknown"})
 SENSITIVE_KEY = re.compile(
@@ -423,6 +423,20 @@ class Relay:
             raise RelayError("invalid_bridge_response")
         return metadata_only(data, self.secrets)
 
+    def _local_import_receipt(self, method: str, identifier: str) -> dict[str, Any]:
+        route = "/v1/library/open" + ("/" + identifier if method == "GET" else "")
+        data = self._bridge_data(method, route, {"id": identifier} if method == "POST" else None)
+        # A browser launch receipt cannot grant another operation or expose the
+        # local URL. Keep its contract separate from bridge firmware job status.
+        if (data.get("id") != identifier or type(data.get("opened")) is not bool
+                or data.get("device_io") is not False
+                or type(data.get("expires_in")) is not int
+                or not 0 <= data["expires_in"] <= 300
+                or ("error" in data and (not isinstance(data["error"], str)
+                    or not re.fullmatch(r"[a-z_]{1,80}", data["error"])))):
+            raise RelayError("invalid_bridge_response")
+        return {key: data[key] for key in ("id", "opened", "device_io", "expires_in", "error") if key in data}
+
     def _execute(self, task: dict[str, Any], *, resumed: bool) -> dict[str, Any]:
         identifier, operation, args = task["id"], task["operation"], task["arguments"]
         result = {"id": identifier, "status": "succeeded"}
@@ -431,6 +445,27 @@ class Relay:
         if operation == "official_updater" and not resumed and not self.allow_official_update:
             return {"id": identifier, "status": "failed", "error": "official_update_disabled"}
         try:
+            if operation == "open_local_import":
+                if resumed:
+                    try:
+                        result["data"] = self._local_import_receipt("GET", identifier)
+                    except RelayError:
+                        return {"id": identifier, "status": "unknown", "error": "local_import_outcome_unknown"}
+                else:
+                    try:
+                        result["data"] = self._local_import_receipt("POST", identifier)
+                    except RelayError as error:
+                        if error.status is not None and error.status not in {301, 302, 303, 307, 308}:
+                            return {"id": identifier, "status": "failed", "error": "bridge_request_rejected"}
+                        # A timeout, redirect or malformed reply never justifies
+                        # opening another window. Inspect the first launch ID.
+                        try:
+                            result["data"] = self._local_import_receipt("GET", identifier)
+                        except RelayError:
+                            return {"id": identifier, "status": "unknown", "error": "local_import_outcome_unknown"}
+                if result["data"]["opened"] is not True or "error" in result["data"]:
+                    result["status"] = "unknown" if result["data"].get("error") == "local_import_launch_unknown" else "failed"
+                return result
             if operation in JOB_OPERATIONS:
                 # Once executing is committed, even a crash immediately before
                 # POST must be treated as ambiguous. Resume uses GET exclusively.

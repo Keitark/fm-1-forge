@@ -66,7 +66,57 @@ test('consumed approval retry survives expiry and offline relay',async()=>{const
 test('unconsumed expired approval remains unconsumed and unqueued',async()=>{const env=database();connect(env);cacheCatalog(env);const p=await callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'serial'});env.DB.sqlite.prepare('UPDATE switch_approvals SET expires=0').run();await assert.rejects(callTool(env,'alice','confirm_fm1_switch',{approval_id:p._approval}),/expired/);assert.equal(env.DB.sqlite.prepare('SELECT used FROM switch_approvals').get().used,0);});
 test('transaction deadline cannot consume approval without task',async()=>{const env=database();connect(env);cacheCatalog(env);const p=await callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'serial'});const prepare=env.DB.prepare.bind(env.DB);env.DB.prepare=sql=>{if(sql.startsWith('INSERT INTO relay_tasks')&&sql.includes('SELECT id,user_id'))env.DB.sqlite.prepare('UPDATE switch_approvals SET expires=0').run();return prepare(sql);};await assert.rejects(callTool(env,'alice','confirm_fm1_switch',{approval_id:p._approval}),/expired/);assert.equal(env.DB.sqlite.prepare('SELECT used FROM switch_approvals').get().used,0);assert.equal(env.DB.sqlite.prepare("SELECT count(*) AS n FROM relay_tasks WHERE operation='switch_app'").get().n,0);});
 test('changed digest and cross-user approval are rejected',async()=>{const env=database();connect(env);cacheCatalog(env);const p=await callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'serial'});await assert.rejects(callTool(env,'bob','confirm_fm1_switch',{approval_id:p._approval}),/not found/);const changed=structuredClone(catalog);changed.apps[0].variants[0].sha256='b'.repeat(64);cacheCatalog(env,'alice',changed);await assert.rejects(callTool(env,'alice','confirm_fm1_switch',{approval_id:p._approval}),/changed/);});
-test('MCP initialize, notifications, discovery and inline app resource',async()=>{const env=database();const init=await rpc(env,'initialize');assert.equal(init.body.id,7);assert.equal(init.body.result.protocolVersion,'2025-11-25');assert.ok(init.body.result.serverInfo.icons[0].src.startsWith('data:image/'));assert.equal((await request(env,'/mcp',{jsonrpc:'2.0',method:'notifications/initialized'})).status,202);const tools=(await rpc(env,'tools/list')).body.result.tools;assert.equal(tools.length,18);for(const name of ['confirm_fm1_switch','confirm_fm1_official_update'])assert.deepEqual(tools.find(t=>t.name===name)._meta.ui.visibility,['app']);const read=(await rpc(env,'resources/read',{uri:RESOURCE_URI})).body.result.contents[0];assert.equal(read.mimeType,'text/html;profile=mcp-app');assert.ok(read.text.includes('ui/resource-teardown'));assert.deepEqual(read._meta.ui.csp,{connectDomains:[],resourceDomains:[]});assert.equal((await request(env,'/mcp',null,{method:'GET'})).status,405);});
+test('MCP initialize, notifications, discovery and inline app resource',async()=>{const env=database();const init=await rpc(env,'initialize');assert.equal(init.body.id,7);assert.equal(init.body.result.protocolVersion,'2025-11-25');assert.ok(init.body.result.serverInfo.icons[0].src.startsWith('data:image/'));assert.equal((await request(env,'/mcp',{jsonrpc:'2.0',method:'notifications/initialized'})).status,202);const tools=(await rpc(env,'tools/list')).body.result.tools;assert.equal(tools.length,19);for(const name of ['confirm_fm1_switch','confirm_fm1_official_update','open_fm1_local_import'])assert.deepEqual(tools.find(t=>t.name===name)._meta.ui.visibility,['app']);const read=(await rpc(env,'resources/read',{uri:RESOURCE_URI})).body.result.contents[0];assert.equal(read.mimeType,'text/html;profile=mcp-app');assert.ok(read.text.includes('ui/resource-teardown'));assert.deepEqual(read._meta.ui.csp,{connectDomains:[],resourceDomains:[]});assert.equal((await request(env,'/mcp',null,{method:'GET'})).status,405);});
+
+test('local importer requires a connected bench and accepts no local path or payload',async()=>{
+  const env=database();await assert.rejects(callTool(env,'alice','open_fm1_local_import',{}),/offline/);
+  connect(env,false,false);
+  for(const args of [{path:'F:\\private'}, {url:'https://other.test'}, {bundles:[]}, {image:'raw'}])await assert.rejects(callTool(env,'alice','open_fm1_local_import',args),/arguments/);
+  assert.equal(env.DB.sqlite.prepare('SELECT count(*) AS n FROM relay_tasks').get().n,0);
+  assert.deepEqual(validate('open_fm1_local_import',{}),{});
+});
+test('local importer launch is owner scoped and coalesced without transfer approvals',async()=>{
+  const env=database();connect(env,false,false);
+  const [first,second]=await Promise.all([callTool(env,'alice','open_fm1_local_import',{}),callTool(env,'alice','open_fm1_local_import',{})]);
+  assert.equal(first.request_id,second.request_id);
+  const bob=await callTool(env,'bob','open_fm1_local_import',{});assert.notEqual(first.request_id,bob.request_id);
+  await assert.rejects(callTool(env,'bob','get_fm1_request',{request_id:first.request_id}),/not found/);
+  const tasks=env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY rowid').all();assert.equal(tasks.length,2);
+  assert.ok(tasks.every(task=>task.operation==='open_local_import'&&task.arguments==='{}'));
+  for(const table of ['switch_approvals','official_update_approvals'])assert.equal(env.DB.sqlite.prepare('SELECT count(*) AS n FROM '+table).get().n,0);
+  const poll=await request(env,'/relay/poll',{}, {relay:true});assert.deepEqual(poll.body.tasks,[{id:first.request_id,operation:'open_local_import',arguments:{}}]);
+  env.DB.sqlite.prepare('UPDATE relay_tasks SET dispatched=? WHERE id=?').run(seconds()-16,first.request_id);
+  const retry=await request(env,'/relay/poll',{}, {relay:true});assert.deepEqual(retry.body.tasks,poll.body.tasks);
+});
+test('local importer receipt excludes local authority and preserves a saved uncertain outcome',async()=>{
+  const env=database();connect(env);const queued=await callTool(env,'alice','open_fm1_local_import',{});
+  await request(env,'/relay/poll',{}, {relay:true});
+  const report={id:queued.request_id,status:'unknown',data:{id:queued.request_id,opened:false,device_io:false,expires_in:300,error:'local_import_launch_unknown',
+    url:'http://127.0.0.1:9770/#secret',path:'F:\\private',token:'secret',image:'raw'}};
+  assert.deepEqual((await request(env,'/relay/result',report,{relay:true})).body,{saved:true});
+  const saved=await callTool(env,'alice','get_fm1_request',{request_id:queued.request_id});assert.equal(saved.state,'unknown');
+  assert.deepEqual(saved.data,{id:queued.request_id,opened:false,device_io:false,expires_in:300,error:'local_import_launch_unknown'});
+  assert.deepEqual((await request(env,'/relay/result',report,{relay:true})).body,{saved:true});
+  assert.equal((await request(env,'/relay/result',{...report,status:'succeeded'},{relay:true})).status,409);
+});
+test('local importer rejects a mismatched or unsafe bridge receipt',async()=>{
+  const env=database();connect(env);const queued=await callTool(env,'alice','open_fm1_local_import',{});
+  await request(env,'/relay/poll',{}, {relay:true});
+  const data={id:queued.request_id,opened:true,device_io:false,expires_in:300};
+  for(const fields of [{id:'f'.repeat(32)}, {opened:'yes'}, {device_io:true}, {expires_in:301}, {error:'C:\\private\\exception'}])assert.equal((await request(env,'/relay/result',{id:queued.request_id,status:'succeeded',data:{...data,...fields}},{relay:true})).status,400);
+  assert.equal(env.DB.sqlite.prepare('SELECT result FROM relay_tasks WHERE id=?').get(queued.request_id).result,null);
+});
+test('saved local sets remain metadata only, owner scoped and backward compatible',async()=>{
+  const env=database();connect(env);cacheCatalog(env);
+  assert.deepEqual((await callTool(env,'alice','open_fm1_library',{})).catalog.apps,catalog.apps);
+  const queued=await callTool(env,'alice','list_fm1_apps',{});await request(env,'/relay/poll',{}, {relay:true});
+  const sets=[{id:'a'.repeat(32),name:'My apps',members:[{id:'nes-test',profile:'nes',title:'NES',variant:'local',sha256:digest,path:'F:\\private',image:'raw'}],imported:seconds(),device_io:false,token:'secret'}];
+  await request(env,'/relay/result',{id:queued.request_id,status:'succeeded',data:{...catalog,sets}},{relay:true});
+  const library=await callTool(env,'alice','open_fm1_library',{});assert.deepEqual(library.catalog.apps,catalog.apps);
+  assert.equal(library.catalog.sets[0].name,'My apps');assert.equal(library.catalog.sets[0].members[0].sha256,digest);
+  assert.ok(!JSON.stringify(library.catalog).includes('secret'));assert.ok(!JSON.stringify(library.catalog).includes('private'));
+  assert.ok(!('image' in library.catalog.sets[0].members[0]));assert.equal((await callTool(env,'bob','open_fm1_library',{})).catalog,null);
+});
 test('unknown JSON-RPC method and tool input produce explicit errors',async()=>{const env=database();assert.equal((await rpc(env,'arbitrary/exec')).body.error.code,-32601);const answer=await rpc(env,'tools/call',{name:'plan_fm1_app',arguments:{catalog_id:'../'}});assert.equal(answer.body.result.isError,true);});
 test('server requires DB binding and never creates schema in requests',async()=>{const env=database();delete env.DB;assert.equal((await api(env,'open_fm1_library')).status,503);});
 
