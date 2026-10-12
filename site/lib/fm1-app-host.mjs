@@ -6,7 +6,7 @@ import { createResourceEditor, parseForgeRoute, validateLocalPath } from './fm1-
 // These official SDKs are bundled locally into the MCP App resource.
 export class FM1PluginHost {
   constructor({onToolResult=()=>{},onToolInput=()=>{},onTeardown=()=>{},onContext=()=>{}}={}) {
-    this.app=new App({name:'FM1 Forge',version:'3.1.2'},
+    this.app=new App({name:'FM1 Forge',version:'3.1.3'},
       {availableDisplayModes:['inline','fullscreen']},{autoResize:false});
     this.extensions=new OpenAIExtensions(this.app);
     this.closed=false;this.transportClosed=false;this.resources=new Set();

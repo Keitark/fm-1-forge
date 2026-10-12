@@ -11,7 +11,7 @@ function inventoryFreshness(snapshot,now=Date.now()){
   return {fresh,present,age,observed,state:fresh?'fresh':enumerationError||status.state==='error'?'error':snapshot?.inventory?'stale':'unavailable'};
 }
 /** A single unresolved status request survives ticks, timeouts and manual refreshes. */
-function createInventoryMonitor({call,readSnapshot,getSnapshot,onError=()=>{},onAge=()=>{},canRun=()=>true,signal,clock={setTimeout,clearTimeout},interval=5000,initialDelay=1500}){
+function createInventoryMonitor({call,readSnapshot,getSnapshot,onError=()=>{},onAge=()=>{},canRun=()=>true,signal,clock={setTimeout:(fn,ms)=>globalThis.setTimeout(fn,ms),clearTimeout:timer=>globalThis.clearTimeout(timer)},interval=5000,initialDelay=1500}){
   let enabled=false,disposed=false,timer=null,inflight=null,pending=null,failures=0;
   const clear=()=>{if(timer!==null){clock.clearTimeout(timer);timer=null;}};
   const alive=()=>!disposed&&!signal?.aborted;

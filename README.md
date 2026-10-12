@@ -1,6 +1,6 @@
 # FM1 Forge
 
-The private FM1 App Library plugin is now **FM1 Forge 3.1.2**: install an asset-free
+The private FM1 App Library plugin is now **FM1 Forge 3.1.3**: install an asset-free
 diagnostic baseline, test hardware, configure USB/HAL/user modules graphically,
 then ask Codex to create and build a firmware project. It preserves the existing
 plugin ID, hosted MCP endpoint, local protected writer and saved-job history.
@@ -10,7 +10,7 @@ mentions, configuration forms, deep links and chat context/message actions.
 
 Read the current [Forge guide](docs/FORGE_GUIDE.md). The owner-private Site's
 final Forge release is deployed with MCP enabled at the existing endpoint. Its
-resource is `ui://fm1/forge-panel-v3.html`. The same private
+resource is `ui://fm1/forge-panel-v4.html`. The same private
 [FM1 Forge plugin](https://chatgpt.com/plugins/plugins_6ac9ad3fc1c8819195580a4747c50052)
 was updated in place.
 

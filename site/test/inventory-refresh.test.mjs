@@ -1,11 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createInventoryMonitor,inventoryFreshness} from '../lib/fm1-inventory-refresh.mjs';
+import vm from 'node:vm';
+import {createInventoryMonitor,inventoryFreshness,inventoryRuntime} from '../lib/fm1-inventory-refresh.mjs';
 
 const id='a'.repeat(32),nextId='b'.repeat(32),flush=async()=>{for(let step=0;step<20;step++)await Promise.resolve();};
 function fakeClock(){let now=0,key=0;const timers=new Map();return {now:()=>now,setTimeout(fn,ms){const id=++key;timers.set(id,{fn,time:now+ms});return id;},clearTimeout(id){timers.delete(id);},get size(){return timers.size;},async advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].sort((a,b)=>a[1].time-b[1].time).find(([,timer])=>timer.time<=end);if(!due)break;if(++count>100)throw new Error('Timer storm');now=due[1].time;timers.delete(due[0]);due[1].fn();await flush();}now=end;await flush();}};}
 const fresh=(overrides={})=>({relay:{connected:true},inventory:{device:{serial_ports:[{port:'COM10'}],update_mode:{mode:'serial'}}},inventory_status:{state:'fresh',observed_at:1000,age_seconds:0,max_age_seconds:15,request_id:id},_inventory_received_at:1000000,recent_requests:[],...overrides});
 function fixture({states=['succeeded'],connected=true,backend,canRun=()=>true}={}){const clock=fakeClock(),calls=[],snapshots=[],errors=[],ages=[],controller=new AbortController();let snapshot=fresh({relay:{connected}}),reads=0;const monitor=createInventoryMonitor({clock,signal:controller.signal,getSnapshot:()=>snapshot,canRun,call:async(name,args,signal)=>{calls.push({name,args,signal});if(backend)return backend(name,args,signal);if(name==='get_fm1_status')return {request_id:id};return {id,operation:'status',state:states[Math.min(reads++,states.length-1)]};},readSnapshot:async()=>{snapshots.push(true);return snapshot;},onAge:()=>ages.push(clock.now()),onError:(error,pending)=>errors.push({error,pending})});return {clock,calls,snapshots,errors,ages,monitor,controller,setSnapshot:next=>{snapshot=next;},get snapshot(){return snapshot;}};}
+
+test('injected browser runtime preserves native timer receivers for start, poll, pause and teardown',async()=>{
+  const browser=vm.createContext({window:{}});
+  vm.runInContext(`
+    globalThis.timers=new Map();globalThis.timerKey=0;globalThis.calls=[];globalThis.cleared=[];
+    globalThis.setTimeout=function(fn,ms){if(this!==globalThis)throw new TypeError('Illegal invocation');const key=++timerKey;timers.set(key,{fn,ms});return key;};
+    globalThis.clearTimeout=function(key){if(this!==globalThis)throw new TypeError('Illegal invocation');cleared.push(key);timers.delete(key);};
+    ${inventoryRuntime}
+    globalThis.monitor=window.FM1Inventory.monitor({getSnapshot:()=>({relay:{connected:true},recent_requests:[]}),readSnapshot:async()=>({relay:{connected:true}}),call:async(name,args)=>{calls.push(name);return name==='get_fm1_status'?{request_id:'${id}'}:{id:'${id}',operation:'status',state:'pending'};}});
+  `,browser);
+  assert.doesNotThrow(()=>browser.monitor.start());assert.equal(browser.timers.size,1);const [key,timer]=browser.timers.entries().next().value;assert.equal(timer.ms,1500);browser.timers.delete(key);timer.fn();await flush();
+  assert.deepEqual(Array.from(browser.calls),['get_fm1_status','get_fm1_request']);assert.equal(browser.monitor.pendingRequestId,id);assert.equal(browser.timers.size,1);assert.equal(browser.timers.values().next().value.ms,5000);
+  assert.doesNotThrow(()=>browser.monitor.pause());assert.equal(browser.timers.size,0);assert.ok(browser.cleared.length>0);assert.doesNotThrow(()=>browser.monitor.wake());await flush();assert.equal(browser.calls.filter(name=>name==='get_fm1_status').length,1);assert.equal(browser.timers.size,1);
+  assert.doesNotThrow(()=>browser.monitor.close());assert.equal(browser.timers.size,0);browser.monitor.wake();await flush();assert.equal(browser.timers.size,0);
+});
 
 test('freshness uses server age, client elapsed and wall age without accepting future receipt times',()=>{
   const value=fresh();assert.equal(inventoryFreshness(value,1000000).fresh,true);assert.equal(inventoryFreshness(value,1015000).fresh,true);assert.equal(inventoryFreshness(value,1016000).fresh,false);

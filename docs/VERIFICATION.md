@@ -1,5 +1,50 @@
 # Integration verification
 
+## Native timer correction 3.1.3, 2026-10-12
+
+The first actual 3.1.2 MCP App opening displayed **Illegal invocation** and
+did not start polling. The default injected clock invoked unbound browser
+timers as methods of a plain clock object; the native Window receiver check
+rejected that call. This was a real host failure despite the passing VM suite,
+and native acceptance for 3.1.2 is not claimed.
+
+Version 3.1.3 wraps calls through `globalThis.setTimeout/clearTimeout`, preserving
+the browser receiver. A regression executes the injected browser runtime with
+receiver-sensitive timers and covers polling, pending IDs, pause/wake and
+teardown. The freshness and passive-transfer boundaries remain unchanged.
+
+The installed plugin cache updated to 3.1.3, but a newly opened MCP App still
+contained the 3.1.2 SDK version and old unbound timer runtime, and displayed
+**Illegal invocation**. This proves stale native resource content; it does not
+establish a failure of the corrected 3.1.3 runtime. The canonical resource moved
+to `ui://fm1/forge-panel-v4.html`, with all three UI-bound descriptors updated
+and the v3 alias retained. Both protocol-era SDK tests check this exact binding
+and identical content through every old alias. OpenAI documents the resource URI
+as a cache key; refreshing registered host metadata may still be necessary.
+
+Final v4-source checks passed: all 212 Site tests, TypeScript checking and the
+production build. Source commit `56f85d9c71e2facf584465422898defc36047f7b` was
+pushed and deployed privately with MCP enabled: deployment
+`appgdep_6acc4b432ba08191a6f6bfc479a1b882`, saved version
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_d8557cfb41108191a45a749fcaf5ab6b`,
+terminal state **succeeded**, environment revision 1. Archive SHA256:
+`c350868e026594630daa2896bd84de0a15ed7304a65f39d14278276c856707c2`.
+The same private plugin ID `plugins_6ac9ad3fc1c8819195580a4747c50052` was updated
+in place to 3.1.3, release `pluginrel_6acc48baecc081919db4c7acf69b9f70`; the
+installed local cache is 3.1.3. Only the two existing manifest version fields
+changed in the account package. Plugin overlay ZIP SHA256:
+`35966ffbcc21ed9e32ceffcd321f227615cd5fcc4f460f5c5801749bfe16515e`.
+
+After the final deployment, a newly opened `open_fm1_library` MCP App in Codex
+loaded the 3.1.3 SDK script and the `globalThis.setTimeout` runtime. Without
+clicking Refresh, its heading changed from unavailable to **FM1 disconnected**.
+Two later DOM observations showed **Checked 13s ago**, then **Checked 12s ago**
+with the same disconnected heading and no error, demonstrating a later automatic
+observation rather than a frozen opening snapshot. The app document was visible.
+Screenshot: `F:\dev\fm1\tmp\fm1-forge-3.1.3-auto-disconnected.png`.
+This acceptance is for the model-opened native MCP App route; the separate
+New Tab native thread entrypoint and its icon still need user confirmation.
+
 ## Automatic connection refresh 3.1.2, 2026-10-12
 
 The opening panel consumed saved inventory without an automatic status request.

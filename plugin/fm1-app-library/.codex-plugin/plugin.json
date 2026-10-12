@@ -22,7 +22,7 @@
     }
   },
   "name": "fm1-app-library",
-  "version": "3.1.2",
+  "version": "3.1.3",
   "description": "FM1 diagnostic firmware, module configuration and custom firmware projects through the hosted Forge plugin panel.",
   "author": {
     "name": "Keitarou Kondou"

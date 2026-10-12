@@ -1,5 +1,20 @@
 # FM1 Codex integration handoff
 
+## Native timer correction 3.1.3 (2026-10-12)
+
+The first real 3.1.2 native opening exposed **Illegal invocation** in the
+monitor's default clock. Native timer wrappers now preserve the Window receiver;
+the receiver-sensitive regression reproduces and checks this exact failure.
+The current release is 3.1.3. Codex still loaded cached 3.1.2 scripts after a
+reopen, so the canonical resource is now `ui://fm1/forge-panel-v4.html` while v3
+and older aliases remain available. Refresh the existing connection metadata
+if a new panel still selects v3. Native acceptance requires observing the new
+scripts and repeated automatic status checks, not just reopening a tab.
+The newly opened model-tool MCP App loaded the corrected scripts and refreshed
+to **FM1 disconnected** without a manual click; its checked age renewed on a
+later cycle. The existing native thread tab can still need reopening after its
+metadata refresh. Exact evidence is recorded in [verification](VERIFICATION.md).
+
 ## Automatic connection refresh 3.1.2 (2026-10-12)
 
 The normal panel now refreshes passive FM1 presence while visible, on opening

@@ -1,12 +1,12 @@
 # FM1 Forge
 
-FM1 Forge **3.1.2** is the renamed private FM1 App Library plugin. Its existing plugin ID,
+FM1 Forge **3.1.3** is the renamed private FM1 App Library plugin. Its existing plugin ID,
 Site URL and local bridge remain in use. While the conversation is active, use
 **Side-panel New Tab (+) → More tools… → Plugins and MCPs → FM1 Forge**.
 This opens Forge's native conversation tab. The global shortcut opens a separate
 app view; returning to an earlier chat selects that chat's own panel instance.
 
-The current resource is `ui://fm1/forge-panel-v3.html`; older resource aliases
+The current resource is `ui://fm1/forge-panel-v4.html`; older resource aliases
 remain available. Reopen the native conversation tab after an update.
 The [native extensions guide](MCP_EXTENSIONS.md) describes the official SDK,
 settings, drafts, file editing, mentions, forms and chat handoff. Dated
