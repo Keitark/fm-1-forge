@@ -266,6 +266,56 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(result['update_mode']['app_entry_method'], 'serial')
         self.assertFalse(result['update_mode']['official_available'])
 
+    def test_status_observation_bounds_all_passive_enumeration_and_state_metadata(self):
+        events = []
+        state = backend.read_json(self.session / 'state.json')
+
+        def clock():
+            if not events:
+                events.append('started_at')
+                return 1000.9
+            self.assertEqual(events[-1], 'session_state')
+            events.append('completed_at')
+            return 1006.8
+
+        def comports():
+            self.assertEqual(events, ['started_at'])
+            events.append('serial_pnp')
+            return []
+
+        def disk_pnp(args, **kwargs):
+            events.append('disk_pnp')
+            self.assertIn('Get-CimInstance Win32_DiskDrive', args[-1])
+            return SimpleNamespace(stdout='[]', returncode=0)
+
+        def midi_pnp():
+            events.append('midi_pnp')
+            return {'endpoints': [], 'error': None}
+
+        def session_state(path):
+            self.assertEqual(path, self.session / 'state.json')
+            events.append('session_state')
+            return state
+
+        def no_transport(*args, **kwargs):
+            raise AssertionError('Passive observation must not open a device or pipe')
+
+        ports = SimpleNamespace(comports=comports)
+        modules = {'serial': SimpleNamespace(Serial=no_transport),
+                   'serial.tools': SimpleNamespace(list_ports=ports)}
+        with patch.dict('sys.modules', modules), patch.object(backend.sys, 'platform', 'win32'), \
+             patch.object(backend.time, 'time', side_effect=clock), \
+             patch.object(backend.subprocess, 'run', side_effect=disk_pnp), \
+             patch.object(backend, 'enumerate_midi_endpoints', side_effect=midi_pnp), \
+             patch.object(backend, 'read_json', side_effect=session_state), \
+             patch.object(self.adapter, '_pipe', side_effect=no_transport):
+            result = self.adapter.status()
+        self.assertEqual(events, ['started_at', 'serial_pnp', 'disk_pnp',
+                                  'midi_pnp', 'session_state', 'completed_at'])
+        self.assertEqual(result['observation'], {'started_at': 1000, 'completed_at': 1006})
+        self.assertFalse(result['device_io'])
+        self.assertEqual(result['update_mode']['mode'], 'disconnected')
+
     def test_catalog_package_ids_are_immutable(self):
         bundle = self.bundle()
         self.adapter.install_catalog(bundle)

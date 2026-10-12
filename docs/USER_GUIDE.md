@@ -17,16 +17,63 @@ and diagnostics or your own user module. `sdk-320` requires stock DMA; the
 RGB444 presets require SDK-default CPU because they need a 60 MHz LSB, while
 the 320 MHz SDK table supplies 53 MHz.
 
-Diagnostics transfer has not been performed. Runtime elevation was canceled,
-so no new protected helper was started and no firmware was written. Install
-and verify the diagnostics baseline before **New firmware project** unlocks;
-then test the physical inputs, LCD and sound. **Ask Codex** requests a build
-through a supported host message or provides a copyable prompt. It does not
-flash the firmware or claim build/hardware acceptance.
+On 2026-10-12, protected local bench transfers, startup observations and three
+CPU benchmark runs passed for both the preserved SDK-default clock (360 MHz
+on this unit) and `sdk-320`, including USB audio duplex under the final run.
+The original MOD firmware was restored and its serial startup verified. The
+[clock benchmark report](https://github.com/Keitark/fm1-tracker/blob/codex/12-fm1-forge/docs/FM1_FORGE_CLOCK_BENCH_20261012.md)
+records the measurements and acceptance limits.
+These local CLI checks do not create the panel's saved diagnostics onboarding
+proof. Install and verify the diagnostics baseline through Forge before **New
+firmware project** unlocks; physical input, LCD and audible sound checks remain
+separate. **Ask Codex** requests a build through a supported host message or
+provides a copyable prompt. It does not flash firmware or certify a build.
 
-The material below records earlier App Library behavior and dated bench checks.
+## Restore automatic device detection
+
+Run `tools/jieli-wl82/start-forge-services.ps1` from normal, non-administrator
+PowerShell to restore the local inventory bridge and outbound Site relay.
+`-PrepareOnly` validates existing private files, runtime and process metadata
+without launching services or making HTTP requests. The wrapper reuses your
+existing tokens, app library and saved jobs. It preserves verified running
+services, including an attached protected bench session; a reused PID or an
+unhealthy live bridge stops recovery without killing processes or duplicating
+them.
+
+The current published panel refreshes passive inventory automatically while
+visible and checks again on return. Pending status requests are inspected at
+one-second intervals; their relay heartbeat is refreshed independently. A
+successful status cycle promptly starts the next cycle. **Bench connected**
+describes the relay, while the device heading describes FM1 presence. Inventory
+older than 15 seconds is marked stale; **Checking connection** and last-seen
+history do not enable transfer actions. Saved requests, progress and drafts
+remain intact. **Refresh** also reloads package metadata.
+
+Freshness uses the local scan time, so time spent waiting in the request queue
+does not make a newly detected connection stale. Replayed old results retain
+their original timestamps. A temporary refresh error preserves a still-fresh
+observation until normal expiry and displays a retry notice. UI resource v8
+retains all older aliases; close and reopen an existing Forge tab once to load
+it. A fresh native tab confirmed automatic COM4 detection without a full Codex
+restart or reinstall.
+
+Reopen the Forge panel once to load the newly published resource. A complete
+Codex restart or plugin reinstall is not required for this hosted UI update.
+
+A newly started bridge provides passive device detection without attaching an
+old flashing helper. Newly started relays keep firmware switching and official
+updater handoff disabled. A protected session
+must be established separately for firmware transfers. The wrapper can be run
+again safely and is suitable for a reversible per-user Startup shortcut; it
+does not register startup entries itself. A hidden, normal-user **FM1 Forge
+connection** shortcut was registered in this user's Windows Startup folder on
+2026-10-12. Running the wrapper twice preserved the healthy bridge and relay;
+startup after an actual Windows restart has not yet been tested. Check **Bench
+connected** and fresh device status in Forge after launch.
 
 ## Earlier App Library guide
+
+The material below records earlier App Library behavior and dated bench checks.
 
 Use the installed **FM1 App Library** plugin in ChatGPT or Codex and ask it to
 open your FM1 app library. Its native panel is the primary interface selected
@@ -34,11 +81,12 @@ for this integration. The private [FM1 App Library website](https://fm1-app-libr
 is also available; sign in with the owner account when prompted. Both use the
 [black/mint FM-1 mark](../site/public/fm1-icon.png).
 
-The latest host tool calls are unavailable despite active v6. Native
-**Refresh** rejects `open_fm1_library` as outside its trusted tool scope; a
-repeated assistant open returned **Unknown tool**. Local Appearance controls
-still work. The cause and recovery remain unconfirmed, and reopening is not a
-verified fix. Follow [issue #6](https://github.com/Keitark/fm1-marketplace-plugin/issues/6).
+An earlier 2026-10-10 host check failed with a trusted-tool-scope rejection and
+**Unknown tool**; [issue #6](https://github.com/Keitark/fm1-marketplace-plugin/issues/6)
+records that observation. Later installed-tool and native panel openings
+succeeded. That historical failure does not describe current tool availability;
+the latest connection and deployment evidence is in
+[VERIFICATION.md](VERIFICATION.md).
 
 ## Appearance
 
@@ -89,9 +137,8 @@ without submitting the firmware operation again.
 **Refresh** updates device/catalog data when host tools are available; it does
 not reload the UI resource. Published v6 preserves selected progress. During the earlier v5 check,
 a freshly opened native panel received cached v4; the later v6 panel loaded
-the current Appearance controls successfully. This historical cache result
-does not establish recovery for the current tool-scope failure. A directly
-connected custom MCP plugin has a documented
+the current Appearance controls successfully. These are dated cache
+observations. A directly connected custom MCP plugin has a documented
 [connection-level Refresh flow](https://developers.openai.com/plugins/deploy/connect-chatgpt).
 That flow differs from the panel's device-data button. Older saved request
 entries are delivery snapshots; use **Inspect job** for current device progress.
@@ -188,9 +235,10 @@ restore the prerequisites through the established bench workflow. The Site
 does not prepare that session. See [SITE_RELAY.md](SITE_RELAY.md) for connection
 and recovery details.
 
-1. The visible panel checks connection inventory automatically every five seconds
-   and checks again when you return. **Bench connected** describes the relay;
-   FM1 presence is shown separately. A failed/old check is marked unavailable or
+1. The visible panel refreshes connection inventory automatically and checks
+   again when you return. Pending requests are inspected every second, and a
+   completed cycle promptly renews the status check. **Bench connected** describes
+   the relay; FM1 presence is shown separately. A failed/old check is marked unavailable or
    stale, with the last known port kept only as history. Click **Refresh** to also
    load package metadata before reviewing an operation.
 2. Choose a package variant on its app card. Check its **Ready/Blocked** state

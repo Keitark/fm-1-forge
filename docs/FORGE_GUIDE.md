@@ -6,7 +6,7 @@ Site URL and local bridge remain in use. While the conversation is active, use
 This opens Forge's native conversation tab. The global shortcut opens a separate
 app view; returning to an earlier chat selects that chat's own panel instance.
 
-The current resource is `ui://fm1/forge-panel-v7.html`; older resource aliases
+The current resource is `ui://fm1/forge-panel-v8.html`; older resource aliases
 remain available. Reopen the native conversation tab after an update.
 The [native extensions guide](MCP_EXTENSIONS.md) describes the official SDK,
 settings, drafts, file editing, mentions, forms and chat handoff. Dated

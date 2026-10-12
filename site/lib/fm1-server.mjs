@@ -43,10 +43,22 @@ async function inventorySnapshot(env,owner,connection){
   if(!saved.data||typeof saved.data!=='object'||Array.isArray(saved.data))return {inventory:null,inventory_status:status};
   const observed=saved[INVENTORY_OBSERVED_FIELD],valid=Number.isSafeInteger(observed)&&observed>0;
   const createdValid=Number.isSafeInteger(row.created)&&row.created>0,instant=now();
-  // Receipt time alone could renew an hours-old relay outbox entry. The original
-  // queue creation bounds how old the physical sample can conservatively be.
-  const age=valid&&createdValid?Math.max(0,instant-observed,instant-row.created):null;
-  const fresh=valid&&createdValid&&observed<=instant&&row.created<=instant&&age<=INVENTORY_MAX_AGE_SECONDS&&connection.connected;
+  const device=saved.data.device,hasObservation=!!device&&typeof device==='object'&&Object.hasOwn(device,'observation');
+  const observation=hasObservation?device.observation:null;
+  // Actual local enumeration starts after queue wait. Validate its interval
+  // against creation and the immutable first Site receipt before using it.
+  // Legacy samples retain their conservative queue-age bound; a malformed
+  // upgraded interval must never fall back to that less-specific contract.
+  const intervalValid=hasObservation&&!!observation&&typeof observation==='object'&&!Array.isArray(observation)
+    &&Number.isSafeInteger(observation.started_at)&&observation.started_at>0
+    &&Number.isSafeInteger(observation.completed_at)&&observation.completed_at>0
+    &&valid&&createdValid&&row.created<=observation.started_at
+    &&observation.started_at<=observation.completed_at&&observation.completed_at<=observed&&observed<=instant
+    &&observation.completed_at-observation.started_at<=INVENTORY_MAX_AGE_SECONDS;
+  const age=hasObservation?(intervalValid?Math.max(0,instant-observation.started_at,instant-observed):null)
+    :valid&&createdValid?Math.max(0,instant-observed,instant-row.created):null;
+  const timestampsValid=hasObservation?intervalValid:valid&&createdValid&&observed<=instant&&row.created<=instant;
+  const fresh=timestampsValid&&age<=INVENTORY_MAX_AGE_SECONDS&&connection.connected;
   const enumerationError=saved.data.device&&Object.hasOwn(saved.data.device,'inventory_error')&&saved.data.device.inventory_error!==null;
   return {inventory:saved.data,inventory_status:{...status,state:enumerationError?'error':fresh?'fresh':'stale',observed_at:valid?observed:null,age_seconds:age}};
 }
@@ -261,7 +273,7 @@ async function mcp(request,env){
     }
     // Older installed descriptors can still fetch the current panel at their
     // original URI. New descriptors exclusively advertise RESOURCE_URI.
-    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
+    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v7.html','ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
       registerAppResource(server,'FM1 Forge',uri,{},async()=>({contents:[{
         uri,mimeType:'text/html;profile=mcp-app',text:UI_HTML,
         _meta:{ui:{prefersBorder:true,csp:{connectDomains:[],resourceDomains:[]}},'openai/ui':OpenAIUiResourceMetadataSchema.parse({availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'fullscreen'})},

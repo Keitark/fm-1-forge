@@ -67,7 +67,7 @@ permissions or recreating the plugin.
 
 ## Connection freshness
 
-The updated panel is `ui://fm1/forge-panel-v7.html`; v6 and older resource aliases
+The updated panel is `ui://fm1/forge-panel-v8.html`; v7 and older resource aliases
 remain served for installed descriptors. OpenAI treats UI resource URIs as cache
 keys. A host with old registered descriptors may require refreshing the existing
 connection metadata before a newly opened panel selects v7. Reopening alone does

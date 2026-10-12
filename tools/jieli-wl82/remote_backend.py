@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 
 from remote_catalog import Catalog, rebase
 from job_progress import progress_for_job
@@ -67,6 +68,7 @@ class WindowsBackend:
 
     def status(self):
         """PnP enumeration and persisted state; no USB/serial handles are opened."""
+        started_at = int(time.time())
         serial_ports = []
         inventory_error = None
         try:
@@ -114,6 +116,7 @@ class WindowsBackend:
             if (info['session']['operation'] != 'idle' or info['session']['blocked'] or info['session']['reset_pending']
                     or info['session']['needs_observation'] or info['session']['loader_running'] or info['session']['stopped']):
                 info['official_update']['available'] = False
+        info['observation'] = {'started_at': started_at, 'completed_at': int(time.time())}
         return info
 
     def official_update_metadata(self, mode):

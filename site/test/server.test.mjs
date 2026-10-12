@@ -164,6 +164,100 @@ test('a newly acknowledged old relay outbox sample remains stale rather than ren
   assert.equal(snapshot.inventory_status.state,'stale');assert.ok(snapshot.inventory_status.observed_at>=before);assert.ok(snapshot.inventory_status.age_seconds>=7200);assert.equal(snapshot.inventory.device.serial_ports[0].port,'COM10');
 });
 
+const sampledInventory=(observation)=>({...serialInventory,device:{...serialInventory.device,observation}});
+
+test('a fresh local enumeration excludes thirty seconds of queue wait from inventory age',async t=>{
+  t.mock.method(Date,'now',()=>1000000);
+  const env=database();connect(env);
+  const queued=await callTool(env,'alice','get_fm1_status',{});
+  env.DB.sqlite.prepare('UPDATE relay_tasks SET created=? WHERE id=?').run(970,queued.request_id);
+  await request(env,'/relay/poll',{}, {relay:true});
+  const data=sampledInventory({started_at:997,completed_at:999});
+  assert.equal((await request(env,'/relay/result',{id:queued.request_id,status:'succeeded',data},{relay:true})).status,200);
+  const snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.inventory_status.state,'fresh');assert.equal(snapshot.inventory_status.age_seconds,3);
+  assert.equal(snapshot.inventory_status.observed_at,1000);assert.equal(snapshot.inventory_status.max_age_seconds,15);
+  assert.deepEqual(snapshot.inventory,data);
+});
+
+test('an upgraded observation delayed in an immutable outbox stays stale at its first Site receipt',async t=>{
+  let instant=970;t.mock.method(Date,'now',()=>instant*1000);
+  const env=database();connect(env);
+  const queued=await callTool(env,'alice','get_fm1_status',{});
+  instant=1000;connect(env);await request(env,'/relay/poll',{}, {relay:true});
+  const data=sampledInventory({started_at:997,completed_at:999});
+  instant=1060;connect(env);
+  assert.equal((await request(env,'/relay/result',{id:queued.request_id,status:'succeeded',data},{relay:true})).status,200);
+  const snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.inventory_status.state,'stale');assert.equal(snapshot.inventory_status.age_seconds,63);
+  assert.equal(snapshot.inventory_status.observed_at,1060);assert.equal(snapshot.inventory.device.serial_ports[0].port,'COM10');
+});
+
+test('malformed or impossible observation intervals fail closed without the legacy queue-age fallback',async t=>{
+  t.mock.method(Date,'now',()=>1000000);
+  const invalid=[null,[],{},true,{started_at:997},{started_at:'997',completed_at:999},
+    {started_at:0,completed_at:999},{started_at:997.5,completed_at:999},
+    {started_at:997,completed_at:Number.MAX_SAFE_INTEGER+1},
+    {started_at:1001,completed_at:1001},{started_at:997,completed_at:1001},
+    {started_at:999,completed_at:997},{started_at:996,completed_at:999},
+    {started_at:980,completed_at:999}];
+  for(const observation of invalid){
+    const env=database();connect(env);cacheCatalog(env);
+    const queued=await callTool(env,'alice','get_fm1_status',{});
+    env.DB.sqlite.prepare('UPDATE relay_tasks SET created=? WHERE id=?').run(997,queued.request_id);
+    await request(env,'/relay/poll',{}, {relay:true});
+    const data=sampledInventory(observation);
+    assert.equal((await request(env,'/relay/result',{id:queued.request_id,status:'succeeded',data},{relay:true})).status,200);
+    const snapshot=await callTool(env,'alice','open_fm1_library',{});
+    assert.equal(snapshot.inventory_status.state,'stale',JSON.stringify(observation));
+    assert.equal(snapshot.inventory_status.age_seconds,null,JSON.stringify(observation));
+    await assert.rejects(callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'auto'}),/fresh inventory/);
+  }
+});
+
+test('upgraded samples validate queue creation and first Site receipt as positive ordered safe integers',async t=>{
+  t.mock.method(Date,'now',()=>1000000);
+  for(const [created,observed] of [[0,1000],[998,1000],[997.5,1000],[997,0],[997,998],[997,1001],[997,1000.5]]){
+    const env=database();connect(env);
+    const data=sampledInventory({started_at:997,completed_at:999});
+    cacheInventory(env,'alice',data,{observedAt:observed});
+    env.DB.sqlite.prepare('UPDATE relay_tasks SET created=? WHERE id=?').run(created,'d'.repeat(32));
+    const snapshot=await callTool(env,'alice','open_fm1_library',{});
+    assert.equal(snapshot.inventory_status.state,'stale',JSON.stringify({created,observed}));
+    assert.equal(snapshot.inventory_status.age_seconds,null);
+  }
+});
+
+test('observation duration keeps the fifteen-second limit inclusive and rejects a longer enumeration',async t=>{
+  t.mock.method(Date,'now',()=>1000000);
+  for(const [started_at,state,age] of [[985,'fresh',15],[984,'stale',null]]){
+    const env=database();connect(env);
+    cacheInventory(env,'alice',sampledInventory({started_at,completed_at:1000}));
+    env.DB.sqlite.prepare('UPDATE relay_tasks SET created=? WHERE id=?').run(970,'d'.repeat(32));
+    const snapshot=await callTool(env,'alice','open_fm1_library',{});
+    assert.equal(snapshot.inventory_status.state,state);assert.equal(snapshot.inventory_status.age_seconds,age);
+    assert.equal(snapshot.inventory_status.max_age_seconds,15);
+  }
+});
+
+test('duplicate upgraded results preserve both the first receipt and original sample interval',async t=>{
+  let instant=1000;t.mock.method(Date,'now',()=>instant*1000);
+  const env=database();connect(env);
+  const queued=await callTool(env,'alice','get_fm1_status',{});
+  env.DB.sqlite.prepare('UPDATE relay_tasks SET created=? WHERE id=?').run(970,queued.request_id);
+  await request(env,'/relay/poll',{}, {relay:true});
+  const data=sampledInventory({started_at:997,completed_at:999}),report={id:queued.request_id,status:'succeeded',data};
+  assert.equal((await request(env,'/relay/result',report,{relay:true})).status,200);
+  const first=env.DB.sqlite.prepare('SELECT result FROM relay_tasks WHERE id=?').get(queued.request_id).result;
+  instant=1060;connect(env);
+  assert.equal((await request(env,'/relay/result',report,{relay:true})).status,200);
+  assert.equal(env.DB.sqlite.prepare('SELECT result FROM relay_tasks WHERE id=?').get(queued.request_id).result,first);
+  const snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.inventory_status.state,'stale');assert.equal(snapshot.inventory_status.age_seconds,63);
+  assert.equal(snapshot.inventory_status.observed_at,1000);
+  assert.equal((await request(env,'/relay/result',{...report,data:sampledInventory({started_at:1057,completed_at:1059})},{relay:true})).status,409);
+});
+
 test('duplicate status acknowledgments preserve the original observation and cannot renew stale inventory',async()=>{
   const env=database();connect(env);const {queued,report}=await statusReport(env);
   const row=env.DB.sqlite.prepare('SELECT result FROM relay_tasks WHERE id=?').get(queued.request_id),stored=JSON.parse(row.result);

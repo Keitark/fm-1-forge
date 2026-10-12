@@ -1,5 +1,98 @@
 # Integration verification
 
+## Automatic detection and local startup recovery, 2026-10-12
+
+The user reported a connected FM1 that the panel did not detect automatically.
+The local bridge and relay needed recovery, and native observation exposed
+two additional UI problems: pending status delivery could outlive its relay
+heartbeat, and slow request/snapshot round trips plus the polling gap allowed
+fresh inventory to expire between checks. Connection-only painting also skipped
+the saved request history.
+
+The controller now reads a fresh relay heartbeat while inspecting the same
+pending request ID, overlaps the two read-only requests, polls pending delivery
+every second and promptly renews status after a successful cycle. A terminal
+snapshot can be reused once for at most one second; manual refresh, wake and
+pause discard it. The strict 15-second inventory freshness limit remains.
+Stale pending inventory displays **Checking
+connection** with last-seen age and disables transfer actions. Hidden/offline
+panels pause; visibility recovery resumes checks. History paints during
+connection-only refresh, preserving drafts, selected jobs and progress.
+Firmware operations are never automatically resubmitted.
+
+Native acceptance then exposed a queue-age defect: current COM4 enumeration
+could arrive already stale because its request had waited in the queue. The
+bridge now timestamps the start and completion of passive enumeration, starting
+before the first PnP scan. The Site validates that interval against request
+creation and the immutable first Site receipt, with a 15-second maximum scan
+duration. Freshness uses scan start; legacy results retain their conservative
+queue-age bound. Invalid intervals fail closed, and replayed outbox results
+cannot renew sample or first-receipt timestamps. Transient panel RPC failures
+show a retry notice without replacing a still-valid authoritative observation.
+
+All **258 Site tests**, **46 backend tests**, TypeScript checking and the Vinext production build
+passed. A slow fake-clock regression with three-second status calls and
+three-second relay round trips verifies repeated renewal over 60 seconds.
+Regressions also cover delayed queues, stale outbox replay, duplicate results,
+invalid intervals and native RPC failures after fresh observations.
+Pushed Site source: `99027ff5837f8d00cd7920d9d3eced88369e80be`.
+Valid archive SHA256:
+`7246148959a72d608f2eeb9312c71f5609a766163455955f5e60834ba510d602`.
+Owner-private deployment `appgdep_6accb36ebe5c8191862ff9ef39e2dc28` succeeded
+with MCP enabled and environment revision 1. Saved version:
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_17e11f7a5bb48191a73f9d0a6cfe9d8a`.
+The plugin package remains **3.1.4**. Canonical UI resource v8 retains v7 and
+all older aliases. A fresh native tab loaded the updated transient-error code
+without a complete Codex restart or reinstall. It renewed saved status requests
+automatically and displayed **FM1 on COM4**, **Checked 13s ago**, after previously
+showing **Checking connection** during a delayed reply. Expired observations
+continue to disable firmware actions. Actual unplug/replug was not performed.
+
+![Native panel detecting FM1 on COM4](images/forge-connection-20261012.jpg)
+
+The new `tools/jieli-wl82/start-forge-services.ps1` wrapper was run twice as a
+normal user. Both runs verified authenticated bridge health and preserved the
+same bridge PID **201412**, relay PID **77160**, attached protected session,
+private credentials, catalog and saved jobs. `-PrepareOnly` also passed without
+HTTP or service launch. A hidden, normal-user per-user Startup shortcut was
+registered at
+`C:\Users\keita\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\FM1 Forge connection.lnk`;
+its target and arguments were read back. The wrapper itself does not register
+startup entries. Actual startup after a Windows restart remains untested.
+Newly launched relays keep switching and official-updater handoff disabled;
+newly launched bridges do not attach a previous protected helper automatically.
+
+After an authenticated idle-state check, the owned bridge was restarted to load
+the timestamp code as PID **339132**, preserving its session, catalog and tokens.
+Relay PID **77160** stayed running. Local enumeration measured 0.828 seconds;
+upgraded status reported an ordered one-second interval, COM4, no enumeration
+error and no active/unknown job. All connection checks were passive.
+
+The local `factory-diag` starter was explicitly migrated from old image
+`e52573f32d27a68e016d7aa36ac65ff254a6a8bada9c5f0fd70c4365f4f60a8c`
+to tested default image
+`c239d59da41e187e5f04c579fe72551a8996c2c867f203d9a4acbd83ce545bde`.
+The exact old bundle was backed up outside catalog discovery. Expected-old
+comparison and atomic replacement changed only that starter; all other package
+hashes, the empty set list, jobs and approvals were preserved. Saved catalog
+request `c8196ebc8e56493c93afa25130020969` returned the new image as ready.
+Reviews remain digest-bound; no onboarding proof was fabricated.
+
+Protected local CLI transfers, full-image readbacks, serial startup and three
+CPU benchmark runs passed for both SDK-default **360/180/60/90 MHz** on this
+unit and `sdk-320` **320/160/53.3/80 MHz** (CPU/HSB/LSB/SFC). Each final run also
+passed USB audio duplex under load, with no reported peripheral or USB errors.
+This establishes the tested workload rather than prolonged thermal/stability
+qualification, audible output or complete physical control acceptance. The
+original MOD image's restoration write and full readback passed. Final startup
+observation `2cf94275a766458cb55c279634b2c8e9` identified **MOD-EDITOR/1** on
+**COM4**, with audio frames advancing from 1113920 to 1246272 and underruns
+remaining zero. The
+[clock benchmark report](https://github.com/Keitark/fm1-tracker/blob/codex/12-fm1-forge/docs/FM1_FORGE_CLOCK_BENCH_20261012.md)
+records the measurements, exact images and protected receipts. These CLI
+results do not create the MCP service's persisted diagnostics onboarding proof
+or unlock the panel's new-project gate.
+
 ## Blank production panel correction, 2026-10-12
 
 Issue #12 tracks the completely blank native FM1 view. Codex logs recorded
@@ -401,7 +494,7 @@ write flags disabled. No protected helper was elevated, no updater was launched
 and no device was flashed. The previous unqualified diagnostics candidate and
 physical LCD/input/audio/UAC/clock acceptance boundaries remain unchanged.
 
-## FM1 Forge final release 3.0.1, 2026-10-11
+## Historical FM1 Forge final release 3.0.1, 2026-10-11
 
 Final Site source `3e97b09eaa41515deda1401cd46d42397ee479ed` deployed privately
 as `appgdep_6acb15fa58908191bf74baadb8ab0b70`; deployment succeeded with MCP
@@ -441,7 +534,7 @@ reject that combination. `sdk-320` with stock DMA and `sdk-default` with each
 LCD preset remain selectable. Higher FPS and clock stability are not accepted
 from compilation or offline tests.
 
-The current native Forge card was subsequently inspected in Codex. Its DOM
+The then-current native Forge card was subsequently inspected in Codex. Its DOM
 contains diagnostic onboarding, module options and the exact diagnostic catalog;
 the HTML and body backgrounds both compute to `rgb(0, 0, 0)`. FM1 is detected
 on COM10 and transfer actions remain disabled. An actual native screenshot
@@ -454,8 +547,8 @@ baseline and physical tests remain separate prerequisites; no firmware
 candidate or hardware qualification is claimed.
 
 The local bridge and outbound relay were then restarted through their supported
-launchers, with 53 completed/reported relay journals retained. Current bridge
-PID is 154724 and relay PID is 209572. Both relay write permissions remain off;
+launchers, with 53 completed/reported relay journals retained. The bridge
+PID was 154724 and relay PID was 209572. Both relay write permissions remained off;
 catalog inventory recognizes all six profiles. These are metadata connections,
 with no device operation requested. The old session's `stopped:false` field
 reflects the absence of its stop marker; its recorded helper PID 240396 is dead.
@@ -506,13 +599,16 @@ reporting custom/light and `rgb(248,244,238)`. Native reset restored FM1
 Mint/Solid; the earlier FM1 Mint/Circuit Grid preference was then restored.
 Persistence across reopening was verified in the synthetic host only.
 
-A later read-only native Refresh failed with **MCP app cannot call tool outside
-its trusted tool scope: open_fm1_library**. A second assistant library call had
-returned **Unknown tool**, and FM1 tools are absent from the current tool
-inventory. Sites still reports an active v6, no disabling authority and the
+At that 2026-10-10 check, a later read-only native Refresh failed with
+**MCP app cannot call tool outside its trusted tool scope: open_fm1_library**.
+A second assistant library call had
+returned **Unknown tool**, and FM1 tools were absent from that check's tool
+inventory. Sites still reported an active v6, no disabling authority and the
 same MCP endpoint/plugin ID. Plugin metadata lookup returned 404. The cause
-is unconfirmed; the loaded panel's local Appearance controls remain usable,
-but current remote tool availability and native reopening are not accepted.
+was unconfirmed; the loaded panel's local Appearance controls remained usable,
+but remote tool availability and native reopening were not accepted at that time.
+Later installed-tool and native openings succeeded, as recorded in the newer
+entries above; this is historical failure evidence.
 No firmware operation was attempted during this check. Follow-up is tracked in
 [issue #6](https://github.com/Keitark/fm1-marketplace-plugin/issues/6).
 
@@ -777,7 +873,7 @@ returned **HTTP 401**. It did not establish modern remote protocol negotiation.
 No raw secrets or private physical identifiers were persisted. Physical
 write/readback/startup, screen, audio, and controls remain unaccepted.
 
-## Current version 3 deployment and native acceptance
+## Historical version 3 deployment and native acceptance
 
 Owner-private version **3** deployed successfully as
 `appgdep_6ac8fc0660648191a2521acd37271e3c`, runtime revision **1**, MCP-ready.
