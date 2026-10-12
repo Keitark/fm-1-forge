@@ -18,10 +18,11 @@ refresh preservation, required clock opt-in and preserving a 30 MHz LCD preset
 when its existing module is dropped back into Tweaks. No dependencies changed.
 
 Browser QA performed actual pointer drags to remove/restore a HAL and replace
-diagnostics with a user starter, verifying the emitted JSON. Actual shelf-to-
-Tweaks drag acceptance is not claimed: several automated gestures ended without
-a drop; its Add button and the same drop controller pass their checks. The
-760 px panel-width preview had no horizontal overflow. A fresh published native
+diagnostics with a user starter, and add Fast LCD to Tweaks, verifying the
+emitted JSON. A drag-event trace confirmed native dragstart/dragover/drop;
+initial automated gestures ending on a newly entered child did not complete a
+drop, and targeting section padding completed it. The 760 px panel-width
+preview had no horizontal overflow. A fresh published native
 MCP App loaded the graph, schema v2 and opaque black background. Native Add/
 Remove/Replace and checkbox actions changed the real configuration for HAL,
 user module and Fast LCD; defaults were restored without saving a draft or
