@@ -1,5 +1,33 @@
 # Integration verification
 
+## Steady connection labels and simplified panel, 2026-10-12
+
+Automatic, manual and wake checks now use a small blinking circle beside the
+device status. The heading and device label retain their last confirmed value
+until a fresh inventory changes it; identical values do not rewrite those text
+nodes. Age expiry, pending responses, transport errors and relay loss cannot
+replace that text with a polling message. Observation age and relay status
+remain separate, and the unchanged freshness checks disable firmware actions
+when the device observation expires. Stale initial payloads never establish a
+confirmed port. The indicator pauses when hidden or offline and respects
+reduced-motion preferences.
+
+The user requested removal of the firmware-dependent Hardware activity view.
+Its markup, styles, runtime and native lifecycle calls are removed from the
+panel, which no longer requests input snapshots. The underlying explicit
+read-only telemetry tool and firmware remain unchanged. Resource v12 retains
+v11 and all historical aliases.
+
+All **308 Site tests**, TypeScript checking and the production build passed.
+Source and production-minified regressions cover steady text across pending,
+expired and failed checks, neutral stale initial data, confirmed device/port
+changes, the accessible blinking indicator and absence of panel sampling.
+
+Pushed Site source `fea1efe4a43aaff58f9eadba970b46135a389cbd` deployed
+owner-private with MCP enabled as `appgdep_6accecb78c9881919a869696359156b1`.
+The built archive SHA-256 is
+`95b241c5d3b4e972813cf34695171d07920c17b670a8e077a696b1d9d8fc8fa1`.
+
 ## Blank native panel, 2026-10-12
 
 The Codex widget frame loaded, then its startup script failed with

@@ -8,7 +8,7 @@ Browser WebMCP is a separate interface and does not discover the native panel.
 The panel build freezes its browser runtime strings before production server
 minification. Changes to those source runtimes require `npm run build:panel`;
 contract tests reject stale generated strings and execute the minified UI.
-The canonical UI resource is `ui://fm1/forge-panel-v11.html`, with prior
+The canonical UI resource is `ui://fm1/forge-panel-v12.html`, with prior
 resource aliases retained.
 
 ## Official SDK source
@@ -143,4 +143,8 @@ and platform support; passing a mocked host test is reported separately from
 a successful action in Codex. No extension test authorizes or performs a
 firmware flash.
 
-The hardware activity view uses `get_fm1_input_snapshot`, a no-argument saved read-only request. It remains separate from passive `get_fm1_status`. Input observations are scoped to their owner, coalesced per pending request, normalized to fixed metadata, and aged from validated local sampling timestamps plus the immutable first Site receipt. Replayed acknowledgments cannot renew a sample. The canonical panel resource is v10; v9 and earlier aliases remain readable.
+The panel no longer mounts a Hardware activity dashboard or submits input
+sampling requests. Passive `get_fm1_status` refreshes keep the last confirmed
+label and show a small blinking circle. Freshness still gates firmware actions;
+new confirmed observations update the label. The read-only telemetry API
+remains available to explicit tool calls independently of the panel.

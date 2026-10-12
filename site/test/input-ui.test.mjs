@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {INPUT_KEY_LABELS,INPUT_ENCODER_NAMES,normalizeInputSample,inputFreshness,createInputView,createInputMonitor,inputBlockReason,inputHtml,inputRuntime,mountInputActivity} from '../lib/fm1-input-ui.mjs';
-import {UI_HTML} from '../lib/fm1-ui.mjs';
 
 const id='a'.repeat(32),nextId='b'.repeat(32),flush=async()=>{for(let n=0;n<25;n++)await Promise.resolve();};
 const mask=(...bits)=>bits.reduce((value,bit)=>value|(1n<<BigInt(bit)),0n).toString(16).padStart(16,'0');
@@ -97,7 +96,4 @@ test('activity mount displays MOD volume support truthfully and never touches se
   // The default mount uses browser Date.now(), so assign current source times for a fresh sample.
   const now=Math.floor(Date.now()/1000);value={...value,input_activity:{...value.input_activity,sample:{...value.input_activity.sample,observation:{started_at:now,completed_at:now}},observed_at:now,age_seconds:0},_input_received_at:Date.now()};activity.paint();
   assert.match(el('input-capabilities').textContent,/volume only/);assert.match(el('input-capabilities').textContent,/reviewed install flow/);assert.equal(el('input-encoder-edges-0').textContent,'Unavailable');assert.match(el('input-volume-value').textContent,/ADC 512/);assert.equal(el('input-toggle').textContent,'Start monitoring');assert.equal(el('detail').textContent,'Existing saved job');assert.equal(el('forge-project-goal').textContent,'Unsaved draft');controller.abort();
-});
-test('native HTML mounts separate activity monitor in connection refresh and lifecycle paths',()=>{
-  assert.ok(UI_HTML.indexOf('id="input-title"')<UI_HTML.indexOf('aria-label="FM1 firmware factory"'));assert.match(UI_HTML,/input_activity:data\.input_activity/);assert.match(UI_HTML,/_input_received_at:Date\.now\(\)/);assert.match(UI_HTML,/inputActivity\?\.paint\(\)/);assert.match(UI_HTML,/inputActivity\?\.close\(\)/);assert.match(UI_HTML,/inputActivity\.pause\(\)/);assert.match(inputHtml,/Brief presses can happen between samples/);assert.match(inputHtml,/Monitoring never changes firmware or volume/);
 });
