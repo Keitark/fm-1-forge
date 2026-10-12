@@ -1,6 +1,6 @@
 # FM1 Forge native extensions
 
-Forge 3.1.3 uses the official OpenAI MCP Extensions TypeScript SDK on both the
+Forge 3.1.4 uses the official OpenAI MCP Extensions TypeScript SDK on both the
 hosted MCP server and the native MCP App. ChatGPT Sites still hosts the server
 and UI. The local relay continues to connect saved requests to the FM1 bridge.
 Browser WebMCP is a separate interface and does not discover the native panel.
@@ -45,12 +45,19 @@ entrypoint. The global shortcut opens its own app view and conversation
 instance. Expanding a model-generated app card uses another host rendering
 route; its tab icon may be supplied by Codex rather than the tool's icons.
 
-Forge 3.1.3 advertises the existing 128×128 PNG device artwork for native
-entrypoints and server metadata. The earlier SVG declared `sizes:["any"]`,
-which Codex selected ahead of PNG even when PNG appeared first. PNG-only
-metadata avoids nested SVG decoding in the native tab mask. Codex controls
-monochrome tab tint; the panel's black/mint artwork and SVG favicon are retained.
-Changing the HTML favicon or MCP resource icons does not change that tab icon.
+Forge 3.1.4 supplies a separate FM1 tab outline with an LCD, knobs, pads and
+keys. Its transparent interior preserves these features when Codex masks the
+icon. Light and dark 128×128 PNGs are advertised on opening tools, quick actions
+and server metadata; matching packaged composer/logo assets use the same mark.
+The original detailed panel-header artwork and favicon are retained. Codex
+controls the native tab tint. A favicon change alone cannot change that icon.
+
+On local Codex App entrypoints, the host reads the connected service's exported
+entrypoint icons, rather than the live tool or server icons. These exports inherit
+the opening tool's title and icons at discovery; the official SDK's thread
+entrypoint accepts only `type: "thread"`. Adding unsupported icon fields to that
+descriptor does not repair stale exports. Publishing the Site or the standalone
+plugin package is separate from refreshing the service's registered metadata.
 
 Tool definitions and exported entrypoint metadata may lag the live HTML. The
 new icon must be checked in a fresh native tab; initial settings from the opening
@@ -60,10 +67,10 @@ permissions or recreating the plugin.
 
 ## Connection freshness
 
-The updated panel is `ui://fm1/forge-panel-v6.html`; v4 and older resource aliases
+The updated panel is `ui://fm1/forge-panel-v7.html`; v6 and older resource aliases
 remain served for installed descriptors. OpenAI treats UI resource URIs as cache
 keys. A host with old registered descriptors may require refreshing the existing
-connection metadata before a newly opened panel selects v4. Reopening alone does
+connection metadata before a newly opened panel selects v7. Reopening alone does
 not prove that updated scripts loaded. See [OpenAI UI guidance](https://developers.openai.com/plugins/build/chatgpt-ui).
 
 Forge paints its selected background and pattern on an app-owned full-viewport

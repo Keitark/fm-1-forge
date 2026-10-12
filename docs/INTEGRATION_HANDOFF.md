@@ -1,5 +1,20 @@
 # FM1 Codex integration handoff
 
+## Native tab artwork 3.1.4 (2026-10-12)
+
+The same private plugin ID now publishes 3.1.4 with separate transparent FM1
+tab artwork. Opening tools, server, quick actions and mentions advertise explicit
+light/dark PNG128 variants; packaged composer/logo paths use the same mark.
+The detailed header and favicon are retained. Site deployment
+`appgdep_6acc64a33c54819182291a9e30003ac9` succeeded with MCP enabled.
+
+Codex selects native local Apps tab icons from the service's exported entrypoints.
+The cached FM1 descriptor still has the older title/resource and SVG-any icon.
+A standalone package update does not prove the separate Sites App export has
+refreshed. A fresh native tab needs visual confirmation after metadata refresh.
+No cache edits, permission changes, replacement identities or hardware operations
+were used. See [verification](VERIFICATION.md#native-tab-artwork-314-2026-10-12).
+
 ## Drag-and-drop module configuration (2026-10-12)
 
 Current UI resource: `ui://fm1/forge-panel-v6.html`; v5 and all earlier aliases

@@ -1,6 +1,6 @@
 # FM1 Forge user guide
 
-For the current **3.1.3** diagnostic-to-project workflow, black default panel,
+For the current **3.1.4** diagnostic-to-project workflow, black default panel,
 graphical module configuration and all transfer methods, read
 [FORGE_GUIDE.md](FORGE_GUIDE.md). The final private service and plugin release
 are updated. The current resource is `ui://fm1/forge-panel-v6.html`. Open the

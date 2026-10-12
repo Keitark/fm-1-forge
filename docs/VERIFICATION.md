@@ -1,5 +1,40 @@
 # Integration verification
 
+## Native tab artwork 3.1.4, 2026-10-12
+
+Issue #11 tracks the generic native tab glyph. Original SVG sources provide an
+FM1 outline, LCD, knobs, pads and keys with transparent interiors. Matching
+PNG32/128 files were rendered with existing sharp 0.35.4/librsvg; actual 16-pixel
+previews and light/dark mask simulations were reviewed. Both variants have the
+same alpha mask. The detailed header and favicon remain unchanged.
+
+- PNG128 light SHA256: `68b2c3b2c827185f0531fa3164f0a6f5442f6c3218d36a4cc36bb07c121f802a`.
+- PNG128 dark SHA256: `5d5248c7363bab2bb528e97a1f3e980e11b921705d55e78605f26eee2755dd19`.
+- Native icon metadata uses PNG MIME, explicit `128x128` and light/dark themes;
+  inlined bytes match both Site and packaged assets exactly.
+- Existing SDK/server/extensions tests: 78 passed. Production build passed.
+- Plugin updated in place to 3.1.4, release
+  `pluginrel_6acc643f7d7481918260c903623ff070`; account readback verified both
+  manifests and six new assets. Exact default prompt, author details, skills,
+  MCP bindings, scope and private audience were preserved.
+- Overlay archive SHA256:
+  `e84344effff7bdc5769cceb05a2b08938359bc6c253afe92fd06866cd045e5ea`.
+- Site source: `703d886de6ade8800dd3891d2d5a0bf2183298e8`; archive SHA256:
+  `a48e2b867f0ef69bd223fe3994f1a93cfeaf261c9f6d46c63e72333f55a26648`.
+- Private deployment `appgdep_6acc64a33c54819182291a9e30003ac9` succeeded with
+  MCP enabled and environment revision 1; IDs and owner-only audience unchanged.
+
+Installed Codex 26.1002.7124.0 selects native local Apps tab icons from exported
+service entrypoints (`L_n`, `J_n/Y_n`), resolves theme/size (`Rqr/Bqr`), and
+applies the alpha as a monochrome mask (`HY/qOa/sgi/ngi`). The cached FM1 opener
+still has the older title/resource and SVG-any icon. The official SDK requires
+icons on the opening tool; adding icons to strict `{type:"thread"}` is invalid.
+Publishing source or the standalone package does not prove the separate Sites
+App's export refreshed. No rescan tool is exposed. Fresh native-tab acceptance
+is pending; the host controls its final tint. No hardware operation was performed.
+
+Preview: `F:\dev\fm1\tmp\fm1-forge-tab-icon-preview.png`.
+
 ## Drag-and-drop module graph, 2026-10-12
 
 The current Site resource is `ui://fm1/forge-panel-v6.html`; v5 and all earlier

@@ -1,6 +1,6 @@
 # FM1 Forge
 
-FM1 Forge **3.1.3** is the renamed private FM1 App Library plugin. Its existing plugin ID,
+FM1 Forge **3.1.4** is the renamed private FM1 App Library plugin. Its existing plugin ID,
 Site URL and local bridge remain in use. While the conversation is active, use
 **Side-panel New Tab (+) → More tools… → Plugins and MCPs → FM1 Forge**.
 This opens Forge's native conversation tab. The global shortcut opens a separate
