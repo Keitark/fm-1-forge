@@ -1,5 +1,22 @@
 # FM1 Codex integration handoff
 
+## Native panel patch 3.1.1 (2026-10-12)
+
+The current private account release is 3.1.1. ProTracker's special last-card
+span was removed and actual native DOM measurement confirmed all six cards
+equal. Native tab metadata now selects the existing 128×128 PNG explicitly;
+SVG remains in panel/logo assets. See the newest [verification receipt](VERIFICATION.md)
+for exact Site/plugin IDs and hashes, and [the opening guide](MCP_EXTENSIONS.md#conversation-tabs-and-icons).
+
+Use the conversation's New Tab → More tools… → Plugins and MCPs → FM1 Forge
+entrypoint to keep the plugin beside this chat. The global shortcut opens its
+own app view; expanded app-card tabs use another host icon path. The user
+confirmed that the native conversation tab stays open, but its icon still
+needed verification after the PNG patch. The trusted catalog still rejected
+`settings.read` in the settled native check. The initial snapshot label is not
+RPC acceptance. Refresh connection metadata and verify these before claiming
+complete native functionality. No transfer or helper elevation was performed.
+
 ## FM1 Forge official SDK release 3.1.0 (2026-10-11)
 
 The current source integrates the official OpenAI MCP Extensions SDK 0.2.0,

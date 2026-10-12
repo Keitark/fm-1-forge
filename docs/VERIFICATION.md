@@ -1,5 +1,63 @@
 # Integration verification
 
+## FM1 Forge native panel patch 3.1.1, 2026-10-12
+
+The ProTracker width was caused by `.card:last-child` spanning `1/-1` across
+both library columns. The obsolete desktop span/min-height and mobile reset
+were removed. Before the fix, the original native panel measured **777 px**
+for ProTracker and **380.5 px** for the other cards. After publication, all six
+cards measured **309.5 px** at the newly opened panel's narrower viewport,
+with `grid-column:auto` for each. This is actual native DOM geometry.
+
+The first layout-only private deployment
+`appgdep_6acc34fad34c8191bea825ee3956cf79` succeeded with MCP enabled from
+source `f3a7772a1b44f6d717a72beac251626efe57054d`. Its archive SHA256 is
+`28eeb9f4e6eb7ee734d624b332fe4f0ebd5e2272961cea23290399eba35687a7`.
+The 90 affected UI/extension UI tests, TypeScript and production build passed.
+
+The subsequent icon patch uses the existing **128×128 PNG only** in opening
+tool, server, form and mention icon metadata. The SVG constant, HTML artwork,
+favicon and packaged composer/logo assets remain intact. The Codex host selects
+the largest declared icon, so the previous SVG `sizes:["any"]` took precedence
+over PNG. Its native tab mask loads that image through `Image.decode()`;
+decode/render failure falls back to the generic icon. No explicit SVG rejection
+was found, so the precise cause remains SVG rendering or stale/null exported
+entrypoint metadata. The PNG-only change is a bounded compatibility correction.
+Codex owns monochrome tab tint; black/mint colour is not promised in tab chrome.
+
+Private Site source `eed95fc4fb986a13e33316bb5e75ea221feb1f33` deployed as
+`appgdep_6acc3a966d3c8191b5c7f17aab7ed6ca`, succeeded with MCP enabled and
+environment revision 1. Its saved version is
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_011863a3d1c48191809829be83195f1e`.
+The archive SHA256 is
+`c9282f862981da0c7336cbbe08ca9f4863d2368cff9e0a84404b91d1915199a0`.
+All **171 final Site tests**, TypeScript checking and production build passed.
+The SDK remains the same official 0.2.0 package; no dependency/runtime change.
+
+The same private plugin ID was updated to account release **3.1.1**,
+`pluginrel_6acc3b8aace4819196d12adb15208a46`. Readback confirms both versions
+and preserves every other manifest field. The version-only manifest overlay
+archive SHA256 is
+`03f95e39367e140540eeea7be682c880c53bd449c2a0320d28cf961bac1b7b99`.
+Installed cache synchronization and the new native icon are checked separately
+from successful account publication.
+
+The user confirmed that the global shortcut leaves the app view when returning
+to this original chat. Opening **Side-panel New Tab → More tools… → Plugins
+and MCPs → FM1 Forge** then stayed beside the chat, but still showed a generic
+icon before the PNG patch. Its native tab title was **FM1 device panel** rather
+than the current advertised title. The user was asked to reopen that native
+conversation tab after the patch; final icon acceptance remains pending.
+
+A settled settings reload in the native conversation tab returned
+`MCP app cannot call tool outside its trusted tool scope: settings.read`
+(code `-32000`). The earlier immediate **Owner defaults loaded** label came
+from the initial snapshot and was not proof of RPC completion; this was
+corrected explicitly. Refresh of the trusted connection/catalog remains
+outstanding. No new tool-scope acceptance, native forms or file-editor acceptance
+is claimed from rendering the new panel alone. No hardware transfer, updater
+launch or protected-helper elevation occurred.
+
 ## FM1 Forge official SDK release 3.1.0, 2026-10-11
 
 The owner-private Site source `010f44ac2e2baac5495a5afcdf6ce08ec8869d69`

@@ -1,11 +1,12 @@
 # FM1 Forge user guide
 
-For the current **3.1.0** diagnostic-to-project workflow, black default panel,
+For the current **3.1.1** diagnostic-to-project workflow, black default panel,
 graphical module configuration and all transfer methods, read
 [FORGE_GUIDE.md](FORGE_GUIDE.md). The final private service and plugin release
 are updated. The current resource is `ui://fm1/forge-panel-v3.html`. Open the
-newest native Forge card to see configuration drafts, native settings, file
-editing and chat context/draft actions. Read [MCP_EXTENSIONS.md](MCP_EXTENSIONS.md)
+native conversation tab through **New Tab (+) → More tools… → Plugins and MCPs
+→ FM1 Forge** to see configuration drafts, native settings, file editing and
+chat context/draft actions. Read [MCP_EXTENSIONS.md](MCP_EXTENSIONS.md)
 for the complete extension surfaces and platform capability checks. Older
 expanded cards can retain earlier UI.
 

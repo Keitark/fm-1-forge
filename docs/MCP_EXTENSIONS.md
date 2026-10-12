@@ -1,6 +1,6 @@
 # FM1 Forge native extensions
 
-Forge 3.1.0 uses the official OpenAI MCP Extensions TypeScript SDK on both the
+Forge 3.1.1 uses the official OpenAI MCP Extensions TypeScript SDK on both the
 hosted MCP server and the native MCP App. ChatGPT Sites still hosts the server
 and UI. The local relay continues to connect saved requests to the FM1 bridge.
 Browser WebMCP is a separate interface and does not discover the native panel.
@@ -36,6 +36,27 @@ The current SDK specification is
 Host/platform availability is independent of server implementation. The panel
 checks advertised capabilities and keeps manual alternatives when needed.
 An unsupported draft action never falls back to immediately sending a message.
+
+## Conversation tabs and icons
+
+For Forge beside an existing Codex chat, use **Side-panel New Tab (+) → More
+tools… → Plugins and MCPs → FM1 Forge**. This selects the native thread
+entrypoint. The global shortcut opens its own app view and conversation
+instance. Expanding a model-generated app card uses another host rendering
+route; its tab icon may be supplied by Codex rather than the tool's icons.
+
+Forge 3.1.1 advertises the existing 128×128 PNG device artwork for native
+entrypoints and server metadata. The earlier SVG declared `sizes:["any"]`,
+which Codex selected ahead of PNG even when PNG appeared first. PNG-only
+metadata avoids nested SVG decoding in the native tab mask. Codex controls
+monochrome tab tint; the panel's black/mint artwork and SVG favicon are retained.
+Changing the HTML favicon or MCP resource icons does not change that tab icon.
+
+Tool definitions and exported entrypoint metadata may lag the live HTML. The
+new icon must be checked in a fresh native tab; initial settings from the opening
+snapshot do not prove that a later settings RPC completed. An unavailable tool
+scope requires refreshing the existing connection metadata, not weakening
+permissions or recreating the plugin.
 
 ## Drafts and file editing
 

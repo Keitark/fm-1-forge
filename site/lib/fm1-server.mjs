@@ -186,7 +186,7 @@ async function mcp(request,env){
     if(rpc?.method==='tools/call'||(rpc?.method==='resources/read'&&String(rpc.params?.uri||'').startsWith('fm1-forge:')))user(request);
   }
   const handler=createMcpHandler(()=>{
-    const server=new McpServer({name:'FM1 Forge',version:'3.1.0',icons:ICONS},{
+    const server=new McpServer({name:'FM1 Forge',version:'3.1.1',icons:ICONS},{
       jsonSchemaValidator:new CfWorkerJsonSchemaValidator(),
       instructions:'Open FM1 Forge through this installed plugin. Install and verify diagnostics, inspect hardware, then configure USB/system, HAL and user modules and ask Codex to build. Inspect saved request IDs after a disconnect. Offline planning does not authorize app switching. Switching requires human confirmation and enabled bench capability. Higher clock/LCD presets require a device test.',
     });

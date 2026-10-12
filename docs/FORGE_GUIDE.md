@@ -1,11 +1,13 @@
 # FM1 Forge
 
-FM1 Forge **3.1.0** is the renamed private FM1 App Library plugin. Its existing plugin ID,
-Site URL and local bridge remain in use. Open the installed plugin's newest app
-card in Codex's side panel. The primary interface is the native MCP App panel.
+FM1 Forge **3.1.1** is the renamed private FM1 App Library plugin. Its existing plugin ID,
+Site URL and local bridge remain in use. While the conversation is active, use
+**Side-panel New Tab (+) → More tools… → Plugins and MCPs → FM1 Forge**.
+This opens Forge's native conversation tab. The global shortcut opens a separate
+app view; returning to an earlier chat selects that chat's own panel instance.
 
 The current resource is `ui://fm1/forge-panel-v3.html`; older resource aliases
-remain available. Open the newest Forge card for its current extension controls.
+remain available. Reopen the native conversation tab after an update.
 The [native extensions guide](MCP_EXTENSIONS.md) describes the official SDK,
 settings, drafts, file editing, mentions, forms and chat handoff. Dated
 deployment and actual native-host checks are in [verification](VERIFICATION.md).

@@ -75,7 +75,7 @@ test('modern discovery has typed result, identity and private cache semantics',a
   const {status,value}=await modern('server/discover',{_meta:meta()});
   assert.equal(status,200);assert.equal(value.result.resultType,'complete');
   assert.ok(value.result.supportedVersions.includes('2026-07-28'));
-  assert.equal(value.result._meta['io.modelcontextprotocol/serverInfo'].version,'3.1.0');
+  assert.equal(value.result._meta['io.modelcontextprotocol/serverInfo'].version,'3.1.1');
   assert.equal(value.result.ttlMs,0);assert.equal(value.result.cacheScope,'private');
 });
 test('modern missing envelope, unsupported revision and mismatched routing header reject before work',async()=>{
