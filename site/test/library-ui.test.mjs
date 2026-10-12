@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import {fileURLToPath} from 'node:url';
+import {build} from 'esbuild';
 import {librarySets,filterLibrary,libraryController,libraryRuntime,libraryHtml} from '../lib/fm1-library-ui.mjs';
 
 const sha='a'.repeat(64),id='f'.repeat(32);
@@ -19,6 +21,26 @@ test('standalone browser runtime retains helper bindings',()=>{
   assert.equal(context.window.FM1Library.librarySets(catalog).length,1);
   assert.equal(context.window.FM1Library.filterLibrary(catalog,'set-one')[0].variants.length,1);
   assert.match(libraryHtml,/Add local set/);
+});
+
+test('production minification preserves serialized library filtering and rendering',async()=>{
+  const built=await build({entryPoints:[fileURLToPath(new URL('../lib/fm1-library-ui.mjs',import.meta.url))],bundle:true,write:false,format:'cjs',platform:'node',target:'es2022',minify:true});
+  const module={exports:{}};
+  vm.runInNewContext(built.outputFiles[0].text,{module,exports:module.exports});
+  const context={window:{}};
+  vm.runInNewContext(module.exports.libraryRuntime,context);
+  const library=context.window.FM1Library;
+  assert.equal(library.librarySets(catalog).length,1);
+  assert.equal(library.filterLibrary(catalog,'set-one')[0].variants.length,1);
+  const nodes=new Map();
+  const el=name=>{if(!nodes.has(name))nodes.set(name,{value:name==='library-set'?'set-one':'',textContent:'',innerHTML:'',querySelectorAll(){return [];}});return nodes.get(name);};
+  const ui=library.mount({el,call(){throw new Error('Rendering must not call a tool.');},snapshot(){},getState:()=>({relay:{connected:false},catalog}),render(){},pause(){},signal:new AbortController().signal});
+  ui.paint();
+  assert.equal(el('library-set').value,'set-one');
+  assert.match(el('library-sets').innerHTML,/My local set/);
+  assert.match(el('library-sets').innerHTML,/aria-pressed="true"/);
+  assert.equal(el('library-add').disabled,true);
+  ui.close();
 });
 
 function setup(responses) {

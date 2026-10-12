@@ -1,5 +1,49 @@
 # Integration verification
 
+## Blank production panel correction, 2026-10-12
+
+Issue #12 tracks the completely blank native FM1 view. Codex logs recorded
+`ReferenceError: dF is not defined` both before and after a full restart. Static
+resource reads and the opener succeeded. The production Worker had renamed
+`librarySets` to `dF`, but individually serialized sibling functions referenced
+that name outside its original scope. Extracting the built functions reproduced
+the exact exception in both filtering and controller painting.
+
+The Apps library now serializes one self-contained factory, retaining all
+shared bindings through minification. Existing exported helpers and library
+behavior remain compatible. A new esbuild-minified isolated-runtime regression
+failed before the correction and passes afterward, exercising set validation,
+filtering, controller painting, selection and disconnected availability.
+
+All 243 Site tests, TypeScript checking and the production build passed. The
+actual built Worker was run locally; its legacy `ui://fm1/device-panel-v6.html`
+resource returned HTTP 200, MIME `text/html;profile=mcp-app`, 873900 bytes and
+eight scripts. Its generated library runtime passed filtering and painting.
+Browser QA of this exact HTML with an isolated fixture rendered the black
+surface and changed two package variants to the selected set's one variant;
+the browser error log was empty. This preview performed no device operation
+and is separate from native-host acceptance. Screenshot:
+`F:\dev\fm1\tmp\fm1-forge-production-blank-panel-fix.jpg`.
+
+Pushed Site source: `dd93da92ec108b47a00a93e04f0a4724581ce56d`.
+Archive SHA256:
+`7aa27d4ecc6fda9db22cd1c646b8429d8f2208e416a96fda161220b6bd80bdb1`.
+Private deployment: `appgdep_6acc844ef5e48191b8d4e402d782e9b1`.
+Saved version:
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_554f30a4da208191a0c1da9ca94e66cc`.
+Deployment succeeded with MCP enabled and environment revision 1. A newly
+opened model-tool native MCP App rendered its header, factory, Apps library
+and all six package cards. Its actual DOM contains the repaired
+`window.FM1Library=(function dF(){...})()` factory, an opaque `rgb(0,0,0)` shell
+and no visible UI error. Screenshot:
+`F:\dev\fm1\tmp\fm1-forge-native-blank-panel-fixed.jpg`.
+The separate global view in the user's other window is outside the supported
+MCP Apps inventory; its crashed document needs reopening for this correction.
+The service's opening snapshot reports an offline relay and stale inventory,
+so this check establishes rendering, not current hardware connectivity.
+The existing plugin package remains 3.1.4; this is a hosted-runtime correction.
+IDs, private audience, drafts, saved jobs and hardware gates are preserved.
+
 ## Native tab artwork 3.1.4, 2026-10-12
 
 Issue #11 tracks the generic native tab glyph. Original SVG sources provide an
