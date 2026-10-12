@@ -10,7 +10,7 @@ mentions, configuration forms, deep links and chat context/message actions.
 
 Read the current [Forge guide](docs/FORGE_GUIDE.md). The owner-private Site's
 final Forge release is deployed with MCP enabled at the existing endpoint. Its
-resource is `ui://fm1/forge-panel-v5.html`. The same private
+resource is `ui://fm1/forge-panel-v6.html`. The same private
 [FM1 Forge plugin](https://chatgpt.com/plugins/plugins_6ac9ad3fc1c8819195580a4747c50052)
 was updated in place.
 

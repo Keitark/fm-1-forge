@@ -1,5 +1,49 @@
 # Integration verification
 
+## Drag-and-drop module graph, 2026-10-12
+
+The current Site resource is `ui://fm1/forge-panel-v6.html`; v5 and all earlier
+aliases remain available. The existing installed plugin package stays 3.1.3.
+USB, HAL, User module and Tweaks are real drop targets. Optional modules return
+to the shelf; Add/Remove/Replace buttons and HAL checkboxes provide keyboard
+alternatives. CDC and UBOOT helper stay enabled. All five user HAL access flags
+default true. Schema v2 is shared by export, prompt, saved drafts, native forms,
+files and context; strict legacy v1 imports acquire all-enabled flags.
+
+All **230 Site tests** passed, with the final two UI regressions rerun after
+review corrections; TypeScript checking and production build passed. Coverage
+includes every HAL toggle, wrong-section/protected-module drops, native
+roundtrips and legacy migration, pending old forms, dirty-file preservation,
+refresh preservation, required clock opt-in and preserving a 30 MHz LCD preset
+when its existing module is dropped back into Tweaks. No dependencies changed.
+
+Browser QA performed actual pointer drags to remove/restore a HAL and replace
+diagnostics with a user starter, verifying the emitted JSON. Actual shelf-to-
+Tweaks drag acceptance is not claimed: several automated gestures ended without
+a drop; its Add button and the same drop controller pass their checks. The
+760 px panel-width preview had no horizontal overflow. A fresh published native
+MCP App loaded the graph, schema v2 and opaque black background. Native Add/
+Remove/Replace and checkbox actions changed the real configuration for HAL,
+user module and Fast LCD; defaults were restored without saving a draft or
+sending a chat/build/transfer request. Screenshot:
+`F:\dev\fm1\tmp\fm1-forge-native-module-graph.png`. The existing thread tab
+can retain older HTML and needs reopening; this acceptance covers the newly
+opened model-tool native MCP App.
+
+Pushed Site source `eedf0f98d4961ab5d5dda995782af5a9bb5ceecd` deployed privately
+with MCP enabled and environment revision 1; terminal status **succeeded**.
+Deployment `appgdep_6acc55eac76c8191a74e7a20daec05d1`; saved version
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_2be8c7e4aac48191b5f4d7d03d5a261c`.
+Archive SHA256:
+`5c14f3e42744fdf35a6636759cf73c45790b06534f5797b43a5ec51c637a4381`.
+
+Firmware implementation and offline build/ELF/source-closure evidence are in
+Keitark/fm1-tracker, `docs/FM1_FORGE_GRAPH_HAL_20261012.md`. Selections govern
+trusted user callback/input access; fixed diagnostics, recovery, UAC mixing
+and physical master gain continue. Physical hardware acceptance remains pending.
+No helper elevation, official updater or device write occurred.
+
+
 ## Native background contrast correction, 2026-10-12
 
 The user-provided native thread-panel screenshot showed white host background

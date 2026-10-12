@@ -6,7 +6,7 @@ Site URL and local bridge remain in use. While the conversation is active, use
 This opens Forge's native conversation tab. The global shortcut opens a separate
 app view; returning to an earlier chat selects that chat's own panel instance.
 
-The current resource is `ui://fm1/forge-panel-v5.html`; older resource aliases
+The current resource is `ui://fm1/forge-panel-v6.html`; older resource aliases
 remain available. Reopen the native conversation tab after an update.
 The [native extensions guide](MCP_EXTENSIONS.md) describes the official SDK,
 settings, drafts, file editing, mentions, forms and chat handoff. Dated
@@ -46,12 +46,28 @@ The source and offline LCD preview are in the FM1 repository's
 
 ## Module designer
 
+Drag modules from **Available modules** into **USB**, **HAL**, **User module**
+or **Tweaks**. Drag optional modules back to the shelf to remove them, or use
+Add/Remove buttons and HAL checkboxes. Wrong-section drops are rejected.
+Use **Replace** to switch diagnostics and the blank user-module starter.
+
+All five HAL access modules default enabled: keys/pads/buttons, encoders,
+volume telemetry, LCD drawing and user audio. Deselecting them removes access
+from user callbacks; fixed diagnostics, USB audio mixing and physical master
+volume protection continue. This selects API access rather than powering off
+hardware. The UBOOT helper and CDC serial are protected enabled defaults.
+
 The graph separates fixed USB/system recovery from shared HAL and editable user
 code. CDC and UBOOT recovery remain enabled. USB Audio Class can be selected;
 it provides stereo playback and digital synth capture rather than analog mic
 capture or a flash protocol. HAL ABI1 exposes all inputs, LCD rendering, audio
 and immutable health snapshots. User code has init/update/render/audio/shutdown
 callbacks, with bounded IRQ audio work and output clipping.
+
+New exports and saved drafts use strict configuration schema v2 with five HAL
+booleans. Existing v1 files/drafts import with all HAL access enabled. Native
+forms, files, context restore and the local firmware generator share this
+contract. Selecting CPU 320 MHz still requires a separate explicit opt-in.
 
 Download the configuration as `<project-slug>.fm1-forge.json`; the generator
 writes it as `forge.json` inside the new project. **Ask Codex** sends that reviewed
@@ -69,7 +85,7 @@ python firmware/forge/build_project.py --project projects/first-synth
 ```
 
 Creation refuses an existing project directory. Edit the generated `user.c`
-and choose `module: "user"`. The build honors the selected module, USB audio,
+and choose `module: "user"`. The build honors the selected module, user HAL access, USB audio,
 clock and LCD presets and creates a new output folder. Packaging and an exact
 offline transfer review follow a successful audited build.
 

@@ -3,9 +3,16 @@ function createForgeProjectEngine() {
   const STARTER='firmware/forge';
   const CLOCK_PRESETS=['sdk-default','sdk-320'];
   const LCD_PRESETS=['stock-dma','spi15-rgb444','spi30-rgb444'];
+  const HAL_KEYS=['buttons','encoders','volume','lcd','audio'];
   const exactFields=(value,fields)=>!!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===fields.length&&fields.every(field=>Object.hasOwn(value,field));
+  const defaultHal=()=>Object.fromEntries(HAL_KEYS.map(key=>[key,true]));
+  function validatedHal(value){
+    if(!exactFields(value,HAL_KEYS)||HAL_KEYS.some(key=>typeof value[key]!=='boolean'))throw new Error('Choose exactly five boolean HAL selections: buttons, encoders, volume, LCD and audio.');
+    return Object.fromEntries(HAL_KEYS.map(key=>[key,value[key]]));
+  }
   function projectConfig(input={}) {
-    if(!exactFields(input,['slug','displayName','clockPreset','clockOptIn','lcdPreset','module','usbAudio']))throw new Error('Enter a firmware project configuration with the supported fields.');
+    const fields=['slug','displayName','clockPreset','clockOptIn','lcdPreset','module','usbAudio'];
+    if(!exactFields(input,fields)&&!exactFields(input,[...fields,'hal']))throw new Error('Enter a firmware project configuration with the supported fields.');
     const slug=typeof input.slug==='string'?input.slug.trim():'',displayName=typeof input.displayName==='string'?input.displayName.trim():'';
     if(!/^[a-z][a-z0-9-]{0,47}$/.test(slug)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(slug))throw new Error('Use a project folder with lowercase letters, numbers and hyphens, starting with a letter; avoid Windows reserved names.');
     if(!displayName||displayName.length>64||/[\u0000-\u001f\u007f]/.test(displayName))throw new Error('Enter a project name of 1–64 printable characters.');
@@ -15,18 +22,26 @@ function createForgeProjectEngine() {
     if(input.clockPreset==='sdk-320'&&input.lcdPreset!=='stock-dma')throw new Error('320 MHz is incompatible with the RGB444 LCD presets: its 53 MHz LSB bus cannot provide their required 60 MHz clock. Choose stock DMA or the SDK default CPU clock.');
     if(!['diagnostics','user'].includes(input.module))throw new Error('Choose diagnostics or a blank user module.');
     if(typeof input.usbAudio!=='boolean')throw new Error('Choose whether USB audio is enabled.');
-    return {schemaVersion:1,project:{slug,displayName},profile:'forge-diag',clockPreset:input.clockPreset,lcdPreset:input.lcdPreset,module:input.module,usb:{cdc:true,uac:input.usbAudio,uboot:true}};
+    const hal=Object.hasOwn(input,'hal')?validatedHal(input.hal):defaultHal();
+    return {schemaVersion:2,project:{slug,displayName},profile:'forge-diag',clockPreset:input.clockPreset,lcdPreset:input.lcdPreset,module:input.module,usb:{cdc:true,uac:input.usbAudio,uboot:true},hal};
+  }
+  function normalizeProjectConfig(config) {
+    // Legacy files remain readable, but all new drafts use the explicit v2 HAL selections.
+    const fields=['schemaVersion','project','profile','clockPreset','lcdPreset','module','usb'];
+    if(!config||!exactFields(config,config.schemaVersion===2?[...fields,'hal']:fields)||
+      !exactFields(config.project,['slug','displayName'])||!exactFields(config.usb,['cdc','uac','uboot'])||
+      ![1,2].includes(config.schemaVersion)||config.profile!=='forge-diag'||config.usb.cdc!==true||config.usb.uboot!==true)throw new Error('Invalid Forge project or recovery configuration.');
+    const safe=projectConfig({slug:config.project.slug,displayName:config.project.displayName,clockPreset:config.clockPreset,clockOptIn:config.clockPreset==='sdk-320',lcdPreset:config.lcdPreset,module:config.module,usbAudio:config.usb.uac,...(config.schemaVersion===2?{hal:config.hal}:{})});
+    if(safe.project.slug!==config.project.slug||safe.project.displayName!==config.project.displayName)throw new Error('Invalid Forge project names: leading or trailing spaces are not supported.');
+    return safe;
   }
   function projectPrompt(config,goal='') {
-    // Re-validate the canonical data, including the fixed recovery block.
-    if(!exactFields(config,['schemaVersion','project','profile','clockPreset','lcdPreset','module','usb'])||
-      !exactFields(config.project,['slug','displayName'])||!exactFields(config.usb,['cdc','uac','uboot'])||
-      config.schemaVersion!==1||config.profile!=='forge-diag'||config.usb.cdc!==true||config.usb.uboot!==true)throw new Error('Invalid Forge project or recovery configuration.');
-    const safe=projectConfig({slug:config.project?.slug,displayName:config.project?.displayName,clockPreset:config.clockPreset,clockOptIn:config.clockPreset==='sdk-320',lcdPreset:config.lcdPreset,module:config.module,usbAudio:config.usb?.uac});
+    const safe=normalizeProjectConfig(config);
     if(typeof goal!=='string'||goal.length>2000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(goal))throw new Error('Describe your firmware goal in up to 2000 characters.');
     return 'Create and build my FM1 Forge firmware project from the repository starter '+STARTER+'.\n'+
       'Read the repository instructions and the Forge starter guide first. Preserve active firmware work and rollback.\n'+
-      'Use the shared HAL for all 41 inputs, 7 encoders, master-volume ADC, LCD and audio. Preserve CDC serial and UBOOT recovery.\n'+
+      'Use the selected shared HAL access for the user module: '+(HAL_KEYS.filter(key=>safe.hal[key]).join(', ')||'none')+'. Disabled selections are unavailable to user callbacks; they do not power down fixed hardware drivers.\n'+
+      'Preserve fixed diagnostics, CDC serial, UBOOT recovery, USB audio mixing and the physical master-volume gain. The HAL covers all 41 inputs, 7 encoders, volume ADC, LCD and audio.\n'+
       'Implement the configured user module and keep fixed USB/system code separate. Validate the configuration with the Forge generator, build it and report the binary/hash and offline checks.\n'+
       'Save the JSON below to a local configuration file. Create a fresh directory with python firmware/forge/create_project.py --base <new-project-parent> --slug '+safe.project.slug+' --config <configuration-file>. It must not overwrite an existing project.\n'+
       'The generated project contains forge.json and user.c. Build with python firmware/forge/build_project.py --project <generated-project-directory>; use --dry-run first to inspect the command.\n'+
@@ -40,7 +55,7 @@ function createForgeProjectEngine() {
   function verifiedBaseline(baseline) {
     return !!(baseline&&baseline.catalog_id==='factory-diag'&&/^[a-f0-9]{32}$/.test(baseline.job_id||'')&&/^[a-f0-9]{64}$/.test(baseline.sha256||'')&&baseline.verified_at&&baseline.write_verified===true&&baseline.full_readback_verified===true&&baseline.boot_verified===true);
   }
-  return {STARTER,CLOCK_PRESETS,LCD_PRESETS,projectConfig,projectPrompt,verifiedDiagnostics,verifiedBaseline};
+  return {STARTER,CLOCK_PRESETS,LCD_PRESETS,HAL_KEYS,projectConfig,normalizeProjectConfig,projectPrompt,verifiedDiagnostics,verifiedBaseline};
 }
-export const {STARTER,CLOCK_PRESETS,LCD_PRESETS,projectConfig,projectPrompt,verifiedDiagnostics,verifiedBaseline}=createForgeProjectEngine();
+export const {STARTER,CLOCK_PRESETS,LCD_PRESETS,HAL_KEYS,projectConfig,normalizeProjectConfig,projectPrompt,verifiedDiagnostics,verifiedBaseline}=createForgeProjectEngine();
 export const forgeProjectRuntime='window.FM1Forge=('+createForgeProjectEngine.toString()+')();';

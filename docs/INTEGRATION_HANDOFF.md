@@ -1,5 +1,18 @@
 # FM1 Codex integration handoff
 
+## Drag-and-drop module configuration (2026-10-12)
+
+Current UI resource: `ui://fm1/forge-panel-v6.html`; v5 and all earlier aliases
+remain served. The installed plugin package stays at 3.1.3; this Site update
+adds real drag/drop into USB, HAL, User module and Tweaks, with accessible
+Add/Remove/Replace controls. CDC and UBOOT helper are protected enabled defaults.
+Five user HAL access flags default true and round-trip through exports, drafts,
+native forms/files and context; strict v1 imports normalize into schema v2.
+The local firmware builder translates the flags into actual callback/input
+access controls while fixed diagnostics, recovery and master gain remain.
+Reopen an already loaded panel to obtain the graph; no device write is involved.
+
+
 ## Native background contrast correction (2026-10-12)
 
 The current UI resource is `ui://fm1/forge-panel-v5.html`. An app-owned,

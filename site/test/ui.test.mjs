@@ -16,7 +16,7 @@ async function panel({embedded=false,initial=true,serverTools=true,hostMessages=
   if(preferences!==null)storage.set('fm1.appearance.v2',typeof preferences==='string'?preferences:JSON.stringify(preferences));
   if(legacyPreferences!==null)storage.set('fm1.appearance.v1',JSON.stringify(legacyPreferences));
   const initialValues={'forge-project-name':'My FM1 firmware','forge-project-slug':'my-fm1-firmware','forge-project-goal':'','forge-clock-preset':'sdk-default','forge-lcd-preset':'stock-dma','forge-module':'diagnostics','diag-entry-method':'auto'};
-  function node(id){if(!nodes.has(id)){let text='';const attributes=new Map();nodes.set(id,{history:[],get textContent(){return text;},set textContent(value){text=value;this.history.push(value);},innerHTML:'',value:initialValues[id]??(id==='variant-nes'?'nes-test':''),checked:id==='forge-usb-audio',dataset:{profile:'nes',plan:'nes',switch:'nes'},hidden:true,open:false,style:{},querySelectorAll:selector=>id==='library'&&nativeControls?selector==='select'?[node('variant-nes')]:selector==='[data-plan]'?[node('plan-nes')]:selector==='[data-switch]'?[node('switch-nes')]:[]:[],querySelector:selector=>id==='library'&&nativeControls?(selector.startsWith('[data-profile=')?node('variant-nes'):node('digest-nes')):null,setAttribute(name,value){attributes.set(name,String(value));},getAttribute(name){return attributes.get(name)??null;},removeAttribute(name){attributes.delete(name);if(name==='value')delete this.value;},showModal(){this.open=true;},close(){this.open=false;},addEventListener(name,fn){this[name]=fn;}});}return nodes.get(id);}
+  function node(id){if(!nodes.has(id)){let text='';const attributes=new Map();nodes.set(id,{history:[],get textContent(){return text;},set textContent(value){text=value;this.history.push(value);},innerHTML:'',value:initialValues[id]??(id==='variant-nes'?'nes-test':''),checked:id==='forge-usb-audio'||id.startsWith('forge-hal-'),dataset:{profile:'nes',plan:'nes',switch:'nes'},hidden:true,open:false,style:{},querySelectorAll:selector=>id==='library'&&nativeControls?selector==='select'?[node('variant-nes')]:selector==='[data-plan]'?[node('plan-nes')]:selector==='[data-switch]'?[node('switch-nes')]:[]:[],querySelector:selector=>id==='library'&&nativeControls?(selector.startsWith('[data-profile=')?node('variant-nes'):node('digest-nes')):null,setAttribute(name,value){attributes.set(name,String(value));},getAttribute(name){return attributes.get(name)??null;},removeAttribute(name){attributes.delete(name);if(name==='value')delete this.value;},showModal(){this.open=true;},close(){this.open=false;},addEventListener(name,fn){this[name]=fn;}});}return nodes.get(id);}
   const initialData=await callTool(env,'alice','open_fm1_library',{});
   if(baseline)initialData.forge={diagnostic_baseline:baseline};
   if(inventory)initialData.inventory=inventory;
@@ -540,11 +540,11 @@ test('a completed saved job without canonical baseline evidence cannot unlock th
   assert.ok(!p.node('diagnostics-status').textContent.includes('startup verified'));p.dispose();
 });
 
-test('module configuration generates the canonical version-one config with fixed recovery',async()=>{
+test('module configuration generates the canonical version-two config with fixed recovery',async()=>{
   const p=await panel({embedded:true,baseline:forgeBaseline});
   p.node('forge-project-name').value='FM1 Pad Lab';p.node('forge-project-slug').value='pad-lab';p.node('forge-module').value='user';
   p.node('forge-usb-audio').checked=false;p.node('forge-lcd-preset').value='spi15-rgb444';p.node('forge-module').onchange();
-  assert.deepEqual(JSON.parse(p.node('forge-config').textContent),{schemaVersion:1,project:{slug:'pad-lab',displayName:'FM1 Pad Lab'},profile:'forge-diag',clockPreset:'sdk-default',lcdPreset:'spi15-rgb444',module:'user',usb:{cdc:true,uac:false,uboot:true}});
+  assert.deepEqual(JSON.parse(p.node('forge-config').textContent),{schemaVersion:2,project:{slug:'pad-lab',displayName:'FM1 Pad Lab'},profile:'forge-diag',clockPreset:'sdk-default',lcdPreset:'spi15-rgb444',module:'user',usb:{cdc:true,uac:false,uboot:true},hal:{buttons:true,encoders:true,volume:true,lcd:true,audio:true}});
   assert.equal(p.node('forge-module-title').textContent,'Your module');assert.match(p.node('forge-prompt').value,/shared HAL/);
   p.node('forge-clock-preset').value='sdk-320';p.node('forge-clock-preset').onchange();assert.match(p.node('forge-project-status').textContent,/experimental CPU clock/);assert.equal(p.node('forge-config').textContent,'');
   p.node('forge-clock-opt-in').checked=true;p.node('forge-clock-opt-in').onchange();assert.match(p.node('forge-project-status').textContent,/incompatible.*53 MHz.*60 MHz/);
@@ -562,6 +562,39 @@ test('project configuration rejects malformed IDs, unsupported modules and bypas
   assert.equal(verifiedBaseline(forgeBaseline),true);
   assert.equal(verifiedDiagnostics({id:'1'.repeat(32),catalog_id:'factory-diag',status:'succeeded',full_readback_verified:true,boot_verified:true}),true);
   assert.equal(verifiedDiagnostics({id:'1'.repeat(32),catalog_id:'factory-diag',status:'succeeded',simulation:true,full_readback_verified:true,boot_verified:true}),false);
+});
+
+test('drag/drop and accessible actions edit the actual project while protecting recovery',async()=>{
+  const p=await panel({embedded:true,baseline:forgeBaseline});
+  const config=()=>JSON.parse(p.node('forge-config').textContent);
+  const drag=(id,part)=>{const values=new Map();const dataTransfer={setData:(key,value)=>values.set(key,value),getData:key=>values.get(key)};p.node('forge-card-'+id).dragstart({dataTransfer});p.node('forge-drop-'+part).drop({dataTransfer,preventDefault(){}});};
+  assert.deepEqual(config().hal,{buttons:true,encoders:true,volume:true,lcd:true,audio:true});
+  for(const name of ['buttons','encoders','volume','lcd','audio']){
+    drag('hal-'+name,'library');assert.equal(config().hal[name],false);assert.equal(p.node('forge-card-hal-'+name).hidden,true);
+    assert.equal(p.node('forge-add-hal-'+name).hidden,false);p.node('forge-add-hal-'+name).onclick();assert.equal(config().hal[name],true);
+  }
+  const before=config();drag('hal-buttons','usb');assert.deepEqual(config(),before);assert.match(p.node('forge-graph-status').textContent,/belongs in HAL/);
+  for(const id of ['usb-cdc','usb-uboot']){drag(id,'library');assert.deepEqual(config(),before);assert.match(p.node('forge-graph-status').textContent,/stays enabled/);assert.equal(p.node('forge-card-'+id).hidden,false);}
+  drag('usb-uac','library');assert.equal(config().usb.uac,false);p.node('forge-add-usb-uac').onclick();assert.equal(config().usb.uac,true);
+  p.node('forge-add-module-user').onclick();assert.equal(config().module,'user');assert.equal(p.node('forge-card-module-diagnostics').hidden,true);
+  drag('module-user','library');assert.equal(config().module,'user');assert.match(p.node('forge-graph-status').textContent,/another user module/);
+  p.node('forge-add-module-diagnostics').onclick();assert.equal(config().module,'diagnostics');
+  p.node('forge-add-tweak-fast-lcd').onclick();assert.equal(config().lcdPreset,'spi15-rgb444');
+  p.node('forge-lcd-preset').value='spi30-rgb444';p.node('forge-lcd-preset').onchange();drag('tweak-fast-lcd','tweaks');assert.equal(config().lcdPreset,'spi30-rgb444');
+  p.node('forge-remove-tweak-fast-lcd').onclick();assert.equal(config().lcdPreset,'stock-dma');
+  p.node('forge-add-tweak-clock').onclick();assert.equal(p.node('forge-config').textContent,'');assert.match(p.node('forge-project-status').textContent,/experimental CPU clock/);
+  p.node('forge-clock-opt-in').checked=true;p.node('forge-clock-opt-in').onchange();assert.equal(config().clockPreset,'sdk-320');
+  p.node('forge-remove-tweak-clock').onclick();assert.equal(config().clockPreset,'sdk-default');assert.equal(p.node('forge-clock-opt-in').checked,false);
+  assert.equal(p.requests.length,0);assertAppearanceStaysLocal(p);p.dispose();
+});
+
+test('HAL checkbox selections survive passive refresh and are reflected in prompt/config',async()=>{
+  const p=await panel({embedded:true,baseline:forgeBaseline});
+  p.node('forge-hal-volume').checked=false;p.node('forge-hal-volume').onchange();
+  assert.match(p.node('forge-graph-status').textContent,/4 of 5 HAL/);
+  const before=p.node('forge-config').textContent;await p.advancePoll(5000);assert.ok(p.requests.includes('get_fm1_status'));
+  assert.equal(p.node('forge-hal-volume').checked,false);assert.equal(p.node('forge-config').textContent,before);
+  assert.equal(JSON.parse(before).hal.volume,false);assert.match(p.node('forge-prompt').value,/"volume": false/);p.dispose();
 });
 
 test('the compiler-proven CPU and fast-LCD combination is rejected without blocking supported presets',()=>{

@@ -84,6 +84,39 @@ test('projects persist as configuration drafts with explicit diagnostic gate and
   assert.equal((await rpc(env,'resources/read',{uri:saved.project.resource_uri},null)).response.status,401);
 });
 
+test('v2 HAL selections survive saved drafts, owner resources and updates including false values',async()=>{
+  const env=database(),selected={...config,hal:{buttons:false,encoders:true,volume:false,lcd:false,audio:false}};
+  const saved=await callTool(env,'alice','save_fm1_project',{config:selected});
+  assert.deepEqual(saved.project.config,selected);
+  assert.deepEqual((await callTool(env,'alice','list_fm1_projects',{})).projects[0].config,selected);
+  assert.deepEqual(JSON.parse((await readForgeResource(env,'alice',saved.project.resource_uri)).contents[0].text),selected);
+  const changed={...selected,hal:{...selected.hal,encoders:false}};
+  await callTool(env,'alice','save_fm1_project',{config:changed,project_id:saved.project.id});
+  assert.deepEqual(JSON.parse(env.DB.sqlite.prepare('SELECT config FROM forge_projects WHERE id=?').get(saved.project.id).config),changed);
+  assert.equal(mutations(env),0);
+});
+
+test('legacy v1 drafts normalize on reads without rewriting storage and save as canonical v2',async()=>{
+  const env=database(),{hal,...previous}=config,legacy={...previous,schemaVersion:1},id='e'.repeat(32),stored=JSON.stringify(legacy),at=seconds();
+  env.DB.sqlite.prepare('INSERT INTO forge_projects(id,user_id,title,slug,config,created,updated) VALUES(?,?,?,?,?,?,?)').run(id,'alice',legacy.project.displayName,legacy.project.slug,stored,at,at);
+  assert.deepEqual((await callTool(env,'alice','get_fm1_project',{project_id:id})).project.config,config);
+  assert.deepEqual((await callTool(env,'alice','list_fm1_projects',{})).projects[0].config,config);
+  assert.deepEqual(JSON.parse((await readForgeResource(env,'alice','fm1-forge://projects/'+id)).contents[0].text),config);
+  assert.equal(env.DB.sqlite.prepare('SELECT config FROM forge_projects WHERE id=?').get(id).config,stored);
+  const saved=await callTool(env,'alice','save_fm1_project',{config:legacy,project_id:id});
+  assert.deepEqual(saved.project.config,config);assert.deepEqual(JSON.parse(env.DB.sqlite.prepare('SELECT config FROM forge_projects WHERE id=?').get(id).config),config);
+  assert.equal(mutations(env),0);
+});
+
+test('canonical schema rejects partial HALs, extra HALs, non-booleans and v1 HAL additions',async()=>{
+  const env=database(),{hal,...previous}=config;
+  for(const candidate of [{...previous},{...previous,schemaVersion:1,hal},{...config,hal:{...hal,extra:true}},{...config,hal:{...hal,audio:'false'}},{...config,hal:{buttons:true}},{...config,hal:null},{...config,schemaVersion:3}]){
+    await assert.rejects(callTool(env,'alice','save_fm1_project',{config:candidate}));
+    const rpc=await tools(env,'save_fm1_project',{config:candidate});assert.equal(rpc.data.result.isError,true);
+  }
+  assert.equal(drafts(env),0);assert.equal(mutations(env),0);
+});
+
 test('canonical configurations reject traversal, unknown fields, recovery edits and unguarded clocks',async()=>{
   const env=database(),bad=[{...config,extra:true},{...config,usb:{...config.usb,uboot:false}},{...config,project:{slug:'../old',displayName:'Unsafe'}},{...config,project:{slug:'con',displayName:'Reserved'}},{...config,project:{slug:'first-synth',displayName:'x'.repeat(65)}},{...config,project:{slug:'first-synth',displayName:'C:\\secret'}},{...config,clockPreset:'sdk-320'}];
   // A printable display title may contain punctuation but never becomes a path.
@@ -133,10 +166,21 @@ test('native MRTR requests use official form schema, keyed continuation and no f
   const panel=await rpc(env,'resources/read',{uri:configure._meta.ui.resourceUri});assert.equal(panel.data.result.contents[0].mimeType,'text/html;profile=mcp-app');assert.equal(mutations(env),0);
 });
 
+test('native optional HAL choices default on for old responses and preserve explicit off values',async()=>{
+  const env=database(),first=await tools(env,'configure_fm1_project'),form=first.data.result.inputRequests[PROJECT_FORM_KEY].params._meta['openai/elicitation'].requestedSchema;
+  for(const key of ['halButtons','halEncoders','halVolume','halLcd','halAudio']){assert.equal(form.properties[key].default,true);assert.ok(!form.required.includes(key));}
+  const selected={...fields,halButtons:false,halEncoders:false,halVolume:false,halLcd:false,halAudio:false};
+  assert.equal(createOpenAIFormContentSchema(form).safeParse(selected).success,true);
+  const answered=await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{[PROJECT_FORM_KEY]:{action:'accept',content:selected}}});
+  const result=answered.data.result.structuredContent;assert.equal(result.action,'accept');assert.deepEqual(result.config.hal,{buttons:false,encoders:false,volume:false,lcd:false,audio:false});assert.equal(result.config.usb.uac,true);
+  const old=await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{[PROJECT_FORM_KEY]:{action:'accept',content:fields}}});
+  assert.deepEqual(old.data.result.structuredContent.config.hal,config.hal);assert.equal(mutations(env),0);
+});
+
 test('native MRTR cancel, decline, wrong keys and malformed answers cannot save configuration drafts',async()=>{
   for(const action of ['cancel','decline']){const env=database(),answer=await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{[PROJECT_FORM_KEY]:{action}}});assert.equal(answer.data.result.structuredContent.action,action);assert.equal(drafts(env),0);}
   const env=database(),wrong=await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{other:{action:'accept',content:fields}}});assert.equal(wrong.data.result.resultType,'input_required');assert.equal(drafts(env),0);
-  for(const content of [{...fields,usbAudio:'yes'},{...fields,unknown:'value'},{...fields,clockPreset:'sdk-320',clockOptIn:false},{...fields,displayName:'x'.repeat(65)}]){const answer=await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{[PROJECT_FORM_KEY]:{action:'accept',content}}});assert.equal(answer.data.result.isError,true);assert.equal(drafts(env),0);}
+  for(const content of [{...fields,usbAudio:'yes'},{...fields,unknown:'value'},{...fields,halButtons:'false'},{...fields,halAudio:null},{...fields,clockPreset:'sdk-320',clockOptIn:false},{...fields,displayName:'x'.repeat(65)}]){const answer=await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{[PROJECT_FORM_KEY]:{action:'accept',content}}});assert.equal(answer.data.result.isError,true);assert.equal(drafts(env),0);}
 });
 
 test('native form capability checks require both modern capability maps and never borrow prior clients',async()=>{
