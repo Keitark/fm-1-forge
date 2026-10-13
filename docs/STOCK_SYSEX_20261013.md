@@ -1,14 +1,16 @@
 # Stock SysEx implementation and acceptance — 2026-10-13
 
-FM1 Forge now has a native-panel stock update route backed by a JavaScript
-protocol engine and a local Node 22 USB-MIDI transport. The existing Python
-bridge/relay still carries reviewed requests, and Python remains the protected
-serial/UBOOT recovery runtime. This is not a complete removal of Python.
+FM1 Forge 3.2.0 performs stock updates in the native panel's JavaScript with
+direct Web MIDI. Its normal device flow starts no Python or Node helper. Local
+package validation uses WebCrypto; a strict IndexedDB journal and Web Locks
+protect the original transfer. Direct USB serial provides read-only custom
+firmware identity/status. UBOOT mass-storage recovery remains manual.
 
-The MCP Apps panel itself executes JavaScript. Direct Web MIDI access from its
-Codex sandbox is unverified; the pinned MCP Apps SDK permission declaration
-does not include MIDI. The pure protocol engine supports an injected transport,
-but this release supplies Node MIDI, not a helperless browser transport.
+The real Codex document reports secure context and allowed MIDI/serial APIs.
+This is API/policy evidence, not a device permission grant or successful flash.
+See [direct device acceptance](DIRECT_DEVICE_ACCESS_20261013.md). The earlier
+Node/Python implementation below remains a legacy recovery path, separate from
+the default browser controls.
 
 ## Reviewed update boundary
 
@@ -23,15 +25,16 @@ but this release supplies Node MIDI, not a helperless browser transport.
   retries. Recovery-lock acquisition is serialized.
 - Status refresh performs passive endpoint enumeration only, without opening
   MIDI ports or sending identity/upgrade commands.
-- Successful stock writes invalidate the old protected baseline. Transfer and
-  reboot identity do not imply a full flash readback.
+- Transfer and reboot identity do not imply a full flash readback or establish
+  a baseline for a later custom flash. Historical helper baselines must not be
+  reused as current device proof.
 - Generic older Windows endpoint names are supported only by the local CLI
   with fresh WinMM USB-instance/interface correlation; the panel keeps those
   endpoints unavailable until its local selection flow is integrated.
 
 See [the worker contract and protocol sources](../tools/jieli-wl82/stock-sysex/README.md).
 
-## Validation performed
+## Legacy implementation validation
 
 - 45/45 JavaScript updater tests, zero skipped, including the actual official
   V15 fixture and concurrent-resume regression.
@@ -59,14 +62,18 @@ See [the worker contract and protocol sources](../tools/jieli-wl82/stock-sysex/R
 The connected custom firmware currently exposes CDC on COM4, not stock MIDI.
 An offline stock V14 restoration request was checked against the existing
 verified MOD rollback image. It changes 121 application sectors, preserves all
-protected bytes and writes the directory sector last. The existing writer will
-require two fresh complete matching source reads before allowing a write.
+protected bytes and writes the directory sector last. Offline review found
+that the protected worker passes its saved baseline as `verified_preflight`,
+which skips the writer's normal fresh-read checks. A fresh current-device read
+gate must be established before this restoration is used; the old saved
+baseline alone is insufficient. Loader and failure latches must be preserved.
 
-The protected immutable-runtime launcher requested Windows elevation, which
-was canceled. No protected session started, and no device transition, reset,
-erase, program or SysEx upgrade was performed in this run. Stock restoration
-and the physical V14-to-V15 transfer remain pending; host validation is not
-hardware acceptance.
+The first elevation request was canceled. A later authorized launch completed
+its immutable-runtime startup and idle status exchange. The session was then
+stopped without device I/O while investigating the requested process-free
+panel architecture. No device transition, reset, erase, program or SysEx upgrade
+was performed. Stock restoration and the physical V14-to-V15 transfer remain
+pending; host validation is not hardware acceptance.
 
 The UVC module is separately linked and audited. Its ProTracker source has
 earlier 256×240 hardware capture evidence; this new Forge combination is still

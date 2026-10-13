@@ -1,47 +1,67 @@
 # FM1 Forge
 
-FM1 Forge **3.1.4** is the renamed private FM1 App Library plugin. Its existing plugin ID,
-Site URL and local bridge remain in use. While the conversation is active, use
+FM1 Forge **3.2.0** is the private firmware workspace plugin. Its existing
+plugin ID and Site URL remain in use. The default connection path runs inside
+the panel with Web Serial and Web MIDI; it requires no separately installed
+JavaScript runtime, Python/Node helper, relay or startup process.
+While the conversation is active, use
 **Side-panel New Tab (+) → More tools… → Plugins and MCPs → FM1 Forge**.
 This opens Forge's native conversation tab. The global shortcut opens a separate
 app view; returning to an earlier chat selects that chat's own panel instance.
 
-The current source resource is `ui://fm1/forge-panel-v14.html`; older resource aliases
-remain available. Reopen the native conversation tab after an update.
+The current source resource is `ui://fm1/forge-panel-v18.html`; older resource
+aliases remain available. Open a fresh native conversation tab after an update.
+Reopening alone does not prove that a host with cached descriptors selected the
+new URI; check the dated native-host evidence before claiming an updated panel.
 The [native extensions guide](MCP_EXTENSIONS.md) describes the official SDK,
 settings, drafts, file editing, mentions, forms and chat handoff. Dated
 deployment and actual native-host checks are in [verification](VERIFICATION.md).
 
-Connection status refreshes automatically while the normal panel is visible,
-and checks again when you return to it. **Bench connected**
-means the local relay is running; the separate FM1 status reports USB, MIDI or
-UBOOT presence. The last confirmed label stays steady during checks; a small
-blinking circle indicates an update. Inventory older than 15 seconds disables
-firmware actions and shows its age separately. Hidden panels pause
-polling. **Refresh** also reloads package metadata before reviewing a transfer.
-These checks use passive inventory and do not open or program the device.
+Choose **Connect USB serial** for custom CDC firmware or **Connect stock MIDI**
+for stock firmware. These explicit buttons request host permission. No device
+is opened at startup. The serial path checks USB VID `3654` / PID `5155`, opens
+115200 baud and verifies a known HELLO identity. It uses only that profile's
+read-only status command on **Refresh**. The existing CDC firmware requires
+one DTR readiness assertion; the panel never pulses it or sends STOP/UBOOT.
+MIDI connection selects an exact FM1 input/output pair and verifies its model.
+Unrelated, generic or ambiguous MIDI devices are refused.
 
-**Apps library → Add local set** opens the laptop's importer. Select a folder
-or exported app bundle JSON files, name the set and review it before adding.
-Saved sets filter the app variants in the panel. Package files stay local;
-importing does not transfer firmware. See [local app sets](LOCAL_APP_SETS.md)
-for supported formats, validation and connection requirements.
+Once connected, device disconnect events update the label automatically.
+Reconnect through the connection button; the panel never silently chooses a
+replacement. The confirmed label stays steady during refresh and a small
+blinking circle shows the check. There is no Hardware activity dashboard.
+Browser API presence is separate from permission and successful device access.
 
-A ready protected helper and separately confirmed transfer are required for
-custom diagnostics. Build/package checks do not qualify the candidate or
-hardware; consult the dated verification receipt for completed bench tests.
+**Apps library → Add local set** opens a browser file chooser. Enter an optional
+set name, then select exported catalog JSON files, or use **Add exported bundle
+folder**. A set contains 1–8 bundles, each up to 1.5 MB, with an embedded 1 MiB
+image and matching SHA256. Paths, metadata, base64 and the complete set are
+validated before one IndexedDB transaction saves anything. Loose binaries,
+source trees, ROMs and music files need a catalog export first.
+
+Firmware Blobs stay in browser IndexedDB; the cards show metadata only. Imports
+remain **Imported / unverified**, with no verified device baseline or custom
+transfer permission. Their route is manual UBOOT. Library refresh reads the
+local store and rechecks saved hashes. Storage belongs to this browser
+origin/profile and is subject to host retention. If storage is unavailable,
+the panel reports it and does not substitute a pretend durable library.
+
+Preparing a configuration and asking Codex to create a project do not require
+the old diagnostics-transfer proof gate. Custom firmware installation remains
+a separate, explicitly authorized operation. Build/package checks do not
+qualify hardware; consult the dated verification receipt for actual tests.
 
 ## First firmware
 
-1. Refresh connection and packages. The local protected helper must be ready.
-2. Choose **Review diagnostics install**, review the selected `factory-diag` package
-   digest and automatic serial/UBOOT route, then confirm the displayed operation.
-3. Follow the original saved job. Write, full readback and serial startup are
-   recorded separately; reconnecting never resubmits the write.
-4. Test the LCD, all 41 buttons/keys, seven encoders, master volume and audible
-   key tones at FM1. UAC playback/capture and long-run stability need real tests.
-5. After the service records the exact completed diagnostic baseline, select
-   **New firmware project**, configure the graphical modules and **Ask Codex**.
+1. Open the graphical editor and choose diagnostics or your own user module.
+2. Configure USB, HAL access and LCD modules, then name the project.
+3. Save/download the draft or use **Ask Codex** to create and build the project.
+4. Review the compiled package and verified current-unit baseline before a
+   separate manual/legacy UBOOT installation. The direct panel does not flash
+   custom packages or install the diagnostics baseline.
+5. After an authorized diagnostics installation, test the LCD, all 41
+   buttons/keys, seven encoders, master volume and audible key tones at FM1.
+   UAC playback/capture, UVC capture and long-run stability need real tests.
 
 The basic firmware is independent diagnostic software, not the vendor's stock
 firmware. It contains no ROM, WAD, song or proprietary bank. The LCD displays
@@ -61,7 +81,8 @@ All five HAL access modules default enabled: keys/pads/buttons, encoders,
 volume telemetry, LCD drawing and user audio. Deselecting them removes access
 from user callbacks; fixed diagnostics, USB audio mixing and physical master
 volume protection continue. This selects API access rather than powering off
-hardware. The UBOOT helper and CDC serial are protected enabled defaults.
+hardware. Firmware-resident UBOOT recovery and CDC serial are protected enabled
+defaults; this UBOOT module is not a laptop helper process.
 
 The graph separates fixed USB/system recovery from shared HAL and editable user
 code. CDC and UBOOT recovery remain enabled. USB Audio Class can be selected;
@@ -84,9 +105,10 @@ CDC/UBOOT or optional UAC. The new Forge combination remains unflashed and needs
 capture test; the ProTracker capture is evidence for the reused transport.
 
 The module editor is expanded by default. **Getting started** holds the optional
-01–04 guide. The main panel omits saved-request history and manual job-ID entry;
-an active transfer shows progress and a resume action if delivery is interrupted.
-Authoritative receipts and exact-ID recovery remain stored by the service.
+01–04 guide. The main panel omits saved-request history and manual job-ID entry.
+Only an actual stock transfer shows progress. An interrupted stock attempt is
+kept in the local IndexedDB journal and requires an explicit recovery review;
+refresh or reopening never starts the transfer again.
 
 Download the configuration as `<project-slug>.fm1-forge.json`; the generator
 writes it as `forge.json` inside the new project. **Ask Codex** sends that reviewed
@@ -94,8 +116,12 @@ configuration and your brief through the host's supported message action. If
 the host does not support it, the same prompt remains available to copy. The
 action requests coding; it does not report a completed build or flash a device.
 
-For this example, set **Project folder** to `first-synth` before downloading.
-In the FM1 source checkout:
+### Local development tools
+
+The panel hands design data to Codex; the C firmware compiler runs in the
+developer's source checkout. These finite build tools are separate from device
+connections and do not require a background bridge. For example, set **Project
+folder** to `first-synth` before downloading. In the FM1 source checkout:
 
 ```powershell
 python firmware/forge/create_project.py --base projects --slug first-synth --config first-synth.fm1-forge.json
@@ -132,45 +158,52 @@ legacy 320 MHz configurations combined with the 15/30 MHz LCD presets, which
 require a 60 MHz LSB. Importing an older draft preserves its original clock
 intent rather than silently changing it; stock DMA remains its valid LCD option.
 
-## Transfer methods and recovery
+## Stock transfer and recovery
 
-- **Auto/serial:** identify the normal CDC firmware and explicitly quiesce its
-  runtime before entering UBOOT; the protected UBOOT writer installs the package.
-- **Already UBOOT:** use the same protected application writer directly.
-- **Stock firmware via SysEx:** review the locally pinned official V15 `.fwsc`
-  package and fresh exact MIDI pair, then confirm once. A local Node 22 worker
-  using native MIDI handles stock SysEx/OTA transfer and reboot identity checks.
-  New updates start from normal stock MIDI mode. Already-OTA mode requires
-  local recovery of the original attempt rather than a new approval.
-- **Vendor updater:** the separate option under connection details opens the
-  locally pinned M-UPGRADE GUI for its manufacturer workflow.
+1. Click **Connect stock MIDI** and grant SysEx access. The panel verifies a
+   unique exact `FM-1` / `FM-1 MIDI` pair and its firmware identity.
+2. Expand **Stock firmware · V15 SysEx update** and select the official V15
+   `.fwsc` file. The browser validates it locally; nothing is uploaded.
+3. Click **Review stock update** and check the identity, package digest and
+   exact MIDI input/output names. Review does not write firmware.
+4. Click **Install stock firmware** yourself. The panel records the original
+   attempt before the first upgrade command, transfers through Web MIDI and
+   checks the reboot identity. Keep USB connected and the panel open.
 
-Custom Forge packages are stock-layout application containers, not vendor
-`.fwsc` files. Direct CDC COMMIT remains blocked. A vendor updater opening is
-not a verified firmware update. Preserve unknown jobs, stopped snapshots and
-verified rollback receipts; resume their original operation before another
-write. The stock action needs a recognized stock MIDI interface: custom CDC
-firmware first needs a separate reviewed stock restore. Generic MIDI names are
-not enabled in the panel by guessing which device is FM1.
+The transfer requires IndexedDB with strict durability and an exclusive Web
+Lock shared by this origin's panels. Missing storage or locks disables writing;
+there is no memory/localStorage fallback. An uncertain attempt blocks a new
+update. Recovery uses the same original IDs and official package, a freshly
+verified `ota-FM-1` loader identity and a separate **Review original transfer
+recovery** / **Resume original transfer** confirmation. There is no automatic
+retry or new-update approval in OTA mode.
 
 The stock package is fixed to `FM-1_015`, 699,956 bytes and SHA256
 `db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a`.
-Package paths and the Node runtime are configured locally, never supplied by
-the hosted page. Stock updating is disabled unless the local relay explicitly
-enables it. Completion reports **transfer finished** and **reboot identity
-verified**; it does not claim full flash readback. A successful stock update
-invalidates the old protected baseline and diagnostic proof. Establish a fresh
-verified baseline before custom firmware writes. An uncertain outcome blocks
-further writes and has no automatic retry.
+No Node binary or local helper configuration is part of this browser path.
+Completion reports **transfer finished** and **reboot identity verified**; it
+does not claim full flash readback. A stock update makes a prior custom-writer
+baseline obsolete. Establish a fresh verified current-unit baseline before any
+later custom write. Physical control, sound and screen acceptance remains a
+device observation.
 
-The native MCP panel runs JavaScript for its UI. Its sandbox does not itself
-provide the Windows USB/MIDI driver connection: stock transfer uses the local
-JavaScript worker, while Python retains bridge/relay orchestration and the
-existing protected serial/UBOOT workflow.
+The current custom firmware exposes COM4 CDC without stock MIDI, so the actual
+stock/SysEx test is pending. Reaching stock MIDI first requires a separately
+authorized stock restore; the panel does not convert or force custom firmware
+into that route. See [stock evidence](STOCK_SYSEX_20261013.md) and
+[direct access evidence](DIRECT_DEVICE_ACCESS_20261013.md) for current results.
 
-The current module action unlocks from authoritative saved diagnostic transfer
-proof, not a browser preference, app card or simulated preview. Physical control,
-sound and screen acceptance remains a device observation.
+### Manual and legacy custom transfers
+
+CDC COMMIT remains blocked. UBOOT is a vendor mass-storage protocol outside
+standard browser Web Serial/Web MIDI, so the helper-free panel does not provide
+custom flashing. The retained protected serial → UBOOT and already-UBOOT writer,
+Node stock worker and M-UPGRADE GUI are optional legacy bench operations,
+separately configured and explicitly authorized. Their old receipts and
+unknown-outcome latches remain intact. Opening a vendor GUI is not a verified
+update. The previous helper Startup entry is disabled reversibly and is not a
+normal Forge prerequisite. Read [legacy relay setup](SITE_RELAY.md) only when
+deliberately using that separate bench path.
 
 ## Connection status
 
@@ -179,12 +212,15 @@ small blinking circle beside that text; they do not replace the heading with
 “Checking connection.” A fresh observation updates the text when FM1 connects,
 disconnects, changes port or enters a different mode.
 
-The observation age appears in the connection details. Expired observations
-disable firmware actions while the last confirmed label remains visible.
-An old initial response cannot establish a confirmed port. Hidden or offline
-panels stop the blinking indicator. Reduced-motion settings disable its
-animation.
+The default path uses the confirmed browser connection, not old relay
+inventory or a saved COM-port string. Serial refresh reads only the recognized
+firmware's status; stock MIDI refresh uses already-authorized endpoint metadata
+without reopening endpoints or sending another identity query. Unplugging the
+selected device invalidates the connection. Reduced-motion settings disable
+the check animation.
 
-The firmware-dependent Hardware activity dashboard has been removed from the
-panel. Automatic connection detection remains passive PnP inventory and does
-not open serial or send firmware telemetry commands.
+The firmware-dependent Hardware activity dashboard is removed. Read-only
+diagnostic frame/error counters do not establish key activity, LCD output or
+audible playback. Closing the panel releases the serial connection. A stock
+write is a foreground operation; do not close the panel or disconnect USB
+during it. No refresh, startup hook or reconnect automatically writes firmware.

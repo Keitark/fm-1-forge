@@ -1,15 +1,20 @@
 # FM1 Forge user guide
 
-For the current **3.1.4** diagnostic-to-project workflow, black default panel,
-graphical module configuration and all transfer methods, read
+For the current **3.2.0** helper-free device flow, black default panel and
+graphical firmware configuration, read
 [FORGE_GUIDE.md](FORGE_GUIDE.md). The current source resource is
-`ui://fm1/forge-panel-v14.html`; dated deployment checks are recorded separately.
+`ui://fm1/forge-panel-v18.html`; dated deployment checks are recorded separately.
 Open the
 native conversation tab through **New Tab (+) → More tools… → Plugins and MCPs
 → FM1 Forge** to see configuration drafts, native settings, file editing and
 chat context/draft actions. Read [MCP_EXTENSIONS.md](MCP_EXTENSIONS.md)
 for the complete extension surfaces and platform capability checks. Older
 expanded cards can retain earlier UI.
+
+The panel includes its JavaScript runtime. You do not separately install
+JavaScript, Node or Python for normal connections, stock SysEx updates or local
+app-set imports. Device access uses browser permission from an explicit button;
+the panel does not launch a helper, relay or Startup process.
 
 The default is plain, opaque black with **Reset to Forge Black**; thirteen
 palettes and five patterns remain available as local preferences. The module
@@ -23,8 +28,9 @@ Forge combination remains unflashed and needs its own capture acceptance.
 
 The main editor is expanded. **Getting started** holds the optional 01–04 guide.
 Saved-request tables and manual job-ID inspectors are removed from everyday
-use. An active transfer shows progress and **Resume progress** if interrupted;
-the service keeps the original receipt and never repeats a write to refresh it.
+use. Only a current stock transfer shows progress. Its original attempt stays
+in a browser IndexedDB journal; an uncertain result blocks new updates and
+requires a separate recovery review. Refresh never repeats a write.
 
 On 2026-10-12, protected local bench transfers, startup observations and three
 CPU benchmark runs passed for both the preserved SDK-default clock (360 MHz
@@ -32,13 +38,116 @@ on this unit) and `sdk-320`, including USB audio duplex under the final run.
 The original MOD firmware was restored and its serial startup verified. The
 [clock benchmark report](https://github.com/Keitark/fm1-tracker/blob/codex/12-fm1-forge/docs/FM1_FORGE_CLOCK_BENCH_20261012.md)
 records the measurements and acceptance limits.
-These local CLI checks do not create the panel's saved diagnostics onboarding
-proof. Install and verify the diagnostics baseline through Forge before **New
-firmware project** unlocks; physical input, LCD and audible sound checks remain
-separate. **Ask Codex** requests a build through a supported host message or
-provides a copyable prompt. It does not flash firmware or certify a build.
+Those CLI checks are hardware evidence for that dated unit, not a claim that
+the new UVC configuration was flashed. In the direct panel, **New firmware
+project** and **Ask Codex** are available without the old diagnostics-proof
+gate. Ask Codex sends the reviewed configuration through a supported host
+message or provides a copyable prompt. Local C compiler/build work is separate
+from a connection helper; the panel does not flash custom firmware or certify
+a build. Physical inputs, LCD and audible sound checks remain separate.
 
-## Restore automatic device detection
+## Connect FM1 directly
+
+Click **Connect USB serial** for custom CDC firmware. Choose the FM1 diagnostics
+device and accept the host permission prompt. The panel checks VID `3654` /
+PID `5155`, opens 115200 baud and recognizes the firmware's HELLO identity.
+**Refresh** then sends only the known read-only status command. One DTR
+assertion is required by the existing CDC firmware; no reset pulse, STOP,
+UBOOT or raw command is exposed.
+
+For stock firmware, use **Connect stock MIDI** and allow SysEx access. The
+panel selects an exact unique FM1 pair and checks its model. It refuses
+unrelated devices, ambiguous duplicates and generic USB Composite Device
+names whose physical USB identity the browser cannot establish.
+
+No connection is opened at startup. After connecting, selected-device events
+update presence automatically. Reconnect explicitly after unplugging; a
+replacement device is never silently selected. The confirmed status text
+stays steady during checks, with only a small blinking circle. There is no
+Hardware activity dashboard. Browser API availability alone does not prove
+that the host granted permission or that device access succeeded.
+
+## Add local app sets
+
+In **Apps library**, enter an optional set name and click **Add local set**,
+or **Add exported bundle folder**. Select 1–8 existing exported catalog bundle
+JSON files, up to 1.5 MB each and 12 MiB per set. Each bundle contains a 1 MiB
+firmware image, image SHA256 and baseline SHA256. The browser checks metadata,
+paths, canonical base64, image size and hash before saving the complete set
+atomically in IndexedDB. Loose source files, binaries, ROMs and songs require
+an exported catalog bundle first.
+
+Choose **Show set** to filter imported metadata cards. **Refresh library**
+reads browser storage and checks saved image hashes; it makes no helper call.
+The firmware Blobs stay in this browser, and the cards display metadata only.
+Imports remain unverified against the connected device and do not authorize
+flashing. Custom transfer cards show **Manual UBOOT transfer**.
+
+Storage belongs to this browser origin/profile. Host retention or an origin
+change can affect it, so keep the original exported files. If IndexedDB is
+unavailable, the panel says the set could not be saved; it never substitutes
+an in-memory library and calls it durable.
+
+## Install official V15 through browser SysEx
+
+1. Connect normal stock MIDI and verify the FM1 identity.
+2. Expand **Stock firmware · V15 SysEx update**, then select the official V15
+   `.fwsc` file. Firmware bytes remain inside the panel.
+3. Click **Review stock update**. Check the package digest, current identity
+   and exact MIDI input/output names.
+4. Click **Install stock firmware** yourself. Keep USB connected and the
+   panel open while it transfers and checks the reboot identity.
+
+The accepted package is `FM-1_015`, 699,956 bytes, SHA256
+`db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a`.
+The manufacturer lists it on the [download page](https://www.m-vave.com/download).
+Selecting/reviewing the file does not write firmware. Transfer requires strict
+IndexedDB durability and an exclusive Web Lock; without these, writing remains
+disabled. Neither a Node runtime nor a Python service is involved.
+
+An uncertain attempt retains its original IDs and blocks a new update.
+**Review original transfer recovery** requires the same official file and a
+fresh verified `ota-FM-1` identity; **Resume original transfer** is another
+explicit confirmation. There is no automatic retry. Completion verifies
+`FM-1_015` after reboot and reports that full flash readback was not performed.
+A later custom flash requires a fresh verified current-unit baseline.
+
+The currently connected custom firmware exposes CDC on COM4 and no stock
+MIDI, so the physical stock/SysEx test remains pending. A separate authorized
+stock restore is needed first. Read the dated
+[direct-device evidence](DIRECT_DEVICE_ACCESS_20261013.md) and
+[stock evidence](STOCK_SYSEX_20261013.md) for actual permission, storage and
+hardware results; offline tests do not establish these outcomes.
+
+## Appearance
+
+The Forge interface owns its full opaque background, including headings,
+card gaps and footer. Codex's surrounding chrome keeps the app theme. The
+default is **Forge Black / Solid**, with **Reset to Forge Black**. Thirteen
+palettes, five patterns and custom background/accent colours remain available;
+foreground and panel colours are derived for contrast. Preferences are local
+and saved only where the host allows storage. Appearance changes send no
+device command.
+
+## Custom flashing and legacy setup
+
+UBOOT's vendor mass-storage protocol is outside standard Web Serial/Web MIDI.
+The direct panel provides read-only serial diagnostics and official stock
+SysEx transfer; custom firmware flashing remains a separate manual/legacy
+bench operation with its own package/baseline review and authorization.
+The old protected writer, Node MIDI worker, vendor updater and their receipts
+are retained. They are not normal Forge prerequisites or automatic fallbacks.
+The previous Windows helper Startup shortcut is disabled reversibly, with its
+rollback copy preserved.
+
+<details>
+<summary>Legacy helper instructions and dated App Library receipts</summary>
+
+Everything below describes the earlier helper/relay architecture. The dated
+observations are preserved as history; its startup, polling, job inspector
+and transfer instructions are not the 3.2.0 default flow.
+
+## Legacy automatic device detection (3.1.4)
 
 Run `tools/jieli-wl82/start-forge-services.ps1` from normal, non-administrator
 PowerShell to restore the local inventory bridge and outbound Site relay.
@@ -82,7 +191,7 @@ connection** shortcut was registered in this user's Windows Startup folder on
 startup after an actual Windows restart has not yet been tested. Check **Bench
 connected** and fresh device status in Forge after launch.
 
-## Install stock firmware through SysEx
+## Legacy Node stock SysEx setup (3.1.4)
 
 Use **Connection & updates → Stock firmware via SysEx** with one recognized
 stock FM1 MIDI input/output pair. Custom CDC/UBOOT firmware needs a separate
@@ -130,7 +239,7 @@ succeeded. That historical failure does not describe current tool availability;
 the latest connection and deployment evidence is in
 [VERIFICATION.md](VERIFICATION.md).
 
-## Appearance
+## Legacy appearance receipts (2026-10-10)
 
 The Appearance controls were published on 2026-10-10 at 11:27 JST for resource
 `ui://fm1/device-panel-v6.html`, server version **2.2.0**, with v1-v5 aliases.
@@ -363,3 +472,5 @@ metadata, and hardware acceptance evidence.
 
 Further detail: [relay setup](SITE_RELAY.md), [browser tools and verification](WEBMCP.md),
 [integration handoff](INTEGRATION_HANDOFF.md), and [verification evidence](VERIFICATION.md).
+
+</details>

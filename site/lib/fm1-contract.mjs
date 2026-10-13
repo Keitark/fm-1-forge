@@ -1,6 +1,6 @@
 import { ICONS } from './fm1-icon.mjs';
 import { OpenAIUiToolMetadataSchema } from '@openai/mcp-extensions';
-export const RESOURCE_URI = 'ui://fm1/forge-panel-v14.html';
+export const RESOURCE_URI = 'ui://fm1/forge-panel-v18.html';
 export const PROFILES = [
   {profile:'diagnostics',title:'Forge diagnostics',description:'Test inputs, LCD and audio before starting your firmware project.',symbol:'F'},
   {profile:'nes',title:'NES',description:'Play your prepared cartridge collection.',symbol:'N'},
@@ -36,8 +36,8 @@ const schemas = {
   entry_method:{type:'string',enum:['auto','serial','already_uboot']},
 };
 const definitions = [
-  ['open_fm1_library','FM1 Forge','Open the installed FM1 Forge plugin panel: diagnostic onboarding, graphical module configuration, packages and saved jobs.',[],true],
-  ['get_fm1_status','Refresh bench status','Request inventory and persisted bridge/session state. No device I/O.',[],true],
+  ['open_fm1_library','FM1 Forge','Open the installed FM1 Forge panel with direct browser USB serial and stock MIDI access, graphical firmware modules and browser-local app sets. No device helper process is started.',[],true],
+  ['get_fm1_status','Refresh legacy bench status','Request legacy relay inventory and persisted bridge/session state. This does not read the direct browser connection. No device I/O.',[],true],
   ['get_fm1_input_snapshot','Sample hardware inputs','Request one bounded read-only serial input sample from the locally selected FM1. Reports supported keys, encoders and volume; never changes firmware, clocks, sound or recovery mode. Inspect its saved request ID after a timeout.',[],true],
   ['list_fm1_apps','Refresh app packages','Request validated package metadata and readiness; never returns firmware bytes.',[],true],
   ['open_fm1_local_import','Add local app set','Open the local companion importer so the user can choose built FM1 package JSON files and save a named app set. Firmware bytes remain local. No device I/O. Inspect the saved request ID after a timeout.',[],false],

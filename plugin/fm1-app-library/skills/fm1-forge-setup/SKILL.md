@@ -1,34 +1,16 @@
 ---
 name: fm1-forge-setup
-description: Set up FM1 Forge after installation, open its native panel, check extension capabilities and the local FM1 connection, and explain the first firmware workflow.
+description: Open the native FM1 Forge panel, connect directly through browser MIDI or serial, and configure firmware projects.
 ---
 
 # Set up FM1 Forge
 
-Use the installed FM1 Forge plugin. Discover its actual tool schemas and open
-`open_fm1_library` to show the native MCP App. The internal package remains
-`fm1-app-library`; do not create another plugin or substitute a website tab for
-the native panel.
+Use open_fm1_library from the installed plugin. Keep its Site, plugin identity and private audience; the internal package remains fm1-app-library. Show the native MCP App rather than a website tab.
 
-1. Check the current panel's Forge branding and connection. Request passive
-   status and packages when needed, then inspect their original saved request
-   IDs. A request being accepted is not proof of device readiness.
-2. Show the user's native plugin settings and the panel's available extension
-   actions: configuration drafts, file editing, composer references, chat
-   context, current/new conversations and editable drafts. Features depend on
-   the host's advertised capabilities. Do not claim an unavailable feature
-   succeeded; retain the displayed copy/download fallback.
-3. Explain that saved configuration drafts are design data. Saving or opening
-   one does not create a local project directory, compile firmware or write
-   the device. Read local repository instructions before any build.
-4. For the first device workflow, install and verify the diagnostic baseline,
-   test controls/LCD/audio, then create a new local firmware project using the
-   HAL and USB recovery starter. Read the companion `fm1-app-library` skill for
-   the protected transfer and generator workflow.
+1. Inspect Direct device access. Available APIs and allowed document policy are not device permission, identity or transfer acceptance.
+2. Let the user choose Connect USB serial or Connect stock MIDI and grant browser device access. Normal hardware communication runs in foreground panel JavaScript. Do not install or start Python/Node bridge, relay or helper processes, or auto-open devices on startup.
+3. Serial verifies a known FM1 firmware identity and supports read-only status. Stock MIDI updating requires the exact local official V15 package, reviewed metadata and the panel's explicit confirmation. Keep package bytes in the browser. Unknown attempts require their original job/package; never automatically resume or repeat an upgrade.
+4. Configuration and Ask Codex to build request design/code work, not a device write. Preserve native settings, files, composer references and current/new chat choices with copy/download fallbacks.
+5. Existing UBOOT uses mass storage, a protected standard WebUSB class. Treat it as manual recovery, not a working browser-only flash path. Old bridge transfers/imports are legacy workflows, not the normal panel.
 
-Keep the existing Site, plugin identity, private audience, saved jobs and local
-bridge. Do not change permissions, start a firmware transfer, open the vendor
-updater or send a new conversation message merely to demonstrate onboarding.
-Firmware writes still require review of the exact package and the user's
-confirmation in the native panel. Do not call app-only confirmation tools
-from chat. Leave uncertain jobs available for inspection and preserve rollback.
+Preserve rollback and uncertain transfer evidence. A ready package does not prove startup, display, sound or controls. Never call legacy app-only confirmation tools from chat. Read the companion Forge skill and repository instructions before builds or separately requested recovery.

@@ -3,7 +3,7 @@
   "author": {
     "name": "Keitarou Kondou"
   },
-  "description": "FM1 diagnostic firmware, module configuration and custom firmware projects through the hosted Forge plugin panel.",
+  "description": "Direct browser MIDI and serial, reviewed stock updates, graphical firmware modules and Codex project builds.",
   "extensions": {
     "com.openai": {
       "interface": {
@@ -15,12 +15,12 @@
         "category": "Productivity",
         "composerIcon": "./assets/fm1-tab-light-128.png",
         "composerIconDark": "./assets/fm1-tab-dark-128.png",
-        "defaultPrompt": "Open my FM1 App Library and check the connection and available apps.",
+        "defaultPrompt": "Open FM1 Forge and connect FM1 directly in the native panel.",
         "developerName": "Keitarou Kondou",
         "displayName": "FM1 Forge",
         "logo": "./assets/fm1-tab-light-128.png",
         "logoDark": "./assets/fm1-tab-dark-128.png",
-        "longDescription": "Install the diagnostic baseline, test controls, LCD and audio, configure USB/system and user modules graphically, and ask Codex to build a custom firmware project. The native panel has a plain black default, optional colours and saved transfer progress. Serial-to-UBOOT and direct UBOOT use validated private application packages; official .fwsc/SysEx updates use the vendor updater.",
+        "longDescription": "Connect FM1 using browser MIDI or USB serial without a local bridge process. Review the exact official stock package before a SysEx update, configure firmware modules graphically, and ask Codex to build. Keep local firmware bytes in the browser and preserve durable recovery evidence. Existing UBOOT mass-storage recovery remains manual.",
         "shortDescription": "Build and test FM1 firmware"
       },
       "onboardingSkill": "./skills/fm1-forge-setup/SKILL.md"
@@ -29,5 +29,5 @@
   "homepage": "https://fm1-app-library.keitark.chatgpt.site/",
   "name": "fm1-app-library",
   "repository": "https://github.com/Keitark/fm1-marketplace-plugin",
-  "version": "3.1.4"
+  "version": "3.2.0"
 }

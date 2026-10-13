@@ -1,14 +1,16 @@
 # FM1 Forge native extensions
 
-Forge 3.1.4 uses the official OpenAI MCP Extensions TypeScript SDK on both the
-hosted MCP server and the native MCP App. ChatGPT Sites still hosts the server
-and UI. The local relay continues to connect saved requests to the FM1 bridge.
+Forge 3.2.0 uses the official OpenAI MCP Extensions TypeScript SDK on the
+hosted MCP server and native MCP App. ChatGPT Sites hosts the server and UI.
+The default hardware path executes JavaScript in the panel through Web Serial
+and Web MIDI; it uses no Python/Node helper, relay or Startup process. The
+hosted MCP still supplies owner settings, configuration drafts and resources.
 Browser WebMCP is a separate interface and does not discover the native panel.
 
 The panel build freezes its browser runtime strings before production server
 minification. Changes to those source runtimes require `npm run build:panel`;
 contract tests reject stale generated strings and execute the minified UI.
-The canonical source UI resource is `ui://fm1/forge-panel-v14.html`, with prior
+The canonical source UI resource is `ui://fm1/forge-panel-v18.html`, with prior
 resource aliases retained.
 
 ## Official SDK source
@@ -26,10 +28,10 @@ license, build procedure and hash. MCP Server 2.3.1, MCP Apps 1.7.5 and MCP SDK
 | --- | --- |
 | Global sidebar | Open Forge, with a quick action for configuration setup. |
 | Conversation panel | Open the native Forge interface alongside the chat. |
-| Plugin settings | Persist owner-specific appearance, transfer-route preference and project defaults. |
+| Plugin settings | Persist owner-specific appearance and project defaults; retained legacy transfer preferences do not drive direct device access. |
 | Project files | View and edit `.fm1-forge.json` through host-managed resources. |
 | Display modes | Support inline/fullscreen presentation when the host permits it. |
-| Deep links | Navigate to project, catalog, job and supported panel sections. |
+| Deep links | Navigate to projects, catalog and supported sections; legacy job resources remain compatibility data. |
 | Model context | Attach a reviewed configuration, restore it on remount, and clear it explicitly. |
 | Messages | Send to the active/new conversation or prepare an editable draft. |
 | Local files | Open a real user-selected file through the host's file API. |
@@ -51,7 +53,7 @@ entrypoint. The global shortcut opens its own app view and conversation
 instance. Expanding a model-generated app card uses another host rendering
 route; its tab icon may be supplied by Codex rather than the tool's icons.
 
-Forge 3.1.4 supplies a separate FM1 tab outline with an LCD, knobs, pads and
+Forge supplies a separate FM1 tab outline with an LCD, knobs, pads and
 keys. Its transparent interior preserves these features when Codex masks the
 icon. Light and dark 128×128 PNGs are advertised on opening tools, quick actions
 and server metadata; matching packaged composer/logo assets use the same mark.
@@ -71,64 +73,94 @@ snapshot do not prove that a later settings RPC completed. An unavailable tool
 scope requires refreshing the existing connection metadata, not weakening
 permissions or recreating the plugin.
 
-## Connection freshness
+## Direct connection and host permission
 
-The current source panel is `ui://fm1/forge-panel-v14.html`; older resource aliases
+The current source panel is `ui://fm1/forge-panel-v18.html`; older resource aliases
 remain served for installed descriptors. OpenAI treats UI resource URIs as cache
 keys. A host with old registered descriptors may require refreshing the existing
-connection metadata before a newly opened panel selects v14. Reopening alone does
+connection metadata before a newly opened panel selects v18. Reopening alone does
 not prove that updated scripts loaded. See [OpenAI UI guidance](https://developers.openai.com/plugins/build/chatgpt-ui).
 
 Forge paints its selected background and pattern on an app-owned full-viewport
 shell. Native hosts may make the document canvas transparent; headings, controls,
 gaps and footer remain on the Forge surface. Host chrome retains the Codex theme.
 
-Normal Forge panels refresh passive inventory while visible,
-share one unresolved status request, and check immediately on return or network
-recovery. Hidden panels pause network checks; closing the panel cancels timers
-and subscriptions. File and native-form entrypoints do not start device polling.
-The monitor preserves selected packages, project edits, approvals and saved-job
-progress, and does not fetch the package catalog every five seconds.
+MCP Extensions settings/file/message capabilities do not themselves grant USB
+or MIDI permission. The panel separately checks its secure context, actual API
+presence and permissions policy. Device access begins only through a trusted
+**Connect USB serial** or **Connect stock MIDI** action. Exposed APIs and passing
+injected-host tests are separate from actual permission and device acceptance.
 
-`relay.connected` describes the local service heartbeat, not FM1 presence.
-`inventory_status` reports freshness separately, with a 15-second maximum age.
-Successful status results receive a Site-controlled receipt timestamp; freshness
-also considers original request creation, so journaled results first delivered
-after an outage cannot become current simply by arriving late. Failed/unknown
-newer observations invalidate an older success. Legacy results without a receipt
-timestamp remain saved history. RPC failures show unavailable/stale status, not
-proof that the physical device was unplugged. Automatic routing and official
-updater and stock SysEx review require fresh inventory; confirmation and device-side checks
-remain necessary.
+`BrowserSerial` requests only VID `3654` / PID `5155`, checks the selected USB
+identity, opens 115200 baud and recognizes exact known HELLO profiles. The
+existing CDC readiness gate requires one DTR assertion, with RTS false; there
+are no reset pulses. Refresh sends only the selected firmware's read-only
+status command. The API provides no arbitrary commands, STOP, UBOOT or custom
+flash operation. Unknown firmware, malformed records and bounded read timeouts
+close the connection.
 
-## Stock SysEx and local JavaScript
+Selected-device events update presence after a connection is authorized. No
+device permission, open or automatic replacement occurs at startup or refresh.
+The confirmed label stays steady while a small circle blinks; the full heading
+does not become “Checking connection.” The panel does not mount Hardware
+activity or submit input-sampling requests. Closing the panel releases its
+serial connection and subscriptions. Stock MIDI refresh reads authorized
+endpoint metadata rather than sending another identity query.
 
-The MCP App UI executes JavaScript in its host sandbox. Stock firmware transfer
-uses a separate local Node 22 worker with `@julusian/midi` 3.8.1; JavaScript in
-the rendered panel does not itself acquire the Windows MIDI/USB driver path.
-Python continues to serve the authenticated bridge/relay and existing protected
-serial/UBOOT workflow for custom firmware.
+## Browser stock SysEx
 
-`prepare_fm1_stock_update` stages the locally pinned official V15 package and
-fresh exact indexed MIDI pair. `confirm_fm1_stock_update` is app-only, consumes
-the displayed one-use approval and queues the original durable job ID. Remote
-arguments cannot supply paths, executable names, MIDI bytes or a package URL.
-The relay's independent `allow_stock_update` capability defaults disabled.
-Local configuration selects the Node binary and V15 package; the worker
-revalidates the fixed size/hash and model handshake before transfer.
-New-update readiness requires normal `sysex` mode. Already-OTA inventory
-disables new review and directs recovery to the original local attempt;
-explicit CLI resume is separate and retains the original journal identity.
+The direct stock path is in `site/lib/browser-stock/`. Its JavaScript runs in
+the panel and calls standard Web MIDI; no separate JavaScript runtime is
+installed and no helper, Node module, MCP queue or local HTTP bridge performs
+the transfer. **Connect stock MIDI** requests SysEx access under a trusted
+gesture and exclusive Web Lock, selects an exact unique FM1 pair and checks its
+model identity. Generic USB Composite Device names are rejected because Web
+MIDI does not provide trusted USB-interface correlation.
 
-Passive status enumeration never opens MIDI endpoints or sends identity queries.
-The worker's `probe` operation means enumeration only and reports
-`identity_verified:false`. Active transfer reports compact phase/progress metadata
-and restores its original ID when the panel reopens; a lost response never causes
-resubmission. Successful stock transfer reports `transfer_finished:true`,
-`boot_identity_verified:true` and `readback_verified:false`. It invalidates the
-protected baseline and cached diagnostics proof; unknown outcomes block later
-writes. The vendor M-UPGRADE GUI review/handoff remains a separate compatibility
-flow and cannot consume a stock approval.
+The user chooses an official V15 `.fwsc` File. WebCrypto validates the pinned
+`FM-1_015` package: 699,956 bytes, SHA256
+`db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a`.
+Bytes stay inside the panel and are neither fetched nor uploaded by the updater.
+The UI displays that digest, current identity and exact MIDI pair before a
+second trusted **Install stock firmware** confirmation.
+
+Writing requires strict IndexedDB durability and an exclusive cross-tab Web
+Lock within the same browser origin/storage scope. The immutable reviewed
+request and active phase commit before an UPGRADE send. Missing locks, storage
+or durability blocks writing; there is no memory/localStorage fallback. The
+storage report contains the actual origin and persisted UUID sentinel. Native
+cross-tab/reopen acceptance must verify this real scope; a facade test cannot
+prove the host's partitioning or retention.
+
+An active or unknown journal record blocks a new update. Explicit recovery
+requires the same original job/review IDs and package, with a fresh exact
+`ota-FM-1` identity. Reopening, refreshing and endpoint events never resume or
+retry a write. Successful protocol completion reports `transfer_finished:true`,
+`boot_identity_verified:true` and `readback_verified:false` after confirming
+`FM-1_015`. This is separate from physical LCD/sound/control acceptance and a
+full flash readback. A prior custom-writer baseline must be re-established
+before another custom write.
+
+The current CFW exposes COM4 CDC without stock MIDI; the physical stock/SysEx
+test remains pending. Actual native permissions, storage and device evidence
+are recorded in [direct access](DIRECT_DEVICE_ACCESS_20261013.md) and
+[stock update](STOCK_SYSEX_20261013.md).
+
+## Browser-local app sets
+
+`createBrowserLibrary` imports the existing catalog JSON export format directly
+from explicitly selected browser Files. Sets contain 1–8 bundles up to 1.5 MB
+each, with a canonical base64 1 MiB image and exact image SHA256. The complete
+set is validated before an atomic IndexedDB save. Safe relative paths,
+immutable IDs, bounded metadata and baseline-hash syntax are enforced. Listing
+rechecks stored Blob hashes; removal affects only browser copies and keeps
+shared packages and original source files.
+
+Firmware Blobs never enter a host resource, server tool call or network request.
+The UI renders only metadata, with `ready:false`, `imported_unverified`,
+`manual_uboot` and `device_baseline_verified:false`. Image hash validation does
+not prove that a package matches the connected unit. Storage belongs to the
+browser origin/profile; unavailable IndexedDB does not fall back to memory.
 
 The everyday panel opens the module graph, collapses the optional 01–04 guide,
 and omits request-history tables and manual job-ID inspection. New projects
@@ -142,10 +174,11 @@ own capture test.
 ## Drafts and file editing
 
 A saved configuration draft is owner-scoped design data. It is not a local
-project directory, compiled firmware or a completed device transfer. Keep the
-existing diagnostic proof gate before requesting the normal firmware project
-handoff. The protected transfer still reviews an exact package digest and
-requires human confirmation separately.
+project directory, compiled firmware or a completed device transfer. Direct
+drafting and **Ask Codex** do not require the former diagnostics proof gate.
+The host action hands configuration to Codex for finite local build work; it
+does not create a connection helper or approve a device write. Custom package
+and verified current-unit baseline review remain separate from that handoff.
 
 File handlers receive an opaque resource URI. Only the opened resource can be
 saved, only when the host marks it writable, and only after an explicit Save.
@@ -181,8 +214,23 @@ and platform support; passing a mocked host test is reported separately from
 a successful action in Codex. No extension test authorizes or performs a
 firmware flash.
 
-The panel no longer mounts a Hardware activity dashboard or submits input
-sampling requests. Passive `get_fm1_status` refreshes keep the last confirmed
-label and show a small blinking circle. Freshness still gates firmware actions;
-new confirmed observations update the label. The read-only telemetry API
-remains available to explicit tool calls independently of the panel.
+The 3.2.0 source passed 417 Site tests with no skips, TypeScript checking and
+the production build. The new Forge UVC candidate remains unflashed; the
+ProTracker capture and October 12 CPU benchmark are separate hardware receipts.
+
+## Retained legacy bench APIs
+
+The previous Python bridge/relay, protected serial/UBOOT writer, local Node
+stock worker and vendor M-UPGRADE handoff remain compatibility operations.
+Their saved job receipts, one-use approvals and unknown-outcome latches are
+preserved. Legacy `get_fm1_status` is passive inventory and `relay.connected`
+means the service heartbeat, not physical FM1 presence. These APIs are not
+the 3.2.0 panel's automatic detection or transfer path.
+
+UBOOT uses a vendor mass-storage protocol outside standard Web Serial/Web MIDI,
+and direct CDC COMMIT remains blocked. A custom flash therefore uses an
+explicitly authorized manual/legacy bench workflow with its own protected
+package and baseline review. The default panel neither starts those services
+nor silently falls back to them. The old Windows helper Startup entry is
+disabled reversibly. See [legacy relay setup](SITE_RELAY.md) and the dated
+[verification receipts](VERIFICATION.md) when deliberately using that path.

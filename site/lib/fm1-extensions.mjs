@@ -36,7 +36,7 @@ function serializeProject(row){return {id:row.id,title:row.title,slug:row.slug,c
 export async function forgeGate(env,owner){
   const baseline=await database(env).prepare('SELECT job_id,sha256,verified_at FROM forge_baselines WHERE user_id=?').bind(owner).first();
   const verified=!!(baseline&&ID.test(baseline.job_id)&&/^[a-f0-9]{64}$/.test(baseline.sha256)&&baseline.verified_at>0);
-  return {diagnostics_verified:verified,can_start_project:verified,message:verified?'Verified diagnostics permit starting a project. Every build and transfer still needs its own validation.':'Save a configuration draft now. Install and verify diagnostics before starting a firmware project.'};
+  return {diagnostics_verified:verified,can_start_project:verified,message:verified?'Recorded diagnostics proof is historical evidence. Configure and request a build now; device installation needs current-unit validation.':'Configure a draft and use Ask Codex to request a build. Device installation remains separate and requires current-unit validation.'};
 }
 export async function readForgeSettings(env,owner){
   const rows=(await database(env).prepare('SELECT setting_key,value FROM forge_settings WHERE user_id=?').bind(owner).all()).results;

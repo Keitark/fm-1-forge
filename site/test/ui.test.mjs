@@ -25,6 +25,10 @@ function minifiedPanelHtml(){
   })();
 }
 async function panel({html=UI_HTML,embedded=false,initial=true,serverTools=true,hostMessages=false,hostRejectMessage=false,baseline=null,catalogValue=null,inventory=null,official=false,stock=false,loseConfirmationReply=false,jobData=null,beforeCall=null,nativeControls=false,omitPlanJobId=false,preferences=null,storageBlocked=false,legacyPreferences=null,nativeExtensions=false,initialFile=null,fileInputFirst=true,initialToolResult=null,nativeStartupDelay=1}={}){
+  // Historical helper transport contracts remain exercised through test-local
+  // injection. The shipped panel has no switch to enable helper autoload;
+  // browser-devices-ui.test.mjs verifies its actual direct-mode default.
+  html=html.replace('const directMode=true;','const directMode=false;');
   const normalInventory=inventory||{device:{serial_ports:[{port:'COM10'}],update_mode:{mode:'serial',app_entry_method:'serial'},official_update:{configured:true,available:false,sha256:digest}},engine:{active:null,blocked_unknown:false}};
   const env=database();connect(env,true,official,stock);cacheCatalog(env,'alice',catalogValue||undefined);cacheInventory(env,'alice',normalInventory);
   const seededTasks=env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY id').all();

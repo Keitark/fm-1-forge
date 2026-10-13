@@ -1,16 +1,17 @@
 # FM1 Forge
 
-The private FM1 App Library plugin is now **FM1 Forge 3.1.4**: install an asset-free
-diagnostic baseline, test hardware, configure USB/HAL/user modules graphically,
-then ask Codex to create and build a firmware project. It preserves the existing
-plugin ID, hosted MCP endpoint, local protected writer and durable transfer receipts.
-The panel defaults to a plain, opaque black background. It uses the official
-OpenAI MCP Extensions SDK for native settings, project file editing, composer
-mentions, configuration forms, deep links and chat context/message actions.
+**FM1 Forge 3.2.0** opens a native Codex plugin panel for graphical firmware
+configuration, browser-local app sets and direct FM1 connections. Its default
+device path runs JavaScript inside the panel through Web Serial and Web MIDI.
+No separate JavaScript installation, Python/Node helper, local relay or startup
+process is required for this flow. The existing plugin ID and owner-private
+Site remain in use. The panel owns its opaque black background and retains the
+official OpenAI MCP Extensions SDK for settings, drafts, project files, composer
+mentions, native forms and chat actions.
 
 Read the current [Forge guide](docs/FORGE_GUIDE.md). The owner-private Site hosts
 the UI and MCP endpoint. The current source resource is
-`ui://fm1/forge-panel-v14.html`. The same private
+`ui://fm1/forge-panel-v18.html`. The same private
 [FM1 Forge plugin](https://chatgpt.com/plugins/plugins_6ac9ad3fc1c8819195580a4747c50052)
 was updated in place.
 
@@ -21,28 +22,81 @@ Use those dated receipts for actual deployment and hardware acceptance.
 Older expanded cards can retain a previous UI; open a fresh native Forge tab
 to check the updated controls. A package release does not qualify hardware.
 
-The main panel opens the graphical editor, keeps onboarding in a collapsed guide,
-and shows progress for the active operation, without request-history tables or
-manual job-ID entry. Optional UVC selects the 256×240 YUY2 / 5 fps transport
-physically confirmed in the ProTracker session; the new Forge combination
-remains unflashed and needs its own capture test. Canonical v3 drafts import
-earlier v1/v2 files with UVC disabled.
+Use **Connect USB serial** for known custom firmware diagnostics or **Connect
+stock MIDI** for the official update route. Device permission and connection
+require an explicit user action. Serial opens only the FM1 diagnostics USB IDs,
+verifies a known firmware identity and sends its read-only status command on
+refresh. MIDI selects an exact FM1 pair and verifies its identity. Presence
+changes use the authorized connection's events; startup never opens a device.
+The confirmed status stays steady during refresh, with a small blinking circle.
+The panel has no hardware-activity dashboard, request-history table or manual
+job-ID inspector.
+
+**Apps library → Add local set** imports existing catalog bundle JSON files
+directly into browser IndexedDB. Images are bounded and SHA256-checked before
+the complete set is saved. Firmware Blobs stay in the browser; only metadata
+is rendered. Import does not verify a device baseline or enable custom flashing.
+Custom package cards remain imported/unverified and use a separate manual
+UBOOT workflow. Browser storage belongs to this origin/profile and is subject
+to host retention; unavailable storage has no in-memory substitute.
+
+The graphical editor opens by default, and **Getting started** is collapsed.
+CDC/UBOOT recovery and all five user HALs default enabled. Optional UVC selects
+256×240 YUY2 / 5 fps using the transport physically confirmed in ProTracker;
+the new Forge combination remains unflashed and needs its own capture test.
+Canonical schema v3 imports earlier v1/v2 drafts with UVC disabled. **Ask Codex**
+hands off the reviewed configuration for project creation and a local compiler
+build; preparing or building a project does not authorize flashing.
 
 New projects preserve `sdk-default`, measured at 360 MHz on the tested unit.
 The panel shows that CPU setting as read-only and offers no new 320 MHz choice.
 Imported `sdk-320` drafts retain their original configuration and stock-DMA
 restriction; they are compatibility data, not a recommended speed increase.
 
-**Stock firmware via SysEx** reviews the exact locally pinned official V15
-`.fwsc` package and stock MIDI route, then runs the Node.js native MIDI worker.
-Python still serves the local bridge/relay and protected serial/UBOOT route for
-custom firmware. The vendor M-UPGRADE GUI handoff remains a separate option.
-Stock transfer completion and reboot identity are checked separately from full
-flash readback, which the SysEx path does not provide. Physical stock-path
-acceptance belongs in the dated verification receipt.
+**Stock firmware · V15 SysEx update** accepts the user-selected, exact official
+V15 `.fwsc` package in the panel. Connect stock MIDI, review its digest and
+selected pair, then explicitly confirm **Install stock firmware**. Transfer
+runs through Web MIDI, with an IndexedDB attempt journal and exclusive Web Lock;
+missing durable storage or locks disables writing. An uncertain attempt blocks
+new updates and requires explicit recovery of that original attempt in verified
+OTA mode. Completion verifies `FM-1_015` after reboot, not full flash readback.
 
-The records below describe earlier App Library releases. Use the Forge guide
-and dated verification entries for the current workflow.
+The current custom firmware exposes CDC on COM4 and no stock MIDI interface;
+the physical stock/SysEx test remains pending. Browser API presence and offline
+tests do not establish permission or hardware acceptance. See
+[direct-device evidence](docs/DIRECT_DEVICE_ACCESS_20261013.md) and
+[stock update evidence](docs/STOCK_SYSEX_20261013.md) for the actual checks.
+UBOOT's vendor mass-storage protocol is outside standard Web Serial/Web MIDI;
+custom flashing and the retained protected writer/vendor GUI are separate,
+explicitly authorized legacy operations. The old helper startup entry is
+disabled reversibly; Forge's normal flow does not launch it.
+
+## Current source and development checks
+
+- `site/lib/fm1-browser-serial.mjs`: explicit, bounded read-only CDC diagnostics.
+- `site/lib/browser-stock/`: browser SysEx protocol, package validation, Web MIDI,
+  strict IndexedDB journal and cross-tab device lock.
+- `site/lib/fm1-browser-library.mjs`: browser-local catalog imports and firmware Blobs.
+- `site/lib/fm1-browser-devices-ui.mjs`: trusted connection, review and confirmation controls.
+- `site/lib/fm1-module-graph.mjs`: drag/drop modules and validated schema-v3 configuration.
+- `site/lib/fm1-app-host.mjs` and `fm1-extension-host.mjs`: native host and extension actions.
+- `site/lib/fm1-server.mjs`: owner-private hosted MCP, settings, drafts and resources.
+
+From `site`, development checks use Node; users do not install Node to use the panel:
+
+```powershell
+node --test test/*.test.mjs
+npx --no-install tsc --noEmit
+npm run build
+```
+
+The final 3.2.0 source passed 417 Site tests with no skips, TypeScript checking
+and the production build. Live permission, storage partition and device results
+are recorded separately in the dated evidence. Legacy Python tests remain for
+the retained optional bench implementation, rather than the normal panel path.
+
+The records below describe earlier App Library releases and their helper-based
+architecture. They are historical receipts, not current setup instructions.
 
 ## Earlier App Library implementation
 
@@ -85,10 +139,10 @@ hardware acceptance; saved inventory does not prove current physical state.
 The app and panel icon use an original black/mint
 FM-1 silhouette based on the physical front-panel arrangement.
 
-The latest installed-host calls are unavailable despite active v6: native
+At the historical v6 check, installed-host calls were unavailable: native
 **Refresh** rejects `open_fm1_library` as outside its trusted tool scope, and a
-repeated assistant open returned **Unknown tool**. The cause and recovery are
-unconfirmed; reopening is not a verified fix. See
+repeated assistant open returned **Unknown tool**. The cause and recovery were
+unconfirmed at that check; reopening was not a verified fix. See
 [host availability issue #6](https://github.com/Keitark/fm1-marketplace-plugin/issues/6).
 
 The v6 Appearance controls were published on 2026-10-10 at 11:27 JST; native
@@ -112,7 +166,7 @@ the connected metadata panel, planning, saved-job recovery, and progress interpr
 
 `ChatGPT/Codex → private Site Worker → D1 queue ← outbound Windows relay → existing FM1 bridge → established protected session → FM1`
 
-## Source layout
+### Legacy source layout
 
 - `tools/jieli-wl82/remote_store.html`: app library, package selection, write confirmation, and job progress.
 - `remote_bridge.py`: loopback HTTP service, authenticated fixed operations, durable jobs, and uncertainty handling.
@@ -139,7 +193,7 @@ integration changes. Private packages, ROMs, songs, firmware images,
 credentials, session descriptors, job receipts, bundled Python, and vendor
 USB tooling are excluded.
 
-## Offline verification
+### Legacy offline verification
 
 Use Python 3.11 or newer and a Node.js runtime with `node:test`. The tests use synthetic data, temporary directories, mocked subprocesses, and loopback HTTP. They do not open the FM1 device.
 
@@ -173,7 +227,7 @@ remote modern-protocol acceptance. The seven WebMCP tool contracts are covered
 by the Site tests; the earlier six-tool release was also checked in a supported
 browser against a synthetic HTTP relay. See [WEBMCP.md](docs/WEBMCP.md).
 
-## Local operation
+### Legacy local operation
 
 The bridge binds to `127.0.0.1:9770`. The store and `/v1/` API share the same origin. The store token is held in page memory; every data/operation request requires authentication.
 
@@ -181,7 +235,7 @@ Windows device operations require a separately prepared, verified protected flas
 
 Do not start a duplicate bridge over an existing listener or redirect its state folder to this repository. Preserve the existing job state and unknown-outcome latch. Tailscale Serve can provide private HTTPS for the same-origin store. See the remote-debug reference before changing a running setup.
 
-## Site and plugin operation
+### Legacy Site and plugin operation
 
 The Site offers catalog and inventory refresh, offline app plans, exact-ID
 recovery tools, automatic app-switch review and stock SysEx review. The native

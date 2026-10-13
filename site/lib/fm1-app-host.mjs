@@ -2,11 +2,14 @@ import { App, applyHostStyleVariables } from '@modelcontextprotocol/ext-apps';
 import { OpenAIExtensions } from '@openai/mcp-extensions/app';
 import { OpenAIFileEntrypointInputSchema } from '@openai/mcp-extensions';
 import { createResourceEditor, parseForgeRoute, validateLocalPath } from './fm1-extension-host.mjs';
+import { browserHardwareCapabilities } from './fm1-browser-hardware.mjs';
+import './fm1-browser-devices-ui.mjs';
+import './fm1-browser-library.mjs';
 
 // These official SDKs are bundled locally into the MCP App resource.
 export class FM1PluginHost {
   constructor({onToolResult=()=>{},onToolInput=()=>{},onTeardown=()=>{},onContext=()=>{}}={}) {
-    this.app=new App({name:'FM1 Forge',version:'3.1.3'},
+    this.app=new App({name:'FM1 Forge',version:'3.2.0'},
       {availableDisplayModes:['inline','fullscreen']},{autoResize:false});
     this.extensions=new OpenAIExtensions(this.app);
     this.closed=false;this.transportClosed=false;this.resources=new Set();
@@ -16,6 +19,7 @@ export class FM1PluginHost {
     this.app.onteardown=async()=>{this.closed=true;this.releaseResources();onTeardown();return {};};
   }
   context(){return this.app.getHostContext()||{};}
+  browserHardware(){return browserHardwareCapabilities();}
   applyStyles(){const values=this.context().styles?.variables;if(values&&typeof document!=='undefined')applyHostStyleVariables(Object.fromEntries(Object.entries(values).filter(([key])=>/^--(?:color|font|border|spacing|shadow)-/.test(key))));}
   features(){return {message:!!this.extensions.message,coreMessage:!!this.app.getHostCapabilities()?.message?.text,
     modelContext:!!this.extensions.modelContext,files:!!this.extensions.files,resources:!!this.extensions.resources,

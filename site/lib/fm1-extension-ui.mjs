@@ -36,7 +36,7 @@ function createExtensionUI({el,call,host,embedded,signal,prepareProject,applyCon
   function snapshot(data){if(disposed)return;if(data?.forge?.projects)projectList(data.forge.projects);if(data?.forge?.settings)settings(data.forge.settings);}
   async function loadProject(id){
     const result=await call('get_fm1_project',{project_id:id},signal);if(disposed)return;
-    const config=window.FM1Forge.normalizeProjectConfig(result.project?.config);selectedProject={...result.project,config};applyConfig(config);el('forge-designer').open=true;status('forge-draft-status','Loaded '+result.project.title+'. Configuration only; building still requires a verified diagnostics baseline.');
+    const config=window.FM1Forge.normalizeProjectConfig(result.project?.config);selectedProject={...result.project,config};applyConfig(config);el('forge-designer').open=true;status('forge-draft-status','Loaded '+result.project.title+'. Configuration draft; use Ask Codex to request a build. Device installation remains separate.');
   }
   async function listProjects(){const data=await call('list_fm1_projects',{},signal);if(!disposed){projectList(data.projects);status('forge-draft-status','Saved configuration drafts refreshed.');}}
   async function saveDraft(){const prepared=prepareProject(),args={config:window.FM1Forge.normalizeProjectConfig(prepared.config),clock_opt_in:el('forge-clock-opt-in').checked===true};if(selectedProject)args.project_id=selectedProject.id;const result=await call('save_fm1_project',args,signal);if(disposed)return;selectedProject=result.project;status('forge-draft-status','Configuration draft saved. No build or transfer started.');await listProjects();}
