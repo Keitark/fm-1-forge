@@ -8,7 +8,7 @@ Browser WebMCP is a separate interface and does not discover the native panel.
 The panel build freezes its browser runtime strings before production server
 minification. Changes to those source runtimes require `npm run build:panel`;
 contract tests reject stale generated strings and execute the minified UI.
-The canonical UI resource is `ui://fm1/forge-panel-v12.html`, with prior
+The canonical source UI resource is `ui://fm1/forge-panel-v14.html`, with prior
 resource aliases retained.
 
 ## Official SDK source
@@ -73,17 +73,17 @@ permissions or recreating the plugin.
 
 ## Connection freshness
 
-The updated panel is `ui://fm1/forge-panel-v8.html`; v7 and older resource aliases
+The current source panel is `ui://fm1/forge-panel-v14.html`; older resource aliases
 remain served for installed descriptors. OpenAI treats UI resource URIs as cache
 keys. A host with old registered descriptors may require refreshing the existing
-connection metadata before a newly opened panel selects v7. Reopening alone does
+connection metadata before a newly opened panel selects v14. Reopening alone does
 not prove that updated scripts loaded. See [OpenAI UI guidance](https://developers.openai.com/plugins/build/chatgpt-ui).
 
 Forge paints its selected background and pattern on an app-owned full-viewport
 shell. Native hosts may make the document canvas transparent; headings, controls,
 gaps and footer remain on the Forge surface. Host chrome retains the Codex theme.
 
-Normal Forge panels refresh passive inventory every five seconds while visible,
+Normal Forge panels refresh passive inventory while visible,
 share one unresolved status request, and check immediately on return or network
 recovery. Hidden panels pause network checks; closing the panel cancels timers
 and subscriptions. File and native-form entrypoints do not start device polling.
@@ -98,8 +98,46 @@ after an outage cannot become current simply by arriving late. Failed/unknown
 newer observations invalidate an older success. Legacy results without a receipt
 timestamp remain saved history. RPC failures show unavailable/stale status, not
 proof that the physical device was unplugged. Automatic routing and official
-updater review require fresh inventory; confirmation and device-side checks
+updater and stock SysEx review require fresh inventory; confirmation and device-side checks
 remain necessary.
+
+## Stock SysEx and local JavaScript
+
+The MCP App UI executes JavaScript in its host sandbox. Stock firmware transfer
+uses a separate local Node 22 worker with `@julusian/midi` 3.8.1; JavaScript in
+the rendered panel does not itself acquire the Windows MIDI/USB driver path.
+Python continues to serve the authenticated bridge/relay and existing protected
+serial/UBOOT workflow for custom firmware.
+
+`prepare_fm1_stock_update` stages the locally pinned official V15 package and
+fresh exact indexed MIDI pair. `confirm_fm1_stock_update` is app-only, consumes
+the displayed one-use approval and queues the original durable job ID. Remote
+arguments cannot supply paths, executable names, MIDI bytes or a package URL.
+The relay's independent `allow_stock_update` capability defaults disabled.
+Local configuration selects the Node binary and V15 package; the worker
+revalidates the fixed size/hash and model handshake before transfer.
+New-update readiness requires normal `sysex` mode. Already-OTA inventory
+disables new review and directs recovery to the original local attempt;
+explicit CLI resume is separate and retains the original journal identity.
+
+Passive status enumeration never opens MIDI endpoints or sends identity queries.
+The worker's `probe` operation means enumeration only and reports
+`identity_verified:false`. Active transfer reports compact phase/progress metadata
+and restores its original ID when the panel reopens; a lost response never causes
+resubmission. Successful stock transfer reports `transfer_finished:true`,
+`boot_identity_verified:true` and `readback_verified:false`. It invalidates the
+protected baseline and cached diagnostics proof; unknown outcomes block later
+writes. The vendor M-UPGRADE GUI review/handoff remains a separate compatibility
+flow and cannot consume a stock approval.
+
+The everyday panel opens the module graph, collapses the optional 01–04 guide,
+and omits request-history tables and manual job-ID inspection. New projects
+preserve `sdk-default`, measured at 360 MHz on the tested unit, with a read-only
+CPU summary. Legacy `sdk-320` drafts retain their configuration; no new 320 MHz
+selection is offered. Schema v3 adds optional 256×240 YUY2 / 5 fps UVC using the
+physically confirmed ProTracker transport. Earlier v1/v2 drafts import with UVC
+disabled, and the new Forge firmware combination remains unflashed pending its
+own capture test.
 
 ## Drafts and file editing
 

@@ -6,17 +6,18 @@ Site URL and local bridge remain in use. While the conversation is active, use
 This opens Forge's native conversation tab. The global shortcut opens a separate
 app view; returning to an earlier chat selects that chat's own panel instance.
 
-The current resource is `ui://fm1/forge-panel-v8.html`; older resource aliases
+The current source resource is `ui://fm1/forge-panel-v14.html`; older resource aliases
 remain available. Reopen the native conversation tab after an update.
 The [native extensions guide](MCP_EXTENSIONS.md) describes the official SDK,
 settings, drafts, file editing, mentions, forms and chat handoff. Dated
 deployment and actual native-host checks are in [verification](VERIFICATION.md).
 
-Connection status refreshes automatically every five seconds while the normal
-panel is visible, and checks again when you return to it. **Bench connected**
+Connection status refreshes automatically while the normal panel is visible,
+and checks again when you return to it. **Bench connected**
 means the local relay is running; the separate FM1 status reports USB, MIDI or
-UBOOT presence. Failed checks and inventory older than 15 seconds show an
-unavailable/stale status rather than a current COM port. Hidden panels pause
+UBOOT presence. The last confirmed label stays steady during checks; a small
+blinking circle indicates an update. Inventory older than 15 seconds disables
+firmware actions and shows its age separately. Hidden panels pause
 polling. **Refresh** also reloads package metadata before reviewing a transfer.
 These checks use passive inventory and do not open or program the device.
 
@@ -26,10 +27,9 @@ Saved sets filter the app variants in the panel. Package files stay local;
 importing does not transfer firmware. See [local app sets](LOCAL_APP_SETS.md)
 for supported formats, validation and connection requirements.
 
-Diagnostics installation is still pending. Runtime elevation was canceled;
-no new protected helper or firmware write resulted. A ready protected helper
-and separately confirmed transfer are required before installing diagnostics.
-Build/package checks do not qualify the candidate or hardware.
+A ready protected helper and separately confirmed transfer are required for
+custom diagnostics. Build/package checks do not qualify the candidate or
+hardware; consult the dated verification receipt for completed bench tests.
 
 ## First firmware
 
@@ -70,10 +70,23 @@ capture or a flash protocol. HAL ABI1 exposes all inputs, LCD rendering, audio
 and immutable health snapshots. User code has init/update/render/audio/shutdown
 callbacks, with bounded IRQ audio work and output clipping.
 
-New exports and saved drafts use strict configuration schema v2 with five HAL
-booleans. Existing v1 files/drafts import with all HAL access enabled. Native
+New exports and saved drafts use strict configuration schema v3 with five HAL
+booleans and optional `usb.uvc`. Existing v1/v2 files import with UVC disabled;
+v1 imports also enable all HAL access. Native
 forms, files, context restore and the local firmware generator share this
-contract. Selecting CPU 320 MHz still requires a separate explicit opt-in.
+contract. New projects preserve `sdk-default`; CPU is a read-only summary in
+the panel. Imported legacy `sdk-320` drafts retain their original setting.
+
+**USB video · UVC** adds 256×240 YUY2 screen output at a nominal 5 fps, using
+the transport physically confirmed in the ProTracker session. The 240×240 firmware screen
+has eight black pixels at either side. Video defaults off and does not remove
+CDC/UBOOT or optional UAC. The new Forge combination remains unflashed and needs its own device
+capture test; the ProTracker capture is evidence for the reused transport.
+
+The module editor is expanded by default. **Getting started** holds the optional
+01–04 guide. The main panel omits saved-request history and manual job-ID entry;
+an active transfer shows progress and a resume action if delivery is interrupted.
+Authoritative receipts and exact-ID recovery remain stored by the service.
 
 Download the configuration as `<project-slug>.fm1-forge.json`; the generator
 writes it as `forge.json` inside the new project. **Ask Codex** sends that reviewed
@@ -106,28 +119,54 @@ LCD choices are maintained stock DMA, nominal 15 MHz packed RGB444 and nominal
 30 MHz packed RGB444. Faster presets require the expected bus clock, retain
 async DMA ownership, and expose actual frame rate and error counters.
 
-`sdk-default` preserves boot clocks. `sdk-320` is experimental and requires exact
-clock/bus readback before USB or DMA starts. It is not proven faster than the
-default clock. No unsupported 396/480 MHz setter is offered. Test each nondefault
-profile on the device before relying on timing or claiming higher FPS.
+`sdk-default` preserves boot clocks, measured as 360 MHz on the tested unit.
+On 2026-10-12 both that profile and `sdk-320` completed three matching-checksum
+workloads, with duplex UAC in each final run. 320 MHz was slower than the measured
+360 MHz default. The panel therefore offers no CPU tweak module or new 320 MHz
+selection; the default appears as a read-only summary. These measurements apply
+to the tested unit and do not establish prolonged stability or faster LCD FPS.
 
 The pinned SDK's real setter is `system_clock_set`; `clk_set` is a stub. The
 320 MHz table reports a 53 MHz LSB. The panel and generator therefore reject
-320 MHz combined with the 15/30 MHz LCD presets, which require a 60 MHz LSB.
-Use stock DMA with 320 MHz, or SDK-default CPU with the faster LCD choices.
+legacy 320 MHz configurations combined with the 15/30 MHz LCD presets, which
+require a 60 MHz LSB. Importing an older draft preserves its original clock
+intent rather than silently changing it; stock DMA remains its valid LCD option.
 
 ## Transfer methods and recovery
 
 - **Auto/serial:** identify the normal CDC firmware and explicitly quiesce its
   runtime before entering UBOOT; the protected UBOOT writer installs the package.
 - **Already UBOOT:** use the same protected application writer directly.
-- **Official SysEx:** review a handoff to the locally pinned vendor updater,
-  which accepts official `.fwsc` packages and handles MIDI/OTA transitions.
+- **Stock firmware via SysEx:** review the locally pinned official V15 `.fwsc`
+  package and fresh exact MIDI pair, then confirm once. A local Node 22 worker
+  using native MIDI handles stock SysEx/OTA transfer and reboot identity checks.
+  New updates start from normal stock MIDI mode. Already-OTA mode requires
+  local recovery of the original attempt rather than a new approval.
+- **Vendor updater:** the separate option under connection details opens the
+  locally pinned M-UPGRADE GUI for its manufacturer workflow.
 
 Custom Forge packages are stock-layout application containers, not vendor
 `.fwsc` files. Direct CDC COMMIT remains blocked. A vendor updater opening is
 not a verified firmware update. Preserve unknown jobs, stopped snapshots and
-verified rollback receipts; inspect their exact IDs before another operation.
+verified rollback receipts; resume their original operation before another
+write. The stock action needs a recognized stock MIDI interface: custom CDC
+firmware first needs a separate reviewed stock restore. Generic MIDI names are
+not enabled in the panel by guessing which device is FM1.
+
+The stock package is fixed to `FM-1_015`, 699,956 bytes and SHA256
+`db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a`.
+Package paths and the Node runtime are configured locally, never supplied by
+the hosted page. Stock updating is disabled unless the local relay explicitly
+enables it. Completion reports **transfer finished** and **reboot identity
+verified**; it does not claim full flash readback. A successful stock update
+invalidates the old protected baseline and diagnostic proof. Establish a fresh
+verified baseline before custom firmware writes. An uncertain outcome blocks
+further writes and has no automatic retry.
+
+The native MCP panel runs JavaScript for its UI. Its sandbox does not itself
+provide the Windows USB/MIDI driver connection: stock transfer uses the local
+JavaScript worker, while Python retains bridge/relay orchestration and the
+existing protected serial/UBOOT workflow.
 
 The current module action unlocks from authoritative saved diagnostic transfer
 proof, not a browser preference, app card or simulated preview. Physical control,

@@ -2,8 +2,9 @@
 
 For the current **3.1.4** diagnostic-to-project workflow, black default panel,
 graphical module configuration and all transfer methods, read
-[FORGE_GUIDE.md](FORGE_GUIDE.md). The final private service and plugin release
-are updated. The current resource is `ui://fm1/forge-panel-v6.html`. Open the
+[FORGE_GUIDE.md](FORGE_GUIDE.md). The current source resource is
+`ui://fm1/forge-panel-v14.html`; dated deployment checks are recorded separately.
+Open the
 native conversation tab through **New Tab (+) → More tools… → Plugins and MCPs
 → FM1 Forge** to see configuration drafts, native settings, file editing and
 chat context/draft actions. Read [MCP_EXTENSIONS.md](MCP_EXTENSIONS.md)
@@ -12,10 +13,18 @@ expanded cards can retain earlier UI.
 
 The default is plain, opaque black with **Reset to Forge Black**; thirteen
 palettes and five patterns remain available as local preferences. The module
-designer preserves CDC/UBOOT recovery and lets you select UAC, the LCD preset
-and diagnostics or your own user module. `sdk-320` requires stock DMA; the
-RGB444 presets require SDK-default CPU because they need a 60 MHz LSB, while
-the 320 MHz SDK table supplies 53 MHz.
+designer opens by default, preserves CDC/UBOOT recovery and lets you select UAC,
+optional 256×240 YUY2 / 5 fps UVC screen output, the LCD preset and diagnostics
+or your own user module. New projects preserve `sdk-default`, measured at
+360 MHz on the tested unit; CPU is a read-only summary with no tweak selector.
+Older `sdk-320` drafts remain compatible and retain their stock-DMA restriction.
+The UVC transport was physically confirmed in the ProTracker session; the new
+Forge combination remains unflashed and needs its own capture acceptance.
+
+The main editor is expanded. **Getting started** holds the optional 01–04 guide.
+Saved-request tables and manual job-ID inspectors are removed from everyday
+use. An active transfer shows progress and **Resume progress** if interrupted;
+the service keeps the original receipt and never repeats a write to refresh it.
 
 On 2026-10-12, protected local bench transfers, startup observations and three
 CPU benchmark runs passed for both the preserved SDK-default clock (360 MHz
@@ -45,31 +54,64 @@ visible and checks again on return. Pending status requests are inspected at
 one-second intervals; their relay heartbeat is refreshed independently. A
 successful status cycle promptly starts the next cycle. **Bench connected**
 describes the relay, while the device heading describes FM1 presence. Inventory
-older than 15 seconds is marked stale; **Checking connection** and last-seen
-history do not enable transfer actions. Saved requests, progress and drafts
-remain intact. **Refresh** also reloads package metadata.
+older than 15 seconds is marked stale. A small blinking circle indicates a check
+while the last confirmed heading stays steady. Stale data does not enable
+transfer actions. Saved receipts and drafts remain intact. **Refresh** also
+reloads package metadata.
 
 Freshness uses the local scan time, so time spent waiting in the request queue
 does not make a newly detected connection stale. Replayed old results retain
 their original timestamps. A temporary refresh error preserves a still-fresh
-observation until normal expiry and displays a retry notice. UI resource v8
+observation until normal expiry and displays a retry notice. UI resource v14
 retains all older aliases; close and reopen an existing Forge tab once to load
-it. A fresh native tab confirmed automatic COM4 detection without a full Codex
+it. A fresh native tab previously confirmed automatic COM4 detection without a full Codex
 restart or reinstall.
 
 Reopen the Forge panel once to load the newly published resource. A complete
 Codex restart or plugin reinstall is not required for this hosted UI update.
 
 A newly started bridge provides passive device detection without attaching an
-old flashing helper. Newly started relays keep firmware switching and official
-updater handoff disabled. A protected session
-must be established separately for firmware transfers. The wrapper can be run
+old flashing helper. Newly started relays keep custom firmware switching,
+vendor-updater handoff and native stock SysEx updating disabled. A protected
+session must be established separately for custom serial/UBOOT transfers.
+Stock SysEx uses its separately configured local native Node worker. The wrapper can be run
 again safely and is suitable for a reversible per-user Startup shortcut; it
 does not register startup entries itself. A hidden, normal-user **FM1 Forge
 connection** shortcut was registered in this user's Windows Startup folder on
 2026-10-12. Running the wrapper twice preserved the healthy bridge and relay;
 startup after an actual Windows restart has not yet been tested. Check **Bench
 connected** and fresh device status in Forge after launch.
+
+## Install stock firmware through SysEx
+
+Use **Connection & updates → Stock firmware via SysEx** with one recognized
+stock FM1 MIDI input/output pair. Custom CDC/UBOOT firmware needs a separate
+reviewed stock restore before this route is available. Review the package
+SHA256, identity and exact MIDI names, then click **Install stock firmware**
+once. The review itself does not write anything.
+If FM1 is already in OTA mode, new stock review stays disabled: inspect and
+recover the original transfer locally. This is not a second update submission.
+
+The local worker uses Node 22 and `@julusian/midi` 3.8.1 for the official V15
+`.fwsc` package: `FM-1_015`, 699,956 bytes, SHA256
+`db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a`.
+It checks the package and fresh model handshake, handles the stock SysEx/OTA
+transfer, and checks the reboot identity. Completion does not imply full flash
+readback. A successful stock update invalidates the old protected baseline and
+diagnostic proof; establish a fresh verified baseline before custom writes.
+An unknown outcome requires local recovery review and cannot automatically retry.
+
+The bench owner configures a local JSON file with `nodeBinary`,
+`localPackagePath` and `reviewedSha256`, supplies it as `-StockSysExConfig` to
+`start-remote-bridge.ps1`, and explicitly enables `-AllowStockUpdate` on
+`start-site-relay.ps1`. Preserve existing service state and receipts when
+changing launch settings; launchers do not kill or duplicate a running service.
+The hosted page cannot select local executable paths or transmit arbitrary
+MIDI messages. Python still runs bridge/relay orchestration and the protected
+custom serial/UBOOT route; the stock MIDI writer is JavaScript.
+
+**Connection details & vendor updater** retains the separate M-UPGRADE GUI
+handoff. Opening that GUI does not establish firmware transfer completion.
 
 ## Earlier App Library guide
 
@@ -125,9 +167,9 @@ The [Mint Light / Circuit Grid preview](images/fm1-appearance-mint-light-preview
 and [Royal Violet / Scanlines preview](images/fm1-appearance-violet-preview.png)
 show synthetic embedded-host previews, rather than an actual native bench panel.
 
-## Progress and the latest NES switch (2026-10-10)
+## Historical progress and NES switch (2026-10-10)
 
-The progress bar appears under **Saved requests & progress** when a job is
+In the v6 panel, the progress bar appeared under **Saved requests & progress** when a job was
 selected. With host tools available, the updated UI follows the original job automatically through sector
 verification, full readback and startup. A full sector bar alone does not mean
 the entire operation has finished. Tracking pauses on connection loss, an
@@ -245,11 +287,11 @@ and recovery details.
    and displayed **SHA256**. A blocked package needs bench-side attention.
 3. Click **View plan** to check the selected package offline. This creates a
    saved request and does not write to the device.
-4. Keep the original request and job IDs. Click a row under **Saved requests &
-   progress** to inspect that request, or paste the original 32-character job
-   ID into **Inspect a saved job** and click **Inspect job**. After a timeout or
-   disconnect, resume those IDs instead of submitting another operation.
-   **Refresh** preserves the job ID already entered in the recovery field.
+4. Keep the original transfer identity. The current panel's active
+   **Resume progress** action follows that operation after a timeout or
+   disconnect without another submission. Exact-ID inspection remains
+   available through tools; the old v6 history table and manual job-ID field
+   are historical UI, not current controls.
 
 ## Review an app switch
 
@@ -262,7 +304,7 @@ the bench is ready. The approval expires and can be used once. **Cancel** or
 Escape closes the review and clears its approval. Browser tools can open a
 review; they do not expose a confirmation tool. The panel saves the original
 job ID before submitting confirmation. If the confirmation reply is lost,
-use **Inspect job** with that ID before reviewing another switch; do not
+use **Resume progress** before reviewing another switch; do not
 submit the operation again.
 
 ## Choose the update route
@@ -274,16 +316,17 @@ devices, conflicting modes or a changed mode prevents submission. The approved
 catalog ID and package SHA-256 still identify the custom app to install.
 Auto does not convert an app bundle into an official firmware package.
 
-For official firmware, open its review and confirm the displayed executable
-SHA-256 yourself. The bench must separately enable official-update
-handoff and expose one recognized stock or OTA MIDI input/output pair. The
-confirmed action opens the locally configured M-UPGRADE GUI; select the correct
-official `.fwsc` there and complete the manufacturer workflow locally. The
+For the fixed official V15 package, use the native **Stock firmware via SysEx**
+action described above. Its review binds the package digest and exact current
+MIDI route; the local Node worker performs the update. The separate vendor
+option reviews the pinned executable and opens M-UPGRADE for a manufacturer
+workflow. The
 [manufacturer download page](https://www.m-vave.com/download) lists the generic
 [M-UPGRADE package](https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/pc/M-UPGRADE.zip)
 and [FM-1 V15 firmware](https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/firmware/FM-1.fwsc).
-The older FM1-specific bundle embeds V14, so use the reviewed generic updater
-for the external V15 package.
+The previously downloaded FM1-specific bundle embeds V14; the generic updater
+can select the separately downloaded V15 package. Current downloads still need
+local hash review before use.
 
 A saved successful handoff means the GUI started. It does not establish a
 firmware transfer or verification. Keep its original job ID if any reply is
@@ -291,12 +334,12 @@ lost. Handoff persistently blocks further device jobs because the old baseline
 may no longer describe the FM1. After official completion, the bench owner must
 establish a fresh protected session and verified current-unit baseline while
 preserving the previous state and receipts. There is no remote unblock or
-automatic retry. Direct SysEx writing is not implemented by this integration.
+automatic retry. The native stock path now performs SysEx directly through the
+local JavaScript worker; it is distinct from this GUI-launch receipt.
 
-Automatic mode selection and vendor handoff have offline contract coverage.
-The current native auto review and offline plan are accepted above. Vendor
-transfer and candidate physical acceptance must still be recorded separately
-for the connected unit.
+Automatic routing, native stock review/confirmation and vendor handoff have
+offline contract coverage. Dated physical stock transfer, reboot and custom
+candidate acceptance must be recorded separately for the connected unit.
 
 ## Read progress correctly
 

@@ -17,12 +17,15 @@ export const tasks = sqliteTable("relay_tasks", {
 export const relay = sqliteTable("relay_state", {
   id: text("id").primaryKey(), lastSeen: integer("last_seen").notNull(), allowSwitch: integer("allow_switch").notNull(),
   allowOfficialUpdate: integer("allow_official_update").notNull().default(0),
+  allowStockUpdate: integer('allow_stock_update').notNull().default(0),
 });
 
 export const officialApprovals = sqliteTable("official_update_approvals", {
   id: text("id").primaryKey(), userId: text("user_id").notNull(),
   digest: text("digest").notNull(), expires: integer("expires").notNull(),
   used: integer("used").notNull().default(0),
+  kind: text('kind').notNull().default('vendor_handoff'),
+  routeReview: text('route_review'),
 });
 
 export const approvals = sqliteTable("switch_approvals", {

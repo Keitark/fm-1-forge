@@ -18,7 +18,7 @@ const settingTitles={palette:'FM1 color palette',pattern:'Background pattern',en
 const settingInput=z.strictObject({set:z.strictObject(settingShape).partial().refine(value=>Object.keys(value).length>0)});
 const canonicalShape={project:z.strictObject({slug:z.string().max(48),displayName:z.string().max(64)}),profile:z.literal('forge-diag'),clockPreset:clock,lcdPreset:lcd,module:moduleName,usb:z.strictObject({cdc:z.literal(true),uac:z.boolean(),uboot:z.literal(true)})};
 const halShape={buttons:z.boolean(),encoders:z.boolean(),volume:z.boolean(),lcd:z.boolean(),audio:z.boolean()};
-const canonical=z.union([z.strictObject({schemaVersion:z.literal(1),...canonicalShape}),z.strictObject({schemaVersion:z.literal(2),...canonicalShape,hal:z.strictObject(halShape)})]);
+const canonical=z.union([z.strictObject({schemaVersion:z.literal(1),...canonicalShape}),z.strictObject({schemaVersion:z.literal(2),...canonicalShape,hal:z.strictObject(halShape)}),z.strictObject({schemaVersion:z.literal(3),...canonicalShape,usb:z.strictObject({cdc:z.literal(true),uac:z.boolean(),uvc:z.boolean(),uboot:z.literal(true)}),hal:z.strictObject(halShape)})]);
 const configInput=z.strictObject({config:canonical,project_id:savedId.optional(),clock_opt_in:z.boolean().optional()});
 const fileInput=z.strictObject({file:z.strictObject({name:z.string().min(1).max(128),resourceUri:z.string().min(1).max(2048)})});
 const inputSchemas={
@@ -58,7 +58,7 @@ function validatedConfig(config,optIn=false){
   const value=parse(canonical,config);
   try{
     const normalized=normalizeProjectConfig(value);
-    const clean=projectConfig({slug:normalized.project.slug,displayName:normalized.project.displayName,clockPreset:normalized.clockPreset,clockOptIn:optIn,lcdPreset:normalized.lcdPreset,module:normalized.module,usbAudio:normalized.usb.uac,hal:normalized.hal});
+    const clean=projectConfig({slug:normalized.project.slug,displayName:normalized.project.displayName,clockPreset:normalized.clockPreset,clockOptIn:optIn,lcdPreset:normalized.lcdPreset,module:normalized.module,usbAudio:normalized.usb.uac,usbVideo:normalized.usb.uvc,hal:normalized.hal});
     return clean;
   }catch(error){throw new PublicError(error.message);}
 }
@@ -89,15 +89,14 @@ function validateFile(file){
   return {name,resourceUri};
 }
 export const PROJECT_FORM_KEY='fm1-project-configuration';
-const formInput=z.strictObject({slug:z.string().max(48),displayName:z.string().max(64),clockPreset:clock,clockOptIn:z.boolean(),lcdPreset:lcd,module:moduleName,usbAudio:z.boolean(),halButtons:z.boolean().default(true),halEncoders:z.boolean().default(true),halVolume:z.boolean().default(true),halLcd:z.boolean().default(true),halAudio:z.boolean().default(true),goal:z.string().max(2000).optional(),referenceProject:z.array(z.string().max(128)).max(1).optional()});
+const formInput=z.strictObject({slug:z.string().max(48),displayName:z.string().max(64),lcdPreset:lcd,module:moduleName,usbAudio:z.boolean(),usbVideo:z.boolean().default(false),halButtons:z.boolean().default(true),halEncoders:z.boolean().default(true),halVolume:z.boolean().default(true),halLcd:z.boolean().default(true),halAudio:z.boolean().default(true),goal:z.string().max(2000).optional(),referenceProject:z.array(z.string().max(128)).max(1).optional()});
 const thumbnail=(text)=>({src:'data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect width="160" height="90" rx="8" fill="black"/><text x="80" y="50" fill="#a3efcc" text-anchor="middle" font-family="sans-serif" font-size="14">'+text+'</text></svg>'),mimeType:'image/svg+xml'});
-export const PROJECT_FORM=Object.freeze({type:'object',required:['slug','displayName','clockPreset','clockOptIn','lcdPreset','module','usbAudio'],properties:{
+export const PROJECT_FORM=Object.freeze({type:'object',required:['slug','displayName','lcdPreset','module','usbAudio'],properties:{
   slug:{type:'string',title:'Project folder name',minLength:1,maxLength:48,pattern:'^[a-z][a-z0-9-]{0,47}$','x-openai-suggestions':[{const:'first-synth',title:'First synthesizer'},{const:'pad-instrument',title:'Pad instrument'}]},
   displayName:{type:'string',title:'Project display name',minLength:1,maxLength:64,'x-openai-suggestions':[{const:'First Synth',title:'First Synth'},{const:'Pad Instrument',title:'Pad Instrument'}]},
-  clockPreset:{type:'string',title:'CPU clock',enum:['sdk-default','sdk-320']},
-  clockOptIn:{type:'boolean',title:'Accept experimental 320 MHz bench validation'},
   lcdPreset:{type:'string',title:'LCD transfer',oneOf:[{const:'stock-dma',title:'Stock DMA',description:'Conservative baseline transfer','x-openai-thumbnail':thumbnail('Stock DMA')},{const:'spi15-rgb444',title:'SPI 15 RGB444',description:'Requires 60 MHz LSB bus and bench validation','x-openai-thumbnail':thumbnail('SPI 15 RGB444')},{const:'spi30-rgb444',title:'SPI 30 RGB444',description:'Requires 60 MHz LSB bus and bench validation','x-openai-thumbnail':thumbnail('SPI 30 RGB444')}]},
   module:{type:'string',title:'User module',oneOf:[{const:'diagnostics',title:'Hardware diagnostics',description:'Inputs, LCD and key tones','x-openai-thumbnail':thumbnail('Diagnostics')},{const:'user',title:'Blank user module',description:'Silent starter for your own firmware','x-openai-thumbnail':thumbnail('User module')}]},usbAudio:{type:'boolean',title:'Enable USB audio'},
+  usbVideo:{type:'boolean',title:'USB video (UVC) screen mirror',description:'256×240 YUY2 screen output at 5 fps. Experimental Forge integration; capture on this starter is not yet hardware-verified.',default:false},
   halButtons:{type:'boolean',title:'User module: buttons and pads HAL',default:true},
   halEncoders:{type:'boolean',title:'User module: encoders HAL',default:true},
   halVolume:{type:'boolean',title:'User module: volume HAL',description:'User access to the volume snapshot; physical master gain remains protected.',default:true},
@@ -121,12 +120,13 @@ export async function configureForgeProject(env,owner,context,extensions,server)
   if(answer.action!=='accept')return {action:answer.action,created:false,message:'Project configuration canceled. No project was saved.'};
   const fields=parse(formInput,answer.content);
   const {goal,referenceProject,halButtons,halEncoders,halVolume,halLcd,halAudio,...configuration}=fields;
+  configuration.clockPreset='sdk-default';configuration.clockOptIn=false;
   configuration.hal={buttons:halButtons,encoders:halEncoders,volume:halVolume,lcd:halLcd,audio:halAudio};
   if(goal!==undefined&&/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(goal))throw new PublicError('Enter a printable firmware goal.');
   let reference;
   if(referenceProject?.length){const match=/^fm1-forge:\/\/projects\/([a-f0-9]{32})$/.exec(referenceProject[0]);if(!match)throw new PublicError('Choose one saved project reference.');reference=await getForgeProject(env,owner,match[1]);}
   let config;try{config=projectConfig(configuration);}catch(error){throw new PublicError(error.message);}
-  return {action:'accept',config,clock_opt_in:fields.clockOptIn,...(goal!==undefined?{goal}:{}),...(reference?{reference_project_id:reference.id}:{}),...await saveForgeProject(env,owner,{config,clock_opt_in:fields.clockOptIn})};
+  return {action:'accept',config,clock_opt_in:false,...(goal!==undefined?{goal}:{}),...(reference?{reference_project_id:reference.id}:{}),...await saveForgeProject(env,owner,{config,clock_opt_in:false})};
 }
 export async function callExtensionTool(env,owner,name,input={},context,extensions,server){
   const args=parse(inputSchemas[name],input);

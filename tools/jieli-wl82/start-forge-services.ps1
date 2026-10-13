@@ -139,7 +139,7 @@ $bridge = Recorded-Process $bridgeState 'bridge.pid'
 $relay = Recorded-Process $relayState 'relay.pid'
 if ($bridge) {
     $config = Read-PrivateJson (Join-Path $bridgeState 'launch.json')
-    $flags = Service-Arguments $bridge $bridgeScript @('--repo','--state-dir','--token-file','--port','--session','--official-updater','--official-updater-sha256') @()
+    $flags = Service-Arguments $bridge $bridgeScript @('--repo','--state-dir','--token-file','--port','--session','--official-updater','--official-updater-sha256','--stock-sysex-config') @()
     if ($config.pid -ne $bridge.ProcessId -or $config.port -ne 9770 -or
         -not (Same-Path $config.python $runtime) -or -not (Same-Path $config.repo $repo) -or
         -not (Same-Path $flags['--repo'] $repo) -or -not (Same-Path $flags['--state-dir'] $bridgeState) -or
@@ -154,9 +154,14 @@ if ($bridge) {
         ($config.official_updater_sha256 -and $config.official_updater_sha256 -ne $flags['--official-updater-sha256'])) {
         throw 'Recorded bridge updater settings are unverified; no process was stopped or duplicated.'
     }
+    $stockConfig = if ($config.PSObject.Properties['stock_sysex_config']) { $config.stock_sysex_config } else { $null }
+    if ([bool]$stockConfig -ne [bool]$flags['--stock-sysex-config'] -or
+        ($stockConfig -and -not (Same-Path $stockConfig $flags['--stock-sysex-config']))) {
+        throw 'Recorded stock SysEx settings are unverified; no process was stopped or duplicated.'
+    }
 }
 if ($relay) {
-    $flags = Service-Arguments $relay $relayScript @('--site-url','--bridge-url','--state-dir','--relay-token-file','--sites-token-file','--bridge-token-file','--poll-seconds') @('--allow-switch','--allow-official-update')
+    $flags = Service-Arguments $relay $relayScript @('--site-url','--bridge-url','--state-dir','--relay-token-file','--sites-token-file','--bridge-token-file','--poll-seconds') @('--allow-switch','--allow-official-update','--allow-stock-update')
     foreach ($required in @('--site-url','--bridge-url','--state-dir','--relay-token-file','--sites-token-file','--bridge-token-file')) {
         if (-not $flags.ContainsKey($required)) { throw 'Recorded relay launch settings are incomplete; no duplicate was launched.' }
     }

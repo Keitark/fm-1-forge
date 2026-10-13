@@ -34,6 +34,7 @@ from remote_catalog import _plain_path, MAX_SET_BYTES
 
 from job_progress import validate_terminal_progress
 from input_telemetry import snapshot as input_refusal
+from update_mode import validate_stock_pair
 
 
 FIRMWARE_SIZE = 0x100000
@@ -48,7 +49,7 @@ IMAGE_OPERATIONS = frozenset({"plan", "flash", "retry_flash", "recover_flash"})
 NO_ARGUMENT_OPERATIONS = frozenset(
     {"serial_status", "observe", "enter_uboot", "reset", "environment"}
 )
-OPERATIONS = IMAGE_OPERATIONS | NO_ARGUMENT_OPERATIONS | {"read_firmware", "switch_app", "plan_app", "official_updater"}
+OPERATIONS = IMAGE_OPERATIONS | NO_ARGUMENT_OPERATIONS | {"read_firmware", "switch_app", "plan_app", "official_updater", "stock_sysex_update"}
 OFFLINE_OPERATIONS = frozenset({"plan", "environment", "plan_app"})
 TERMINAL_STATUSES = frozenset({"succeeded", "failed", "unknown"})
 
@@ -127,6 +128,8 @@ def normalize_request(body: Any) -> dict[str, Any]:
         required.add("catalog_id")
     elif operation == "official_updater":
         required.add("expected_sha256")
+    elif operation == "stock_sysex_update":
+        required.update({'expected_sha256', 'expected_stock_pair', 'endpoint_review_id', 'approval_expires'})
     if set(body) != required:
         raise BridgeError(400, "unexpected or missing request fields")
     if operation in IMAGE_OPERATIONS:
@@ -166,6 +169,15 @@ def normalize_request(body: Any) -> dict[str, Any]:
     elif operation == "official_updater":
         if not isinstance(body['expected_sha256'], str) or not SHA_PATTERN.fullmatch(body['expected_sha256']):
             raise BridgeError(400, 'expected_sha256 must be 64 lowercase hexadecimal characters')
+    elif operation == 'stock_sysex_update':
+        if not isinstance(body['expected_sha256'], str) or not SHA_PATTERN.fullmatch(body['expected_sha256']):
+            raise BridgeError(400, 'expected_sha256 must be 64 lowercase hexadecimal characters')
+        if body['endpoint_review_id'] != body['id'] or type(body['approval_expires']) is not int or not 0 < body['approval_expires'] < 2 ** 53:
+            raise BridgeError(400, 'stock update requires its original one-use approval identity and expiry')
+        try:
+            validate_stock_pair(body['expected_stock_pair'])
+        except ValueError:
+            raise BridgeError(400, 'stock update requires one exact FM1 MIDI pair') from None
     return _copy_json(body)
 
 
@@ -272,7 +284,7 @@ class JobManager:
         return [
             key for key, job in self._jobs.items()
             if job["status"] == "unknown" or (
-                job["operation"] == "official_updater" and job["status"] == "succeeded"
+                job["operation"] in {"official_updater", "stock_sysex_update"} and job["status"] == "succeeded"
             )
         ]
 
@@ -383,6 +395,10 @@ class JobManager:
                 result = self.backend.execute(operation, catalog_id=request["catalog_id"])
             elif operation == "official_updater":
                 result = self.backend.execute(operation, expected_sha256=request['expected_sha256'])
+            elif operation == 'stock_sysex_update':
+                result = self.backend.execute(operation, expected_sha256=request['expected_sha256'],
+                    job_id=job_id, expected_stock_pair=request['expected_stock_pair'],
+                    endpoint_review_id=request['endpoint_review_id'], approval_expires=request['approval_expires'])
             else:
                 result = self.backend.execute(operation)
             if not isinstance(result, dict) or type(result.get("ok")) is not bool:
@@ -495,6 +511,10 @@ class JobManager:
                 "unknown_jobs": unknown,
                 "updater_handoff": any(
                     job["operation"] == "official_updater" and job["status"] == "succeeded"
+                    for job in self._jobs.values()
+                ),
+                'stock_baseline_invalidated': any(
+                    job['operation'] == 'stock_sysex_update' and job['status'] == 'succeeded'
                     for job in self._jobs.values()
                 ),
                 "jobs": dict(Counter(job["status"] for job in self._jobs.values())),
@@ -955,6 +975,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--official-updater", type=Path)
     parser.add_argument("--official-updater-sha256")
+    parser.add_argument('--stock-sysex-config', type=Path)
     args = parser.parse_args(argv)
     manager = None
     server = None
@@ -965,6 +986,8 @@ def main(argv: list[str] | None = None) -> int:
             repo=args.repo, session=args.session, catalog_dir=args.state_dir / "catalog",
             official_updater=args.official_updater,
             official_updater_sha256=args.official_updater_sha256,
+            stock_sysex_config=args.stock_sysex_config,
+            stock_sysex_state=args.state_dir / 'stock-sysex',
         )
         manager = JobManager(backend, args.state_dir)
         server = make_server(manager, token, args.port)

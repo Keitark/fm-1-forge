@@ -8,17 +8,21 @@ import subprocess
 import sys
 import tempfile
 import time
+import queue
+import threading
 
-from remote_catalog import Catalog, rebase
+from remote_catalog import Catalog, rebase, _plain_path
 from job_progress import progress_for_job
-from update_mode import classify_update_mode, enumerate_midi_endpoints
+from update_mode import classify_update_mode, enumerate_midi_endpoints, stock_midi_pair, validate_stock_pair
 from input_telemetry import sample as sample_inputs
 
 SIZE = 0x100000
 PS = r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
 OPERATIONS = {'plan', 'flash', 'retry_flash', 'recover_flash', 'reset', 'observe',
               'enter_uboot', 'read_firmware', 'serial_status', 'environment',
-              'switch_app', 'plan_app', 'official_updater'}
+              'switch_app', 'plan_app', 'official_updater', 'stock_sysex_update'}
+STOCK_SHA256 = 'db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a'
+STOCK_SIZE = 699956
 IMAGE_OPERATIONS = {'plan', 'flash', 'retry_flash', 'recover_flash'}
 
 
@@ -52,13 +56,18 @@ def verified_bytes(path, expected):
 
 class WindowsBackend:
     def __init__(self, repo, session=None, catalog_dir=None,
-                 official_updater=None, official_updater_sha256=None):
+                 official_updater=None, official_updater_sha256=None,
+                 stock_sysex_config=None, stock_sysex_state=None):
         self.repo = Path(repo).resolve()
         self.session = Path(session).resolve() if session else None
         self.client = self.repo / 'tools/jieli-wl82/flash-session-client.ps1'
         self.packages = Catalog(catalog_dir or self.repo / 'tmp/remote-debug/catalog')
         self.updater = Path(official_updater).resolve() if official_updater else None
         self.updater_sha256 = official_updater_sha256
+        self.stock_config = Path(stock_sysex_config).absolute() if stock_sysex_config else None
+        self.stock_state = Path(stock_sysex_state).absolute() if stock_sysex_state else None
+        self.stock_worker = self.repo / 'tools/jieli-wl82/stock-sysex/cli.mjs'
+        self._stock_progress = {}
         if not self.client.is_file():
             raise ValueError('FM-1 checkout missing flash-session-client.ps1')
         if self.session:
@@ -124,6 +133,7 @@ class WindowsBackend:
         info['inventory_error'] = inventory_error or midi['error']
         info['update_mode'] = classify_update_mode(serial_ports, disks, midi['endpoints'], info['inventory_error'])
         info['official_update'] = self.official_update_metadata(info['update_mode'])
+        info['stock_update'] = self.stock_update_metadata(info['update_mode'], midi['endpoints'])
         if self.session:
             state = read_json(self.session / 'state.json')
             info['session'] = {key: state.get(key) for key in
@@ -137,6 +147,7 @@ class WindowsBackend:
             if (info['session']['operation'] != 'idle' or info['session']['blocked'] or info['session']['reset_pending']
                     or info['session']['needs_observation'] or info['session']['loader_running'] or info['session']['stopped']):
                 info['official_update']['available'] = False
+                info['stock_update']['available'] = False
         info['observation'] = {'started_at': started_at, 'completed_at': int(time.time())}
         return info
 
@@ -155,6 +166,19 @@ class WindowsBackend:
 
     def job_progress(self, job, request):
         """Persisted metadata only; never enumerate/open USB or serial devices."""
+        if request.get('operation') == 'stock_sysex_update':
+            status = job['status']
+            event = self._stock_progress.get(job['id'], {})
+            message = ('Stock transfer and reboot identity verified; full flash readback was not performed.'
+                       if status == 'succeeded' else 'Stock update outcome unknown; local recovery review is required.'
+                       if status == 'unknown' else 'Stock update refused or failed before transfer.'
+                       if status == 'failed' else 'Stock SysEx: ' + event.get('phase', 'preflight'))
+            if status == 'running' and isinstance(event.get('progress'), (int, float)):
+                message += ' · ' + str(round(event['progress'] * 100)) + '% served'
+            return {'phase': 'completed' if status == 'succeeded' else 'failed' if status in {'failed', 'unknown'} else 'writing',
+                    'verified_sectors': None, 'total_sectors': None, 'message': message,
+                    'write_complete': False, 'full_readback_verified': False,
+                    'boot_verified': False, 'failed': status in {'failed', 'unknown'}}
         return progress_for_job(self.session, self.packages, job, request)
 
     def catalog(self):
@@ -172,7 +196,14 @@ class WindowsBackend:
     def install_library_set(self, name, bundles):
         return self.packages.install_set(name, bundles)
 
-    def execute(self, operation, request=None, loader_state=None, catalog_id=None, entry_method=None, expected_sha256=None):
+    def execute(self, operation, request=None, loader_state=None, catalog_id=None, entry_method=None, expected_sha256=None,
+                job_id=None, expected_stock_pair=None, endpoint_review_id=None, approval_expires=None):
+        if operation == 'stock_sysex_update':
+            if any(x is not None for x in (request, loader_state, catalog_id, entry_method)):
+                raise ValueError('Stock update accepts only the locally reviewed package and MIDI pair')
+            return self.update_stock(expected_sha256, job_id, expected_stock_pair, endpoint_review_id, approval_expires)
+        if any(x is not None for x in (job_id, expected_stock_pair, endpoint_review_id, approval_expires)):
+            raise ValueError('Stock fields are only accepted for stock_sysex_update')
         if expected_sha256 is not None and operation != 'official_updater':
             raise ValueError('Expected updater SHA256 is only accepted for official_updater')
         if operation == 'plan_app':
@@ -199,6 +230,163 @@ class WindowsBackend:
         if catalog_id is not None or entry_method is not None:
             raise ValueError('Catalog fields are only accepted for switch_app')
         return self._pipe(operation, request, loader_state)
+
+    def _stock_local_config(self):
+        """Local installation selects paths; remote callers never provide them."""
+        if not self.stock_config or not self.stock_state or sys.platform != 'win32':
+            raise ValueError('Stock SysEx runtime is not configured locally')
+        if any(str(path).startswith(('\\\\', '//')) for path in (self.stock_config, self.stock_state)):
+            raise ValueError('Stock runtime requires local paths')
+        _plain_path(self.stock_config)
+        if self.stock_config.stat().st_size > 4096:
+            raise ValueError('Invalid local stock configuration')
+        config = read_json(self.stock_config)
+        if type(config) is not dict or set(config) != {'nodeBinary', 'localPackagePath', 'reviewedSha256'}:
+            raise ValueError('Invalid local stock configuration')
+        if config['reviewedSha256'] != STOCK_SHA256:
+            raise ValueError('Only the reviewed official FM-1_015 package is configured')
+        for key in ('nodeBinary', 'localPackagePath'):
+            if not isinstance(config[key], str) or not Path(config[key]).is_absolute() or config[key].startswith(('\\\\', '//')):
+                raise ValueError('Stock runtime paths must be local absolute paths')
+            _plain_path(Path(config[key]))
+        _plain_path(self.stock_worker)
+        _plain_path(self.stock_state)
+        node, package = Path(config['nodeBinary']), Path(config['localPackagePath'])
+        if not node.is_file() or node.name.lower() != 'node.exe' or not self.stock_worker.is_file():
+            raise ValueError('The fixed native Node stock updater is unavailable')
+        if not self.stock_state.is_dir():
+            raise ValueError('Private stock update state is unavailable')
+        if package.stat().st_size != STOCK_SIZE or digest(package.read_bytes()) != STOCK_SHA256:
+            raise ValueError('Official package size or SHA256 changed')
+        return config
+
+    def _run_stock_worker(self, operation, *, job_id=None, pair=None, review=None):
+        config = self._stock_local_config()
+        payload = {'operation': operation, 'localPackagePath': config['localPackagePath'],
+                   'reviewedSha256': STOCK_SHA256, 'stateRoot': str(self.stock_state)}
+        if job_id is not None:
+            payload.update(jobId=job_id, expectedStockPair=pair, endpointReviewId=review)
+        proc = subprocess.Popen([config['nodeBinary'], str(self.stock_worker)],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, text=True, encoding='utf-8',
+                                cwd=self.stock_worker.parent, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        events = queue.Queue()
+        def read_lines():
+            try:
+                for line in iter(lambda: proc.stdout.readline(8193), ''):
+                    events.put(line)
+            finally:
+                events.put(None)
+        reader = threading.Thread(target=read_lines, daemon=True)
+        reader.start()
+        terminal = None
+        deadline = time.monotonic() + (600 if operation == 'update' else 20)
+        try:
+            proc.stdin.write(json.dumps(payload) + '\n')
+            proc.stdin.close()
+            while True:
+                line = events.get(timeout=max(0.01, deadline - time.monotonic()))
+                if line is None:
+                    break
+                if len(line) > 8192:
+                    raise RuntimeError('Stock worker output exceeded its metadata limit')
+                value = json.loads(line)
+                if value.get('type') == 'event' and job_id:
+                    event = value.get('event', {})
+                    phase = event.get('phase')
+                    if not isinstance(phase, str) or not re.fullmatch('[a-z0-9_-]{1,80}', phase):
+                        raise RuntimeError('Invalid stock progress phase')
+                    safe = {'phase': phase}
+                    for key in ('requests', 'bytes_served', 'progress'):
+                        amount = event.get(key)
+                        maximum = 1 if key == 'progress' else STOCK_SIZE * 100
+                        if type(amount) in (int, float) and 0 <= amount <= maximum:
+                            safe[key] = amount
+                    self._stock_progress[job_id] = safe
+                elif value.get('type') in ('result', 'error'):
+                    if terminal is not None:
+                        raise RuntimeError('Duplicate stock worker outcome')
+                    terminal = value
+                else:
+                    raise RuntimeError('Invalid stock worker metadata')
+            proc.wait(timeout=max(0.01, deadline - time.monotonic()))
+            if terminal is None or terminal.get('operation') != operation:
+                raise RuntimeError('Stock worker outcome unknown')
+            if terminal.get('type') == 'error':
+                error = terminal.get('error', {})
+                if (operation == 'update' and (error.get('state') == 'unknown'
+                        or error.get('destructive_started') is not False
+                        or error.get('recovery_required') is True or error.get('transfer_finished') is True)):
+                    raise RuntimeError('Stock update requires local recovery review')
+                return {'ok': False, 'error': 'Stock worker preflight refused the update; no automatic retry'}
+            if terminal.get('ok') is not True or proc.returncode != 0:
+                raise RuntimeError('Stock worker outcome unknown')
+            return {'ok': True, 'data': terminal.get('data')}
+        except queue.Empty:
+            raise RuntimeError('Stock worker timed out; inspect the saved local journal') from None
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
+            reader.join(timeout=5)
+            proc.stdout.close()
+
+    def stock_update_metadata(self, mode, endpoints):
+        result = {'configured': bool(self.stock_config), 'available': False, 'native_runtime': False,
+                  'sha256': STOCK_SHA256 if self.stock_config else None, 'size': STOCK_SIZE,
+                  'identity': 'FM-1_015', 'package_format': '.fwsc', 'handoff': False,
+                  'readback_supported': False, 'expected_stock_pair': None,
+                  'recovery_required': mode.get('mode') == 'ota_sysex'}
+        if not self.stock_config:
+            return result
+        try:
+            self._stock_local_config()
+            probe = self._run_stock_worker('probe')
+            if probe['ok'] is not True:
+                return result
+            result['native_runtime'] = True
+            pair = stock_midi_pair(endpoints)
+            pairs = probe.get('data', {}).get('pairs', [])
+            matches = [item for item in pairs if isinstance(item, dict) and pair
+                       and all(isinstance(item.get(key), str) and re.sub(r' [0-9]+$', '', item[key]) == pair[key]
+                               for key in ('inputName', 'outputName'))]
+            if mode.get('mode') == 'sysex' and mode.get('official_available') and pair and len(matches) == 1:
+                result['expected_stock_pair'] = validate_stock_pair({key: matches[0][key] for key in ('inputName', 'outputName')})
+                result['available'] = True
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+            pass
+        return result
+
+    def update_stock(self, expected_sha256, job_id, expected_stock_pair, endpoint_review_id, approval_expires):
+        """A reviewed fixed stock package, fresh exact route, and one saved job."""
+        if (expected_sha256 != STOCK_SHA256 or not isinstance(job_id, str)
+                or not re.fullmatch('[0-9a-f]{32}', job_id)
+                or endpoint_review_id != job_id or type(approval_expires) is not int or time.time() >= approval_expires):
+            return {'ok': False, 'error': 'Stock update needs its exact reviewed package and original approval ID'}
+        try:
+            pair = validate_stock_pair(expected_stock_pair)
+            self._stock_local_config()
+            if self.session and self._input_readiness() != 'ready':
+                return {'ok': False, 'error': 'Resolve the protected session state before a stock update'}
+            inventory = self.status()
+            update = inventory.get('stock_update', {})
+            if not update.get('available') or update.get('expected_stock_pair') != pair:
+                return {'ok': False, 'error': 'Stock MIDI route changed or is unavailable; review it again'}
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+            return {'ok': False, 'error': 'Local stock package or runtime failed preflight; no device write'}
+        if time.time() >= approval_expires:
+            return {'ok': False, 'error': 'Stock update approval expired during local preflight; no device write'}
+        response = self._run_stock_worker('update', job_id=job_id, pair=pair, review=endpoint_review_id)
+        if response['ok'] is True:
+            data = response.get('data')
+            if (type(data) is not dict or data.get('jobId') != job_id or data.get('sha256') != STOCK_SHA256
+                    or data.get('transfer_finished') is not True or data.get('boot_identity_verified') is not True
+                    or data.get('identity') != 'FM-1_015' or data.get('readback_verified') is not False):
+                raise RuntimeError('Stock update completion proof is incomplete')
+            response['data'] = {key: data[key] for key in ('jobId', 'sha256', 'identity', 'transfer_finished',
+                                                         'boot_identity_verified', 'readback_verified')}
+            response['data']['protected_baseline_invalidated'] = True
+        return response
 
     def _pipe(self, operation, request=None, loader_state=None):
         if operation not in OPERATIONS:

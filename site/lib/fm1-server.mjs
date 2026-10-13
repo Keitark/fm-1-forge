@@ -22,6 +22,8 @@ async function body(request) {
   try{return JSON.parse(raw);}catch{throw new PublicError('Invalid JSON.');}
 }
 const INVENTORY_MAX_AGE_SECONDS=15;
+const STOCK_PACKAGE_SHA256='db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a';
+const stockPair=value=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===2&&['inputName','outputName'].every(key=>typeof value[key]==='string'&&/^(?:FM-1|FM-1 Midi|ota-FM-1)(?: [0-9]{1,3})?$/.test(value[key]))&&value.inputName.replace(/ [0-9]+$/,'')===value.outputName.replace(/ [0-9]+$/,'');
 // This timestamp belongs to the Site receipt, never to caller-controlled data,
 // queue creation or a retried dispatch. Keep it private to the cache contract.
 const INVENTORY_OBSERVED_FIELD='_site_inventory_observed_at';
@@ -31,8 +33,8 @@ function db(env){if(!env.DB)throw new PublicError('Saved requests are unavailabl
 function user(request){const value=request.headers.get('oai-authenticated-user-id');if(!value)throw new PublicError('Sign in to use your FM1 library.',401);return value;}
 function safeOrigin(request,env){const origin=request.headers.get('origin');if(origin&&origin!==(env.SITE_ORIGIN||new URL(request.url).origin))throw new PublicError('Origin is not permitted.',403);}
 async function relayState(env) {
-  const row=await db(env).prepare("SELECT last_seen,allow_switch,allow_official_update FROM relay_state WHERE id='bench'").first();
-  return {connected:!!row&&now()-row.last_seen<30,last_seen:row?.last_seen??null,allow_switch:!!row?.allow_switch,allow_official_update:!!row?.allow_official_update};
+  const row=await db(env).prepare("SELECT last_seen,allow_switch,allow_official_update,allow_stock_update FROM relay_state WHERE id='bench'").first();
+  return {connected:!!row&&now()-row.last_seen<30,last_seen:row?.last_seen??null,allow_switch:!!row?.allow_switch,allow_official_update:!!row?.allow_official_update,allow_stock_update:!!row?.allow_stock_update};
 }
 async function latest(env,owner,operation){const row=await db(env).prepare("SELECT result FROM relay_tasks WHERE user_id=? AND operation=? AND state='succeeded' ORDER BY created DESC,rowid DESC LIMIT 1").bind(owner,operation).first();return row?.result?JSON.parse(row.result).data:null;}
 async function inventorySnapshot(env,owner,connection){
@@ -72,6 +74,10 @@ async function library(env,owner){
     recent_requests:(await db(env).prepare('SELECT * FROM relay_tasks WHERE user_id=? ORDER BY created DESC,rowid DESC LIMIT 12').bind(owner).all()).results.map(parse)};
 }
 async function rememberDiagnostics(env,task,clean){
+  if(clean.status==='succeeded'&&clean.data?.operation==='stock_sysex_update'&&['succeeded','unknown'].includes(clean.data.status)){
+    await db(env).prepare('DELETE FROM forge_baselines WHERE user_id=?').bind(task.user_id).run();
+    return;
+  }
   if(clean.status!=='succeeded'||!['switch_app','job'].includes(task.operation))return;
   const catalog=await latest(env,task.user_id,'catalog');
   const variant=catalog?.apps?.find(app=>app.profile==='diagnostics')?.variants?.find(item=>item.id==='factory-diag');
@@ -157,6 +163,7 @@ async function stagedOfficial(env,owner){
 async function commitOfficial(env,owner,args){
   const approval=await db(env).prepare('SELECT * FROM official_update_approvals WHERE id=? AND user_id=?').bind(args.approval_id,owner).first();
   if(!approval)throw new PublicError('This approval was not found. Review the official update again.',409);
+  if(approval.kind!=='vendor_handoff')throw new PublicError('This approval belongs to a different update method.',409);
   if(approval.used){const saved=await db(env).prepare('SELECT id,state FROM relay_tasks WHERE id=? AND user_id=?').bind(approval.id,owner).first();if(saved)return {request_id:saved.id,job_id:saved.id,delivery:saved.state};throw new PublicError('Approval was consumed; inspect the saved request.',409);}
   if(approval.expires<now())throw new PublicError('This approval has expired. Review the official update again.',409);
   const connection=await relayState(env);
@@ -171,6 +178,40 @@ async function commitOfficial(env,owner,args){
   const saved=await db(env).prepare('SELECT id,state FROM relay_tasks WHERE id=? AND user_id=?').bind(approval.id,owner).first();
   if(!saved)throw new PublicError('This approval has expired. Review again.',409);
   return {request_id:saved.id,job_id:saved.id,delivery:saved.state,message:'Confirmed updater handoff saved. Inspect this ID; complete the update in the official Windows tool.'};
+}
+async function stockState(env,owner,connection){
+  const snapshot=await inventorySnapshot(env,owner,connection),inventory=snapshot.inventory;
+  if(snapshot.inventory_status.state!=='fresh')throw new PublicError('Refresh the device: stock updating needs fresh FM1 MIDI inventory.',409);
+  const engine=inventory?.engine,update=inventory?.device?.stock_update,mode=inventory?.device?.update_mode;
+  if(engine?.active||engine?.blocked_unknown||engine?.storage_fault||engine?.updater_handoff||engine?.stock_baseline_invalidated)throw new PublicError('Resolve the saved bench job or establish a fresh baseline before a stock update.',409);
+  if(mode?.mode==='ota_sysex')throw new PublicError('FM1 is already in OTA mode. Inspect and recover the original transfer locally; a new update approval cannot resume it.',409);
+  if(!update?.configured||!update.available||update.native_runtime!==true||update.sha256!==STOCK_PACKAGE_SHA256||update.size!==699956||update.identity!=='FM-1_015'||!stockPair(update.expected_stock_pair)||mode?.mode!=='sysex')throw new PublicError('The pinned stock package and native SysEx runtime need one recognized stock FM1 MIDI connection. Custom CDC firmware must be restored separately first.',409);
+  return update;
+}
+async function stagedStock(env,owner){
+  const connection=await relayState(env);
+  if(!connection.connected||!connection.allow_stock_update)throw new PublicError('Stock SysEx updating is disabled or the bench is disconnected.',403);
+  const update=await stockState(env,owner,connection),approval=ident(),expires=now()+180;
+  await db(env).prepare('INSERT INTO official_update_approvals(id,user_id,digest,expires,used,kind,route_review) VALUES(?,?,?,?,0,?,?)').bind(approval,owner,update.sha256,expires,'stock_sysex',JSON.stringify(update.expected_stock_pair)).run();
+  return {review:{title:'Stock FM1 firmware · V15',sha256:update.sha256,size:update.size,identity:update.identity,pair:update.expected_stock_pair,expires,handoff:false,readback_verified:false},_approval:approval,message:'Review the exact official package and stock MIDI connection, then confirm once. The local native worker handles SysEx/OTA; full flash readback is not supported.'};
+}
+async function commitStock(env,owner,args){
+  const approval=await db(env).prepare('SELECT * FROM official_update_approvals WHERE id=? AND user_id=?').bind(args.approval_id,owner).first();
+  if(!approval||approval.kind!=='stock_sysex')throw new PublicError('This stock update approval was not found. Review again.',409);
+  if(approval.used){const saved=await db(env).prepare('SELECT id,state FROM relay_tasks WHERE id=? AND user_id=?').bind(approval.id,owner).first();if(saved)return {request_id:saved.id,job_id:saved.id,delivery:saved.state};throw new PublicError('Approval was consumed; inspect the original transfer.',409);}
+  if(approval.expires<now())throw new PublicError('This approval has expired. Review the stock update again.',409);
+  const connection=await relayState(env);
+  if(!connection.connected||!connection.allow_stock_update)throw new PublicError('Stock SysEx updating is disabled or the bench is disconnected.',403);
+  const update=await stockState(env,owner,connection),pair=JSON.parse(approval.route_review);
+  if(update.sha256!==approval.digest||!stockPair(pair)||JSON.stringify(update.expected_stock_pair)!==JSON.stringify(pair))throw new PublicError('The package or stock MIDI route changed. Refresh and review again.',409);
+  const committedAt=now(),argumentsValue={expected_sha256:approval.digest,expected_stock_pair:pair,endpoint_review_id:approval.id,approval_expires:approval.expires};
+  await db(env).batch([
+    db(env).prepare("INSERT INTO relay_tasks(id,user_id,operation,arguments,state,created) SELECT id,user_id,?,?,?,? FROM official_update_approvals WHERE id=? AND user_id=? AND kind='stock_sysex' AND used=0 AND expires>=?").bind('stock_sysex_update',JSON.stringify(argumentsValue),'pending',committedAt,approval.id,owner,committedAt),
+    db(env).prepare("UPDATE official_update_approvals SET used=1 WHERE id=? AND user_id=? AND kind='stock_sysex' AND used=0 AND expires>=?").bind(approval.id,owner,committedAt),
+  ]);
+  const saved=await db(env).prepare('SELECT id,state FROM relay_tasks WHERE id=? AND user_id=?').bind(approval.id,owner).first();
+  if(!saved)throw new PublicError('This approval expired. Review again.',409);
+  return {request_id:saved.id,job_id:saved.id,delivery:saved.state,message:'Stock update saved. Follow this original transfer; never resubmit after a disconnect. Reboot identity and full readback are reported separately.'};
 }
 async function commitSwitch(env,owner,args){
   const approval=await db(env).prepare('SELECT * FROM switch_approvals WHERE id=? AND user_id=?').bind(args.approval_id,owner).first();
@@ -206,6 +247,8 @@ export async function callTool(env,owner,name,input){
   if(name==='confirm_fm1_switch')return commitSwitch(env,owner,args);
   if(name==='prepare_fm1_official_update')return stagedOfficial(env,owner);
   if(name==='confirm_fm1_official_update')return commitOfficial(env,owner,args);
+  if(name==='prepare_fm1_stock_update')return stagedStock(env,owner);
+  if(name==='confirm_fm1_stock_update')return commitStock(env,owner,args);
   return enqueue(env,owner,{get_fm1_status:'status',get_fm1_input_snapshot:'input_snapshot',list_fm1_apps:'catalog',open_fm1_local_import:'open_local_import',plan_fm1_app:'plan_app',get_fm1_job:'job'}[name],args);
 }
 function localImportReceipt(value,id){
@@ -218,8 +261,8 @@ async function relayRequest(request,env,path){
   if(!configured||configured.length<32||request.headers.get('authorization')!=='Bearer '+configured)throw new PublicError('Relay authentication required.',401);
   const value=await body(request);
   if(path==='/relay/heartbeat'){
-    if(!value||Object.keys(value).some(key=>!['allow_switch','allow_official_update'].includes(key))||typeof value.allow_switch!=='boolean'||(value.allow_official_update!==undefined&&typeof value.allow_official_update!=='boolean'))throw new PublicError('Invalid heartbeat.');
-    await db(env).prepare("INSERT INTO relay_state(id,last_seen,allow_switch,allow_official_update) VALUES('bench',?,?,?) ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen,allow_switch=excluded.allow_switch,allow_official_update=excluded.allow_official_update").bind(now(),Number(value.allow_switch),Number(value.allow_official_update===true)).run();
+    if(!value||Object.keys(value).some(key=>!['allow_switch','allow_official_update','allow_stock_update'].includes(key))||typeof value.allow_switch!=='boolean'||['allow_official_update','allow_stock_update'].some(key=>value[key]!==undefined&&typeof value[key]!=='boolean'))throw new PublicError('Invalid heartbeat.');
+    await db(env).prepare("INSERT INTO relay_state(id,last_seen,allow_switch,allow_official_update,allow_stock_update) VALUES('bench',?,?,?,?) ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen,allow_switch=excluded.allow_switch,allow_official_update=excluded.allow_official_update,allow_stock_update=excluded.allow_stock_update").bind(now(),Number(value.allow_switch),Number(value.allow_official_update===true),Number(value.allow_stock_update===true)).run();
     return json({connected:true});
   }
   if(path==='/relay/poll'){
@@ -286,7 +329,7 @@ async function mcp(request,env){
     }
     // Older installed descriptors can still fetch the current panel at their
     // original URI. New descriptors exclusively advertise RESOURCE_URI.
-    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v11.html','ui://fm1/forge-panel-v10.html','ui://fm1/forge-panel-v9.html','ui://fm1/forge-panel-v8.html','ui://fm1/forge-panel-v7.html','ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
+    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v13.html','ui://fm1/forge-panel-v12.html','ui://fm1/forge-panel-v11.html','ui://fm1/forge-panel-v10.html','ui://fm1/forge-panel-v9.html','ui://fm1/forge-panel-v8.html','ui://fm1/forge-panel-v7.html','ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
       registerAppResource(server,'FM1 Forge',uri,{},async()=>({contents:[{
         uri,mimeType:'text/html;profile=mcp-app',text:UI_HTML,
         _meta:{ui:{prefersBorder:true,csp:{connectDomains:[],resourceDomains:[]}},'openai/ui':OpenAIUiResourceMetadataSchema.parse({availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'fullscreen'})},

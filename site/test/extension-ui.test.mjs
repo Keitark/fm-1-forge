@@ -8,6 +8,7 @@ import {ICON_PNG_DATA_URI} from '../lib/fm1-icon.mjs';
 
 const tick=()=>new Promise(resolve=>setTimeout(resolve,5));
 const config=projectConfig({slug:'draft-fw',displayName:'Draft FW',clockPreset:'sdk-default',clockOptIn:false,lcdPreset:'stock-dma',module:'user',usbAudio:true});
+function oldConfig(config,version=1){const {hal,...previous}=config,{uvc,...usb}=config.usb;return {...previous,schemaVersion:version,usb,...(version===2?{hal:{...hal}}:{})};}
 const id='a'.repeat(32),project={id,title:'Draft FW',slug:'draft-fw',config,resource_uri:'fm1-forge://projects/'+id};
 function ui({features={},modelContext,route,backend,draftConfig=config,resourceText=JSON.stringify(config),resourceWritable=true,firstReadFails=false}={}){
   const nodes=new Map(),calls=[],applied=[],appliedOptions=[],settingsApplied=[],opened=[],contexts=[],scrolls=[],writes=[];let changed,closed=false,readCount=0;
@@ -33,8 +34,8 @@ test('valid model context restores only validated config and is not repeatedly a
   const context={updateId:'one',structuredContent:{fm1Forge:{version:1,config,projectId:id,resourceUri:project.resource_uri}}},p=ui({features:{modelContext:true},modelContext:context});assert.deepEqual(p.applied,[config]);p.value.context();assert.equal(p.applied.length,1);assert.equal(p.value.selectedProject.id,id);p.close();
 });
 
-test('version 1 context envelope restores legacy configuration as v2 and retains deselected v2 HALs',()=>{
-  const {hal,...previous}=config,legacy={...previous,schemaVersion:1},selected={...config,hal:{...hal,buttons:false,lcd:false,audio:false}};
+test('version 1 context envelope restores legacy configuration as v3 and retains deselected v3 HALs',()=>{
+  const {hal,...previous}=config,legacy=oldConfig(config),selected={...config,hal:{...hal,buttons:false,lcd:false,audio:false}};
   for(const [input,expected] of [[legacy,config],[selected,selected]]){
     const p=ui({features:{modelContext:true},modelContext:{updateId:'restored',structuredContent:{fm1Forge:{version:1,config:input}}}});
     assert.deepEqual(p.applied,[expected]);assert.equal(p.calls.length,0);p.close();
@@ -56,17 +57,17 @@ test('configuration drafts are saved and opened independently of firmware baseli
   const p=ui();p.node('forge-save-draft').onclick();await tick();assert.equal(p.calls[0].name,'save_fm1_project');assert.deepEqual(p.calls[0].args.config,config);assert.equal(p.value.selectedProject.id,id);p.node('forge-new-draft').onclick();assert.equal(p.value.selectedProject,null);p.node('forge-list-projects').onclick();await tick();assert.equal(p.node('forge-projects').children[0].textContent,'Draft FW · draft-fw');p.node('forge-projects').children[0].onclick();await tick();assert.deepEqual(p.applied,[config]);assert.ok(p.calls.every(c=>!['confirm_fm1_switch','plan_fm1_app','get_fm1_status'].includes(c.name)));p.close();
 });
 
-test('draft save and attached model context use canonical v2 and preserve false HAL selections',async()=>{
+test('draft save and attached model context use canonical v3 and preserve false HAL selections',async()=>{
   const selected={...config,hal:{...config.hal,volume:false,encoders:false}},p=ui({features:{modelContext:true},draftConfig:selected});
   p.node('forge-save-draft').onclick();await tick();assert.deepEqual(p.calls[0].args.config,selected);
   p.node('forge-context-attach').onclick();await tick();assert.deepEqual(p.contexts[0].structuredContent.fm1Forge.config,selected);assert.equal(p.contexts[0].structuredContent.fm1Forge.version,1);p.close();
-  const {hal,...previous}=config,q=ui({features:{modelContext:true},draftConfig:{...previous,schemaVersion:1}});
+  const {hal,...previous}=config,q=ui({features:{modelContext:true},draftConfig:oldConfig(config)});
   q.node('forge-save-draft').onclick();await tick();assert.deepEqual(q.calls[0].args.config,config);
   q.node('forge-context-attach').onclick();await tick();assert.deepEqual(q.contexts[0].structuredContent.fm1Forge.config,config);q.close();
 });
 
 test('old saved drafts load through the normalizer without replacing the backend payload',async()=>{
-  const {hal,...previous}=config,legacy={...previous,schemaVersion:1},saved={...project,config:legacy},p=ui({route:{section:'project',id},backend:async()=>({project:saved})});
+  const {hal,...previous}=config,legacy=oldConfig(config),saved={...project,config:legacy},p=ui({route:{section:'project',id},backend:async()=>({project:saved})});
   await tick();assert.deepEqual(p.applied,[config]);assert.deepEqual(p.value.selectedProject.config,config);assert.equal(saved.config.schemaVersion,1);p.close();
 });
 test('unsupported native form opens the manual designer and reports its server message',async()=>{
@@ -77,11 +78,30 @@ test('accepted native form populates designer but never submits firmware work',a
 });
 
 test('native form restores selected HALs and supports a legacy form configuration response',async()=>{
-  const selected={...config,hal:{...config.hal,buttons:false,audio:false}}, {hal,...previous}=config;
-  for(const [input,expected] of [[selected,selected],[{...previous,schemaVersion:1},config]]){
+  const selected={...config,usb:{...config.usb,uvc:true},hal:{...config.hal,buttons:false,audio:false}}, {hal,...previous}=config;
+  for(const [input,expected] of [[selected,selected],[oldConfig(config),config],[oldConfig(selected,2),{...selected,usb:{...selected.usb,uvc:false}}]]){
     const p=ui({backend:async name=>name==='configure_fm1_project'?{action:'accept',config:input,project}:{projects:[]}});
     p.node('forge-native-form').onclick();await tick();assert.deepEqual(p.applied,[expected]);p.close();
   }
+});
+
+test('UVC selections survive saved draft, model context and resource file routes without hardware calls',async()=>{
+  const selected={...config,usb:{...config.usb,uvc:true},hal:{...config.hal,lcd:false}},saved={...project,config:selected};
+  const p=ui({features:{modelContext:true,resources:true},draftConfig:selected,backend:async(name)=>name==='get_fm1_project'?{project:saved}:name==='save_fm1_project'?{project:saved}:{projects:[]},resourceText:JSON.stringify(selected)});
+  p.node('forge-save-draft').onclick();await tick();assert.deepEqual(p.calls[0].args.config,selected);
+  p.node('forge-context-attach').onclick();await tick();assert.deepEqual(p.contexts[0].structuredContent.fm1Forge.config,selected);
+  p.changeContext({updateId:'uvc',structuredContent:{fm1Forge:{version:1,config:selected}}});assert.deepEqual(p.applied.at(-1),selected);
+  p.changeRoute({section:'project',id});await tick();assert.deepEqual(p.applied.at(-1),selected);
+  await p.value.fileInput({file:{name:'uvc.fm1-forge.json',resourceUri:'opaque:uvc'}});p.node('forge-resource-load').onclick();await tick();assert.deepEqual(p.applied.at(-1),selected);
+  p.node('forge-resource-text').value=JSON.stringify(selected,null,2);p.node('forge-resource-text').oninput();p.node('forge-resource-save').onclick();await tick();assert.deepEqual(JSON.parse(p.writes[0].text),selected);
+  assert.ok(p.calls.every(call=>!['confirm_fm1_switch','plan_fm1_app','get_fm1_status'].includes(call.name)));p.close();
+});
+
+test('strict v2 resources and contexts preserve disabled HALs with UVC off',async()=>{
+  const selected={...config,hal:{...config.hal,lcd:false,audio:false}},legacy=oldConfig(selected,2),serialized=JSON.stringify(legacy);
+  const p=ui({features:{modelContext:true,resources:true},modelContext:{updateId:'v2',structuredContent:{fm1Forge:{version:1,config:legacy}}},resourceText:serialized});assert.deepEqual(p.applied,[selected]);
+  await p.value.fileInput({file:{name:'v2.fm1-forge.json',resourceUri:'opaque:v2'}});p.node('forge-resource-load').onclick();await tick();assert.deepEqual(p.applied.at(-1),selected);assert.equal(JSON.stringify(legacy),serialized);
+  p.node('forge-resource-text').value=serialized+'\n';p.node('forge-resource-text').oninput();p.node('forge-resource-save').onclick();await tick();assert.equal(JSON.parse(p.writes[0].text).schemaVersion,2);assert.equal(JSON.parse(p.writes[0].text).usb.uvc,undefined);p.close();
 });
 test('owner defaults load once and explicit save applies values through settings tools',async()=>{
   const values={palette:'forge-black',pattern:'solid',entry_method:'auto',default_module:'user',default_usb_audio:true},p=ui({backend:async()=>({values})});p.value.snapshot({forge:{settings:values,projects:[]}});p.value.snapshot({forge:{settings:values}});assert.equal(p.settingsApplied.length,1);assert.equal(p.settingsApplied[0].options.explicit,false);p.node('forge-save-settings').onclick();await tick();assert.equal(p.calls[0].name,'settings.update');assert.deepEqual(JSON.parse(JSON.stringify(p.calls[0].args.set)),values);assert.equal(p.settingsApplied[1].options.explicit,true);p.close();
@@ -94,14 +114,14 @@ test('resource edits save with original ETag and valid Forge schema',async()=>{
 });
 
 test('legacy file loading normalizes the designer while saves retain exact edited text and ETag',async()=>{
-  const {hal,...previous}=config,legacy={...previous,schemaVersion:1},raw=JSON.stringify(legacy,null,3)+'\n',p=ui({features:{resources:true},resourceText:raw});
+  const {hal,...previous}=config,legacy=oldConfig(config),raw=JSON.stringify(legacy,null,3)+'\n',p=ui({features:{resources:true},resourceText:raw});
   await p.value.fileInput({file:{name:'legacy.fm1-forge.json',resourceUri:'opaque:legacy'}});
   p.node('forge-resource-load').onclick();await tick();assert.deepEqual(p.applied,[config]);assert.equal(p.node('forge-resource-text').value,raw);
   const edited=raw+'\n';p.node('forge-resource-text').value=edited;p.node('forge-resource-text').oninput();p.node('forge-resource-save').onclick();await tick();
   assert.equal(p.writes[0].text,edited);assert.equal(p.writes[0].ifMatch,'a');assert.equal(JSON.parse(p.writes[0].text).schemaVersion,1);p.close();
 });
 
-test('selected v2 file loads false HAL flags and malformed HAL text cannot be loaded or saved',async()=>{
+test('selected v3 file loads false HAL flags and malformed HAL text cannot be loaded or saved',async()=>{
   const selected={...config,hal:{...config.hal,lcd:false,encoders:false}},p=ui({features:{resources:true},resourceText:JSON.stringify(selected)});
   await p.value.fileInput({file:{name:'selected.fm1-forge.json',resourceUri:'opaque:selected'}});p.node('forge-resource-load').onclick();await tick();assert.deepEqual(p.applied,[selected]);
   p.node('forge-resource-text').value=JSON.stringify({...config,hal:{...config.hal,audio:'false'}});p.node('forge-resource-text').oninput();assert.equal(p.node('forge-resource-load').disabled,true);assert.equal(p.node('forge-resource-save').disabled,true);p.node('forge-resource-save').onclick();await tick();assert.equal(p.writes.length,0);assert.match(p.node('forge-resource-status').textContent,/HAL/);p.close();
@@ -115,8 +135,8 @@ test('local file opening passes only the explicit field and is separate from clo
 test('late draft reply cannot update a torn-down panel',async()=>{
   let resolve;const p=ui({backend:()=>new Promise(done=>{resolve=done;})});p.node('forge-save-draft').onclick();p.close();resolve({project});await tick();assert.equal(p.value.selectedProject,null);assert.equal(p.calls.length,1);
 });
-test('native form goal and experimental clock opt-in are forwarded into the editable brief',async()=>{
-  const goal='A pad-controlled synthesizer.',p=ui({backend:async name=>name==='configure_fm1_project'?{action:'accept',config,project,goal,clock_opt_in:true}:{projects:[]}});p.node('forge-native-form').onclick();await tick();assert.equal(p.appliedOptions[0].goal,goal);assert.equal(p.appliedOptions[0].clockOptIn,true);p.close();
+test('native form goal uses the default CPU configuration without experimental opt-in',async()=>{
+  const goal='A pad-controlled synthesizer.',p=ui({backend:async name=>name==='configure_fm1_project'?{action:'accept',config,project,goal,clock_opt_in:false}:{projects:[]}});p.node('forge-native-form').onclick();await tick();assert.equal(p.appliedOptions[0].goal,goal);assert.equal(p.appliedOptions[0].clockOptIn,false);assert.equal(p.applied[0].clockPreset,'sdk-default');p.close();
 });
 test('failed host file read can reopen the same selection and establish a fresh resource session',async()=>{
   const p=ui({features:{resources:true},firstReadFails:true}),input={file:{name:'retry.fm1-forge.json',resourceUri:'opaque:retry'}};await assert.rejects(p.value.fileInput(input),/Temporary/);await p.value.fileInput(input);assert.equal(p.node('forge-resource-text').value,JSON.stringify(config));assert.equal(p.node('forge-resource-load').disabled,false);p.close();

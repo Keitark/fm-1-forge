@@ -3,29 +3,43 @@
 The private FM1 App Library plugin is now **FM1 Forge 3.1.4**: install an asset-free
 diagnostic baseline, test hardware, configure USB/HAL/user modules graphically,
 then ask Codex to create and build a firmware project. It preserves the existing
-plugin ID, hosted MCP endpoint, local protected writer and saved-job history.
+plugin ID, hosted MCP endpoint, local protected writer and durable transfer receipts.
 The panel defaults to a plain, opaque black background. It uses the official
 OpenAI MCP Extensions SDK for native settings, project file editing, composer
 mentions, configuration forms, deep links and chat context/message actions.
 
-Read the current [Forge guide](docs/FORGE_GUIDE.md). The owner-private Site's
-final Forge release is deployed with MCP enabled at the existing endpoint. Its
-resource is `ui://fm1/forge-panel-v6.html`. The same private
+Read the current [Forge guide](docs/FORGE_GUIDE.md). The owner-private Site hosts
+the UI and MCP endpoint. The current source resource is
+`ui://fm1/forge-panel-v14.html`. The same private
 [FM1 Forge plugin](https://chatgpt.com/plugins/plugins_6ac9ad3fc1c8819195580a4747c50052)
 was updated in place.
 
 Read [the extension guide](docs/MCP_EXTENSIONS.md) for the exact official SDK
 source, implemented surfaces and host capability checks. Dated test/deployment
 and native-host evidence lives in [verification](docs/VERIFICATION.md).
-Diagnostics installation and physical acceptance remain pending. Runtime
-elevation was canceled: no new protected helper was started and no firmware
-write occurred. Older expanded cards can retain a previous UI; inspect the
-newest Forge card for the current extension controls. A package release does
-not establish device qualification.
+Use those dated receipts for actual deployment and hardware acceptance.
+Older expanded cards can retain a previous UI; open a fresh native Forge tab
+to check the updated controls. A package release does not qualify hardware.
 
-The experimental `sdk-320` clock supports stock DMA only. Its SDK table supplies
-a 53 MHz LSB, incompatible with the 15/30 MHz RGB444 LCD presets' required 60 MHz LSB;
-choose the SDK-default CPU clock for those LCD presets.
+The main panel opens the graphical editor, keeps onboarding in a collapsed guide,
+and shows progress for the active operation, without request-history tables or
+manual job-ID entry. Optional UVC selects the 256×240 YUY2 / 5 fps transport
+physically confirmed in the ProTracker session; the new Forge combination
+remains unflashed and needs its own capture test. Canonical v3 drafts import
+earlier v1/v2 files with UVC disabled.
+
+New projects preserve `sdk-default`, measured at 360 MHz on the tested unit.
+The panel shows that CPU setting as read-only and offers no new 320 MHz choice.
+Imported `sdk-320` drafts retain their original configuration and stock-DMA
+restriction; they are compatibility data, not a recommended speed increase.
+
+**Stock firmware via SysEx** reviews the exact locally pinned official V15
+`.fwsc` package and stock MIDI route, then runs the Node.js native MIDI worker.
+Python still serves the local bridge/relay and protected serial/UBOOT route for
+custom firmware. The vendor M-UPGRADE GUI handoff remains a separate option.
+Stock transfer completion and reboot identity are checked separately from full
+flash readback, which the SysEx path does not provide. Physical stock-path
+acceptance belongs in the dated verification receipt.
 
 The records below describe earlier App Library releases. Use the Forge guide
 and dated verification entries for the current workflow.
@@ -104,6 +118,7 @@ the connected metadata panel, planning, saved-job recovery, and progress interpr
 - `remote_bridge.py`: loopback HTTP service, authenticated fixed operations, durable jobs, and uncertainty handling.
 - `remote_backend.py` and `flash-session-client.ps1`: adapter to an existing protected Windows flashing session.
 - `update_mode.py`: passive serial/disk/MIDI classification without opening an endpoint or transmitting SysEx.
+- `tools/jieli-wl82/stock-sysex/`: fixed-package JavaScript SysEx/OTA worker, native MIDI adapter and durable attempt journal.
 - `remote_catalog.py`: immutable private package validation and device-baseline matching.
 - `remote_client.py`: CLI with credential origin restrictions and no automatic job resubmission.
 - `job_progress.py`: progress from persisted job/session metadata.
@@ -168,10 +183,12 @@ Do not start a duplicate bridge over an existing listener or redirect its state 
 
 ## Site and plugin operation
 
-The Site offers catalog and inventory refresh, offline app plans, saved
-request/job inspection, automatic app-switch review, and official SysEx updater
-review. The latter opens the pinned manufacturer's tool for an official `.fwsc`
-package; it does not report a completed update from a GUI launch. The MCP panel uses server tools
+The Site offers catalog and inventory refresh, offline app plans, exact-ID
+recovery tools, automatic app-switch review and stock SysEx review. The native
+stock action runs the locally configured Node 22 worker with `@julusian/midi`
+3.8.1 for the pinned official V15 package. The separate vendor-updater review
+opens the pinned manufacturer's GUI and does not claim transfer completion.
+The MCP panel uses server tools
 through its host bridge. The full website separately feature-detects
 `document.modelContext.registerTool`; normal library controls remain available
 when WebMCP is unavailable. The panel does not embed the loopback store.
@@ -192,12 +209,13 @@ a delivered response can contain a failed or unknown job, and interrupted
 submissions are inspected by their saved ID without resubmission.
 
 Native appearance rendering and earlier metadata round trips are recorded
-above; current host-tool availability is limited by issue #6. The tested UI
+above; issue #6 records a historical host-tool scope failure. The tested UI
 preserves the original job ID across metadata refresh and a lost
 confirmation reply. Its tested automatic progress following uses only
 `get_fm1_job` and `get_fm1_request`; it never repeats a submission. Following
 stops on a terminal outcome, cancellation or its inspection limit;
-**Inspect job** resumes that exact ID. Relay metadata is bounded to 58,000
+the active **Resume progress** action resumes that exact ID. There is no
+everyday request-history table or manual job inspector. Relay metadata is bounded to 58,000
 serialized bytes, with durable
 receipt recovery for proven oversize rejections. Device writes and
 physical screen/audio/control acceptance require

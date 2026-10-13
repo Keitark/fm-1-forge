@@ -6,11 +6,14 @@ import { OpenAIExtensions, OpenAIFormSchema, createOpenAIFormContentSchema } fro
 import { callTool, handleFm1Request } from '../lib/fm1-server.mjs';
 import { readForgeSettings, updateForgeSettings, configureForgeProject, readForgeResource, searchForgeMentions, PROJECT_FORM, PROJECT_FORM_KEY } from '../lib/fm1-extensions.mjs';
 import { projectConfig } from '../lib/fm1-forge-project.mjs';
+import { MODULES, moduleGraphHtml, createModuleGraphEngine } from '../lib/fm1-module-graph.mjs';
 import { RESOURCE_URI } from '../lib/fm1-contract.mjs';
 import { database, cacheCatalog, cacheInventory, seconds } from './d1.mjs';
 
-const fields={slug:'first-synth',displayName:'First Synth',clockPreset:'sdk-default',clockOptIn:false,lcdPreset:'stock-dma',module:'user',usbAudio:true};
-const config=projectConfig(fields);
+const fields={slug:'first-synth',displayName:'First Synth',lcdPreset:'stock-dma',module:'user',usbAudio:true};
+const config=projectConfig({...fields,clockPreset:'sdk-default',clockOptIn:false});
+function oldConfig(config,version=1){const {hal,...previous}=config,{uvc,...usb}=config.usb;return {...previous,schemaVersion:version,usb,...(version===2?{hal:{...hal}}:{})};}
+
 const capabilities={elicitation:{form:{}},extensions:{'openai/elicitation':{form:{}}}};
 const envelope=caps=>({'io.modelcontextprotocol/protocolVersion':'2026-07-28','io.modelcontextprotocol/clientCapabilities':caps,'io.modelcontextprotocol/clientInfo':{name:'Forge extensions test',version:'1'}});
 async function rpc(env,method,params={},owner='alice'){
@@ -84,7 +87,7 @@ test('projects persist as configuration drafts with explicit diagnostic gate and
   assert.equal((await rpc(env,'resources/read',{uri:saved.project.resource_uri},null)).response.status,401);
 });
 
-test('v2 HAL selections survive saved drafts, owner resources and updates including false values',async()=>{
+test('v3 HAL selections survive saved drafts, owner resources and updates including false values',async()=>{
   const env=database(),selected={...config,hal:{buttons:false,encoders:true,volume:false,lcd:false,audio:false}};
   const saved=await callTool(env,'alice','save_fm1_project',{config:selected});
   assert.deepEqual(saved.project.config,selected);
@@ -96,8 +99,8 @@ test('v2 HAL selections survive saved drafts, owner resources and updates includ
   assert.equal(mutations(env),0);
 });
 
-test('legacy v1 drafts normalize on reads without rewriting storage and save as canonical v2',async()=>{
-  const env=database(),{hal,...previous}=config,legacy={...previous,schemaVersion:1},id='e'.repeat(32),stored=JSON.stringify(legacy),at=seconds();
+test('legacy v1 drafts normalize on reads without rewriting storage and save as canonical v3',async()=>{
+  const env=database(),{hal,...previous}=config,legacy=oldConfig(config),id='e'.repeat(32),stored=JSON.stringify(legacy),at=seconds();
   env.DB.sqlite.prepare('INSERT INTO forge_projects(id,user_id,title,slug,config,created,updated) VALUES(?,?,?,?,?,?,?)').run(id,'alice',legacy.project.displayName,legacy.project.slug,stored,at,at);
   assert.deepEqual((await callTool(env,'alice','get_fm1_project',{project_id:id})).project.config,config);
   assert.deepEqual((await callTool(env,'alice','list_fm1_projects',{})).projects[0].config,config);
@@ -108,9 +111,29 @@ test('legacy v1 drafts normalize on reads without rewriting storage and save as 
   assert.equal(mutations(env),0);
 });
 
+test('strict v2 drafts import with UVC off while v3 UVC persists through save, list, get and export',async()=>{
+  for(const uvc of [true,false]){
+    const env=database(),selected={...config,usb:{...config.usb,uvc},hal:{...config.hal,lcd:false,buttons:false}},saved=await callTool(env,'alice','save_fm1_project',{config:selected});
+    assert.deepEqual(saved.project.config,selected);
+    assert.deepEqual((await callTool(env,'alice','list_fm1_projects',{})).projects[0].config,selected);
+    assert.deepEqual((await callTool(env,'alice','get_fm1_project',{project_id:saved.project.id})).project.config,selected);
+    assert.deepEqual(JSON.parse((await readForgeResource(env,'alice',saved.project.resource_uri)).contents[0].text),selected);
+    const previous=oldConfig(selected,2),serialized=JSON.stringify(previous),normalized={...selected,usb:{...selected.usb,uvc:false}};
+    const imported=await callTool(env,'alice','save_fm1_project',{config:previous,project_id:saved.project.id});
+    assert.deepEqual(imported.project.config,normalized);assert.equal(JSON.stringify(previous),serialized);assert.equal(mutations(env),0);
+  }
+});
+
+test('strict canonical USB shapes reject malformed UVC and unexpected legacy additions before persistence',async()=>{
+  const env=database(),{uvc,...missing}=config.usb;
+  const bad=[{...config,usb:missing},...[null,'false',1,{},[]].map(uvc=>({...config,usb:{...config.usb,uvc}})),...[1,2].map(version=>({...oldConfig(config,version),usb:config.usb})),{...config,schemaVersion:4},{...config,usb:{...config.usb,cdc:false}},{...config,usb:{...config.usb,uboot:false}}];
+  for(const candidate of bad){await assert.rejects(callTool(env,'alice','save_fm1_project',{config:candidate}));assert.equal((await tools(env,'save_fm1_project',{config:candidate})).data.result.isError,true);}
+  assert.equal(drafts(env),0);assert.equal(mutations(env),0);
+});
+
 test('canonical schema rejects partial HALs, extra HALs, non-booleans and v1 HAL additions',async()=>{
   const env=database(),{hal,...previous}=config;
-  for(const candidate of [{...previous},{...previous,schemaVersion:1,hal},{...config,hal:{...hal,extra:true}},{...config,hal:{...hal,audio:'false'}},{...config,hal:{buttons:true}},{...config,hal:null},{...config,schemaVersion:3}]){
+  for(const candidate of [{...previous},{...previous,schemaVersion:1,hal},{...config,hal:{...hal,extra:true}},{...config,hal:{...hal,audio:'false'}},{...config,hal:{buttons:true}},{...config,hal:null},{...config,schemaVersion:4}]){
     await assert.rejects(callTool(env,'alice','save_fm1_project',{config:candidate}));
     const rpc=await tools(env,'save_fm1_project',{config:candidate});assert.equal(rpc.data.result.isError,true);
   }
@@ -161,9 +184,25 @@ test('native MRTR requests use official form schema, keyed continuation and no f
   assert.equal(first.data.result.resultType,'input_required');assert.equal(drafts(env),0);assert.equal(mutations(env),0);
   const form=first.data.result.inputRequests[PROJECT_FORM_KEY].params._meta['openai/elicitation'].requestedSchema;
   assert.equal(OpenAIFormSchema.safeParse(form).success,true);assert.match(form.properties.module.oneOf[0]['x-openai-thumbnail'].src,/^data:image\/svg\+xml;base64,[A-Za-z0-9+/]+=*$/);assert.ok(form.properties.slug['x-openai-suggestions']);
+  assert.equal(form.properties.clockPreset,undefined);assert.equal(form.properties.clockOptIn,undefined);assert.ok(!form.required.some(key=>key.startsWith('clock')));
   const completed=await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{[PROJECT_FORM_KEY]:{action:'accept',content:fields}}});
   assert.equal(completed.data.result.resultType,'complete');assert.equal(completed.data.result.structuredContent.action,'accept');assert.deepEqual(completed.data.result.structuredContent.config,config);assert.equal(drafts(env),1);assert.equal(mutations(env),0);
+  assert.equal(completed.data.result.structuredContent.clock_opt_in,false);
   const panel=await rpc(env,'resources/read',{uri:configure._meta.ui.resourceUri});assert.equal(panel.data.result.contents[0].mimeType,'text/html;profile=mcp-app');assert.equal(mutations(env),0);
+});
+
+test('CPU is read-only in the module graph and removed from native form input',async()=>{
+  assert.equal(MODULES.length,12);assert.ok(!MODULES.some(module=>module.id==='tweak-clock'));
+  assert.throws(()=>createModuleGraphEngine().placement('tweak-clock','tweaks'),/Unknown firmware module/);
+  assert.ok(!moduleGraphHtml.includes('forge-add-tweak-clock'));assert.ok(!moduleGraphHtml.includes('forge-card-tweak-clock'));
+  assert.match(moduleGraphHtml,/id="forge-cpu-summary">CPU: SDK default · measured 360 MHz<\/p>/);
+  assert.match(moduleGraphHtml,/<select id="forge-clock-preset" hidden aria-hidden="true" tabindex="-1">/);
+  assert.match(moduleGraphHtml,/<input id="forge-clock-opt-in" type="checkbox" hidden aria-hidden="true" tabindex="-1">/);
+  const env=database();
+  for(const clockFields of [{clockPreset:'sdk-320'},{clockOptIn:true},{clockPreset:'sdk-default',clockOptIn:false}]){
+    const answer=await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{[PROJECT_FORM_KEY]:{action:'accept',content:{...fields,...clockFields}}}});assert.equal(answer.data.result.isError,true);
+  }
+  assert.equal(drafts(env),0);assert.equal(mutations(env),0);
 });
 
 test('native optional HAL choices default on for old responses and preserve explicit off values',async()=>{
@@ -175,6 +214,20 @@ test('native optional HAL choices default on for old responses and preserve expl
   const result=answered.data.result.structuredContent;assert.equal(result.action,'accept');assert.deepEqual(result.config.hal,{buttons:false,encoders:false,volume:false,lcd:false,audio:false});assert.equal(result.config.usb.uac,true);
   const old=await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{[PROJECT_FORM_KEY]:{action:'accept',content:fields}}});
   assert.deepEqual(old.data.result.structuredContent.config.hal,config.hal);assert.equal(mutations(env),0);
+});
+
+test('native UVC option defaults off and preserves explicit accepted screen-mirror selection',async()=>{
+  const env=database(),first=await tools(env,'configure_fm1_project'),form=first.data.result.inputRequests[PROJECT_FORM_KEY].params._meta['openai/elicitation'].requestedSchema;
+  assert.equal(form.properties.usbVideo.default,false);assert.ok(!form.required.includes('usbVideo'));
+  for(const usbVideo of [true,false]){
+    const content={...fields,usbVideo,halLcd:false};assert.equal(createOpenAIFormContentSchema(form).safeParse(content).success,true);
+    const answered=await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{[PROJECT_FORM_KEY]:{action:'accept',content}}}),value=answered.data.result.structuredContent;
+    assert.equal(value.config.usb.uvc,usbVideo);assert.equal(value.config.schemaVersion,3);assert.equal(value.config.hal.lcd,false);
+    assert.deepEqual(JSON.parse((await readForgeResource(env,'alice',value.project.resource_uri)).contents[0].text),value.config);
+  }
+  const legacy=await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{[PROJECT_FORM_KEY]:{action:'accept',content:fields}}});assert.equal(legacy.data.result.structuredContent.config.usb.uvc,false);
+  for(const usbVideo of [null,'true',1])assert.equal((await rpc(env,'tools/call',{name:'configure_fm1_project',arguments:{},inputResponses:{[PROJECT_FORM_KEY]:{action:'accept',content:{...fields,usbVideo}}}})).data.result.isError,true);
+  assert.equal(drafts(env),3);assert.equal(mutations(env),0);
 });
 
 test('native MRTR cancel, decline, wrong keys and malformed answers cannot save configuration drafts',async()=>{

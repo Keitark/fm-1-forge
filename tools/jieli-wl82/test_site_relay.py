@@ -4,11 +4,13 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import uuid
@@ -294,7 +296,104 @@ class ValidationTests(unittest.TestCase):
                 self.assertLess(len(relay.json_bytes(projected)), relay.MAX_METADATA_BYTES)
 
 
+class PrivatePathTests(unittest.TestCase):
+    def setUp(self):
+        self.path = Path("synthetic-state/tasks/" + "a" * 32 + ".json").absolute()
+        self.components = (self.path, *self.path.parents)
+        self.leaf_info = SimpleNamespace(st_mode=stat.S_IFREG | 0o600,
+                                        st_size=128, st_file_attributes=0)
+        self.parent_info = SimpleNamespace(st_mode=stat.S_IFDIR | 0o700,
+                                          st_size=0, st_file_attributes=0)
+
+    def info(self, candidate):
+        return self.leaf_info if candidate == self.path else self.parent_info
+
+    def test_each_component_is_checked_once_and_verified_leaf_metadata_is_returned(self):
+        with patch.object(Path, "lstat", autospec=True, side_effect=self.info) as checked, \
+                patch.object(Path, "is_symlink", side_effect=AssertionError("second stat")), \
+                patch.object(Path, "stat", side_effect=AssertionError("follows path")):
+            self.assertIs(relay._no_symlinks(self.path), self.leaf_info)
+        self.assertEqual([call.args[0] for call in checked.call_args_list], list(self.components))
+
+    def test_symlink_mode_and_windows_reparse_attributes_are_rejected_on_any_component(self):
+        for unsafe in self.components:
+            for mode, attributes in ((stat.S_IFLNK, 0), (stat.S_IFDIR, 0x400)):
+                with self.subTest(component=unsafe, mode=mode, attributes=attributes):
+                    def info(candidate):
+                        return (SimpleNamespace(st_mode=mode, st_file_attributes=attributes)
+                                if candidate == unsafe else self.info(candidate))
+                    with patch.object(Path, "lstat", autospec=True, side_effect=info), \
+                            self.assertRaisesRegex(relay.RelayError, "unsafe_private_path"):
+                        relay._no_symlinks(self.path)
+
+    def test_missing_leaf_still_checks_all_ancestors(self):
+        def missing_leaf(candidate):
+            if candidate == self.path:
+                raise FileNotFoundError
+            return self.info(candidate)
+        with patch.object(Path, "lstat", autospec=True, side_effect=missing_leaf) as checked:
+            self.assertIsNone(relay._no_symlinks(self.path))
+        self.assertEqual([call.args[0] for call in checked.call_args_list], list(self.components))
+        def unsafe_parent(candidate):
+            if candidate == self.path:
+                raise FileNotFoundError
+            if candidate == self.path.parent:
+                return SimpleNamespace(st_mode=stat.S_IFDIR, st_file_attributes=0x400)
+            return self.info(candidate)
+        with patch.object(Path, "lstat", autospec=True, side_effect=unsafe_parent), \
+                self.assertRaisesRegex(relay.RelayError, "unsafe_private_path"):
+            relay._no_symlinks(self.path)
+
+    def test_path_metadata_is_not_cached_between_reads(self):
+        with patch.object(Path, "lstat", autospec=True, side_effect=self.info):
+            self.assertIs(relay._no_symlinks(self.path), self.leaf_info)
+        def changed_parent(candidate):
+            if candidate == self.path.parent:
+                return SimpleNamespace(st_mode=stat.S_IFLNK, st_file_attributes=0)
+            return self.info(candidate)
+        with patch.object(Path, "lstat", autospec=True, side_effect=changed_parent), \
+                self.assertRaisesRegex(relay.RelayError, "unsafe_private_path"):
+            relay._no_symlinks(self.path)
+
+
 class RelayTests(unittest.TestCase):
+    def stock_task(self, expires=9999999999):
+        value = task('stock_sysex_update', expected_sha256=EXPECTED_SHA,
+                     expected_stock_pair={'inputName': 'FM-1', 'outputName': 'FM-1'}, approval_expires=expires)
+        value['arguments']['endpoint_review_id'] = value['id']
+        return value
+
+    def test_stock_update_is_independently_disabled_and_invalid_routes_are_rejected(self):
+        value = self.stock_task()
+        self.assertEqual(self.relay.handle_task(value)['error'], 'stock_update_disabled')
+        self.assertFalse(self.bridge.calls)
+        value = self.stock_task()
+        value['arguments']['expected_stock_pair']['inputName'] = 'Another synth'
+        with self.assertRaises(relay.RelayError):
+            self.relay.handle_task(value)
+
+    def test_stock_one_use_expiry_and_lost_reply_never_retry_original_write(self):
+        self.restart(allow_stock_update=True)
+        expired = self.stock_task(expires=1)
+        self.assertEqual(self.relay.handle_task(expired)['error'], 'approval_expired')
+        self.assertFalse(self.bridge.calls)
+        value = self.stock_task()
+        self.bridge.post_error = relay.RelayError('network_unavailable')
+        first = self.relay.handle_task(value)
+        self.assertEqual(first['data']['id'], value['id'])
+        posts = [entry for entry in self.bridge.calls if entry[0] == 'POST']
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0][2]['expected_stock_pair'], value['arguments']['expected_stock_pair'])
+        self.restart()
+        self.assertEqual(self.relay.handle_task(value), first)
+        self.assertEqual(len([entry for entry in self.bridge.calls if entry[0] == 'POST']), 1)
+
+    def test_stock_heartbeat_capability_can_be_enabled_without_custom_switch_or_vendor_handoff(self):
+        self.restart(allow_stock_update=True)
+        self.relay.run_once()
+        self.assertEqual(self.site.calls[0], ('POST', '/relay/heartbeat', {
+            'allow_switch': False, 'allow_official_update': False, 'allow_stock_update': True}))
+
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.root = Path(self.folder.name) / "relay-state"
@@ -1021,6 +1120,39 @@ class RelayTests(unittest.TestCase):
         self.relay._path(value["id"]).write_text('{"broken":true}')
         with self.assertRaisesRegex(relay.RelayError, "invalid_relay_state"):
             relay.Relay(self.root, self.site, self.bridge)
+
+    def test_reported_journal_is_validated_again_on_every_poll(self):
+        value = task("plan_app", catalog_id="nes-test")
+        self.site.tasks = [value]
+        self.relay.run_once()
+        self.assertTrue(self.relay._load(value["id"])["reported"])
+        self.bridge.calls.clear()
+        self.relay._path(value["id"]).write_text('{"broken":true}')
+        with self.assertRaisesRegex(relay.RelayError, "invalid_relay_state"):
+            self.relay.run_once()
+        self.assertFalse(self.bridge.calls)
+
+    def test_load_reuses_verified_leaf_stat_without_following_it_again(self):
+        value = task("plan_app", catalog_id="nes-test")
+        self.relay.handle_task(value)
+        path = self.relay._path(value["id"])
+        calls = []
+        def counted_lstat(candidate):
+            calls.append(candidate)
+            return os.lstat(candidate)
+        with patch.object(Path, "lstat", autospec=True, side_effect=counted_lstat), \
+                patch.object(Path, "exists", side_effect=AssertionError("extra existence stat")), \
+                patch.object(Path, "stat", side_effect=AssertionError("follows path")):
+            self.assertEqual(self.relay._load(value["id"])["task"], value)
+        self.assertEqual(calls, [path, *path.parents])
+
+    def test_oversized_journal_is_rejected_before_reading_contents(self):
+        value = task("plan_app", catalog_id="nes-test")
+        self.relay.handle_task(value)
+        self.relay._path(value["id"]).write_bytes(b" " * (relay.MAX_JSON_BYTES + 1))
+        with patch.object(Path, "read_bytes", side_effect=AssertionError("reads oversized state")), \
+                self.assertRaisesRegex(relay.RelayError, "invalid_relay_state"):
+            self.relay._load(value["id"])
 
     def test_another_process_cannot_own_same_state(self):
         script = ('import sys\nfrom pathlib import Path\nimport site_relay as r\n'

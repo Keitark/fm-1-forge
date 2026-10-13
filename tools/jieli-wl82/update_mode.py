@@ -5,9 +5,32 @@ no serial, disk or SysEx transfer is attempted by this module.
 """
 import ctypes
 import sys
+import re
 
 STOCK_NAMES = frozenset({'FM-1', 'FM-1 Midi'})
 OTA_NAMES = frozenset({'ota-FM-1'})
+
+
+def stock_midi_pair(endpoints):
+    """Select only one exact FM1 family pair; generic device names stay closed."""
+    candidates = [item for item in endpoints if isinstance(item, dict)
+                  and item.get('name') in STOCK_NAMES | OTA_NAMES]
+    inputs = [item['name'] for item in candidates if item.get('direction') == 'in']
+    outputs = [item['name'] for item in candidates if item.get('direction') == 'out']
+    if len(inputs) != 1 or len(outputs) != 1:
+        return None
+    if (inputs[0] in OTA_NAMES) != (outputs[0] in OTA_NAMES):
+        return None
+    return {'inputName': inputs[0], 'outputName': outputs[0]}
+
+
+def validate_stock_pair(pair):
+    if (type(pair) is not dict or set(pair) != {'inputName', 'outputName'}
+            or any(not isinstance(pair[key], str) or not re.fullmatch(r'(FM-1|FM-1 Midi|ota-FM-1)(?: [0-9]{1,3})?', pair[key])
+                   for key in ('inputName', 'outputName'))
+            or re.sub(r' [0-9]+$', '', pair['inputName']) != re.sub(r' [0-9]+$', '', pair['outputName'])):
+        raise ValueError('Select one exact stock FM1 MIDI pair')
+    return dict(pair)
 
 
 class MIDIINCAPSW(ctypes.Structure):

@@ -1,6 +1,7 @@
 """Offline laptop adapter tests. No real USB, PnP, serial or named pipe access."""
 import base64
 import hashlib
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -97,6 +98,120 @@ class BackendTests(unittest.TestCase):
         self.client.unlink()
         with self.assertRaisesRegex(ValueError, 'flash-session-client'):
             backend.WindowsBackend(self.repo, self.session)
+
+    def stock_adapter(self):
+        state = self.root / 'stock-state'
+        state.mkdir()
+        config = self.root / 'stock-local.json'
+        node = self.root / 'node.exe'
+        node.write_bytes(b'not executable; mocked native process')
+        package = self.root / 'official.fwsc'
+        package.write_bytes(bytes(backend.STOCK_SIZE))
+        worker = self.repo / 'tools/jieli-wl82/stock-sysex/cli.mjs'
+        worker.parent.mkdir(parents=True)
+        worker.write_text('// mocked worker', encoding='utf-8')
+        config.write_text(json.dumps({'nodeBinary': str(node), 'localPackagePath': str(package),
+                                     'reviewedSha256': backend.STOCK_SHA256}), encoding='utf-8')
+        adapter = backend.WindowsBackend(self.repo, stock_sysex_config=config, stock_sysex_state=state)
+        return adapter, config, node, package, worker
+
+    def test_stock_local_config_rejects_changed_package_size_digest_or_runtime_without_launch(self):
+        adapter, config, node, package, worker = self.stock_adapter()
+        with patch.object(backend.subprocess, 'Popen', side_effect=AssertionError('No native process')):
+            with self.assertRaisesRegex(ValueError, 'SHA256'):
+                adapter._stock_local_config()
+            with patch.object(backend, 'digest', return_value=backend.STOCK_SHA256):
+                self.assertEqual(adapter._stock_local_config()['nodeBinary'], str(node))
+                package.write_bytes(b'changed')
+                with self.assertRaisesRegex(ValueError, 'size'):
+                    adapter._stock_local_config()
+                package.write_bytes(bytes(backend.STOCK_SIZE))
+                worker.unlink()
+                with self.assertRaisesRegex(ValueError, 'Node'):
+                    adapter._stock_local_config()
+
+    def test_unconfigured_stock_status_has_no_child_or_device_io(self):
+        with patch.object(backend.subprocess, 'Popen', side_effect=AssertionError('No process')):
+            metadata = self.adapter.stock_update_metadata(inventory('sysex')['update_mode'], inventory('sysex')['midi_endpoints'])
+        self.assertFalse(metadata['configured'])
+        self.assertFalse(metadata['available'])
+        self.assertFalse(metadata['readback_supported'])
+
+    def test_stock_runtime_only_advertises_exact_consistent_passive_midi_pair(self):
+        adapter, *_ = self.stock_adapter()
+        pair = {'inputName': 'FM-1', 'outputName': 'FM-1'}
+        with patch.object(adapter, '_stock_local_config', return_value={}), patch.object(adapter, '_run_stock_worker',
+                return_value={'ok': True, 'data': {'pairs': [pair]}}) as child:
+            meta = adapter.stock_update_metadata(inventory('sysex')['update_mode'], inventory('sysex')['midi_endpoints'])
+            self.assertTrue(meta['available'])
+            self.assertEqual(meta['expected_stock_pair'], pair)
+            self.assertEqual(child.call_args.args, ('probe',))
+            for mode in ('serial', 'ambiguous', 'unknown'):
+                data = inventory(mode)
+                self.assertFalse(adapter.stock_update_metadata(data['update_mode'], data['midi_endpoints'])['available'])
+
+    def test_stock_update_rechecks_expiry_hash_and_route_before_native_update(self):
+        adapter, *_ = self.stock_adapter()
+        ident = '1' * 32
+        pair = {'inputName': 'FM-1', 'outputName': 'FM-1'}
+        fresh = inventory('sysex')
+        fresh['stock_update'] = {'available': True, 'expected_stock_pair': pair}
+        arguments = dict(expected_sha256=backend.STOCK_SHA256, job_id=ident,
+                         expected_stock_pair=pair, endpoint_review_id=ident, approval_expires=9999999999)
+        with patch.object(adapter, '_stock_local_config', return_value={}), patch.object(adapter, 'status', return_value=fresh), patch.object(adapter, '_run_stock_worker') as child:
+            self.assertFalse(adapter.execute('stock_sysex_update', **(arguments | {'expected_sha256': 'a' * 64}))['ok'])
+            self.assertFalse(adapter.execute('stock_sysex_update', **(arguments | {'approval_expires': 1}))['ok'])
+            fresh['stock_update']['expected_stock_pair'] = {'inputName': 'ota-FM-1', 'outputName': 'ota-FM-1'}
+            self.assertFalse(adapter.execute('stock_sysex_update', **arguments)['ok'])
+            child.assert_not_called()
+
+    def test_stock_already_ota_is_local_recovery_not_a_new_write_route(self):
+        adapter, *_ = self.stock_adapter()
+        pair = {'inputName': 'ota-FM-1 3', 'outputName': 'ota-FM-1 4'}
+        data = inventory('ota_sysex')
+        with patch.object(adapter, '_stock_local_config', return_value={}), patch.object(adapter, '_run_stock_worker',
+                return_value={'ok': True, 'data': {'pairs': [pair]}}) as child:
+            meta = adapter.stock_update_metadata(data['update_mode'], data['midi_endpoints'])
+            self.assertTrue(meta['native_runtime'])
+            self.assertTrue(meta['recovery_required'])
+            self.assertFalse(meta['available'])
+            self.assertIsNone(meta['expected_stock_pair'])
+            self.assertEqual(child.call_args.args, ('probe',))
+
+    def test_stock_native_stream_errors_after_upgrade_are_unknown_and_success_requires_boot_identity(self):
+        adapter, _, node, package, worker = self.stock_adapter()
+        ident = '2' * 32
+        pair = {'inputName': 'FM-1', 'outputName': 'FM-1'}
+        config = {'nodeBinary': str(node), 'localPackagePath': str(package)}
+        class Child:
+            def __init__(self, value):
+                self.stdin, self.stdout = io.StringIO(), io.StringIO(json.dumps(value) + '\n')
+                self.returncode = 0
+            def wait(self, **kwargs): return self.returncode
+            def poll(self): return self.returncode
+        for destructive, state in ((True, 'unknown'), (False, 'failed')):
+            value = {'type': 'error', 'ok': False, 'operation': 'update', 'error': {
+                'destructive_started': destructive, 'state': state, 'code': 'timeout'}}
+            with patch.object(adapter, '_stock_local_config', return_value=config), patch.object(backend.subprocess, 'Popen', return_value=Child(value)) as child:
+                if destructive:
+                    with self.assertRaises(RuntimeError):
+                        adapter._run_stock_worker('update', job_id=ident, pair=pair, review=ident)
+                else:
+                    self.assertFalse(adapter._run_stock_worker('update', job_id=ident, pair=pair, review=ident)['ok'])
+                self.assertEqual(child.call_args.args[0], [str(node), str(worker)])
+        fresh = inventory('sysex')
+        fresh['stock_update'] = {'available': True, 'expected_stock_pair': pair}
+        proof = {'jobId': ident, 'sha256': backend.STOCK_SHA256, 'identity': 'FM-1_015',
+                 'transfer_finished': True, 'boot_identity_verified': True, 'readback_verified': False}
+        with patch.object(adapter, '_stock_local_config', return_value=config), patch.object(adapter, 'status', return_value=fresh), patch.object(adapter, '_run_stock_worker', return_value={'ok': True, 'data': proof}) as worker:
+            answer = adapter.execute('stock_sysex_update', expected_sha256=backend.STOCK_SHA256,
+                job_id=ident, expected_stock_pair=pair, endpoint_review_id=ident, approval_expires=9999999999)
+            self.assertTrue(answer['data']['protected_baseline_invalidated'])
+            self.assertFalse(answer['data']['readback_verified'])
+            worker.return_value['data']['boot_identity_verified'] = False
+            with self.assertRaises(RuntimeError):
+                adapter.execute('stock_sysex_update', expected_sha256=backend.STOCK_SHA256,
+                    job_id=ident, expected_stock_pair=pair, endpoint_review_id=ident, approval_expires=9999999999)
 
     def test_constructor_rejects_session_descriptor_for_another_directory(self):
         (self.session / 'session.json').write_text(

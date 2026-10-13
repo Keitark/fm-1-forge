@@ -1,6 +1,6 @@
 import { ICONS } from './fm1-icon.mjs';
 import { OpenAIUiToolMetadataSchema } from '@openai/mcp-extensions';
-export const RESOURCE_URI = 'ui://fm1/forge-panel-v12.html';
+export const RESOURCE_URI = 'ui://fm1/forge-panel-v14.html';
 export const PROFILES = [
   {profile:'diagnostics',title:'Forge diagnostics',description:'Test inputs, LCD and audio before starting your firmware project.',symbol:'F'},
   {profile:'nes',title:'NES',description:'Play your prepared cartridge collection.',symbol:'N'},
@@ -19,6 +19,7 @@ export function validate(name,input={}) {
     plan_fm1_app:['catalog_id'], get_fm1_job:['job_id'], get_fm1_request:['request_id'],
     prepare_fm1_switch:['catalog_id','entry_method'], confirm_fm1_switch:['approval_id'],
     prepare_fm1_official_update:[], confirm_fm1_official_update:['approval_id'],
+    prepare_fm1_stock_update:[], confirm_fm1_stock_update:['approval_id'],
   }[name];
   if (!fields) throw new PublicError('Unknown tool.',404);
   if (Object.keys(input).some(key=>!fields.includes(key)) || fields.some(key=>!(key in input))) throw new PublicError('Unexpected or missing arguments.');
@@ -47,6 +48,8 @@ const definitions = [
   ['confirm_fm1_switch','Confirm app switch','Consume the displayed one-use approval after human confirmation. Requires local bench switching to be enabled.',['approval_id'],false],
   ['prepare_fm1_official_update','Review official SysEx update','Review a handoff to the locally pinned official M-UPGRADE updater. The vendor tool handles .fwsc firmware and MIDI/OTA transitions. Does not launch or write.',[],false],
   ['confirm_fm1_official_update','Open official updater','Consume the displayed one-use approval after human confirmation to open the official Windows updater. Completion remains in the vendor tool.',['approval_id'],false],
+  ['prepare_fm1_stock_update','Review stock firmware via SysEx','Review the locally pinned official FM-1_015 package and a fresh stock MIDI route. Does not write or launch the vendor updater.',[],false],
+  ['confirm_fm1_stock_update','Install reviewed stock firmware','Consume the displayed one-use approval after human confirmation for the exact stock package and MIDI route. Uses the local native SysEx worker; inspect the original saved job after a disconnect.',['approval_id'],false],
 ];
 export const TOOLS = definitions.map(([name,title,description,fields,readOnly])=>({
   name,title,description,inputSchema:{type:'object',properties:Object.fromEntries(fields.map(key=>[key,schemas[key]])),required:fields,additionalProperties:false},

@@ -60,11 +60,13 @@ class FakeBackend:
         return bridge.input_refusal()
 
     def execute(self, operation, request=None, loader_state=None, catalog_id=None, entry_method=None,
-                expected_sha256=None):
+                expected_sha256=None, job_id=None, expected_stock_pair=None, endpoint_review_id=None, approval_expires=None):
         if operation in ('switch_app', 'plan_app'):
             self.calls.append((operation, catalog_id, entry_method))
         elif operation == 'official_updater':
             self.calls.append((operation, expected_sha256, None))
+        elif operation == 'stock_sysex_update':
+            self.calls.append((operation, expected_sha256, job_id, expected_stock_pair, endpoint_review_id, approval_expires))
         else:
             self.calls.append((operation, request, loader_state))
         self.entered.set()
@@ -93,6 +95,54 @@ class FakeBackend:
 
 
 class BridgeTests(unittest.TestCase):
+    def stock_request(self):
+        body = job('stock_sysex_update', expected_sha256='b' * 64,
+            expected_stock_pair={'inputName': 'FM-1', 'outputName': 'FM-1'}, approval_expires=9999999999)
+        body['endpoint_review_id'] = body['id']
+        return body
+
+    def test_stock_write_schema_never_accepts_paths_messages_or_generic_midi_names(self):
+        valid = self.stock_request()
+        for changed in (valid | {'path': 'private.fwsc'}, valid | {'messages': [1]},
+                        valid | {'endpoint_review_id': 'c' * 32},
+                        valid | {'expected_stock_pair': {'inputName': 'USB Composite', 'outputName': 'USB Composite'}},
+                        valid | {'approval_expires': True}):
+            with self.assertRaises(bridge.BridgeError):
+                bridge.normalize_request(changed)
+        self.assertEqual(bridge.normalize_request(valid), valid)
+
+    def test_stock_success_latches_baseline_and_same_job_never_rewrites_across_restart(self):
+        body = self.stock_request()
+        self.backend.response = {'ok': True, 'data': {'transfer_finished': True, 'boot_identity_verified': True,
+                                                      'readback_verified': False, 'protected_baseline_invalidated': True}}
+        self.submit(body)
+        finished = self.wait_job(body['id'])
+        self.assertEqual(finished['status'], 'succeeded')
+        self.assertTrue(self.manager.status()['engine']['stock_baseline_invalidated'])
+        self.assertFalse(self.manager.status()['engine']['updater_handoff'])
+        self.assertEqual(self.manager.submit(body)['status'], 'succeeded')
+        self.assertEqual(len(self.backend.calls), 1)
+        with self.assertRaises(bridge.BridgeError):
+            self.manager.submit(job('reset'))
+        self.manager.close()
+        self.manager = bridge.JobManager(self.backend, self.root)
+        self.assertTrue(self.manager.status()['engine']['stock_baseline_invalidated'])
+        self.assertEqual(self.manager.submit(body)['status'], 'succeeded')
+        self.assertEqual(len(self.backend.calls), 1)
+
+    def test_stock_worker_unknown_latches_engine_and_inspection_cannot_restart_transfer(self):
+        self.backend.failure = RuntimeError('worker exited after UPGRADE')
+        body = self.stock_request()
+        self.submit(body)
+        finished = self.wait_job(body['id'])
+        self.assertEqual(finished['status'], 'unknown')
+        self.assertTrue(self.manager.status()['engine']['blocked_unknown'])
+        self.assertEqual(self.manager.submit(body)['status'], 'unknown')
+        self.assertEqual(self.manager.get_job(body['id'])['status'], 'unknown')
+        self.assertEqual(len(self.backend.calls), 1)
+        with self.assertRaises(bridge.BridgeError):
+            self.manager.submit(self.stock_request())
+
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.root = Path(self.folder.name)
