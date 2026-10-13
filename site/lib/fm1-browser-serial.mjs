@@ -82,9 +82,10 @@ export class BrowserSerial{
     if(typeof this._serial?.requestPort!=='function')throw fail('serial_unavailable','This panel does not provide Web Serial device access.');
     const epoch=++this._epoch;
     this._publish({connecting:true,connected:false,checking:false,profile:null,statusCommand:null,status:null,error:null});
-    let selected=null;
+    let selected=null,stage='chooser';
     try{
       selected=await this._serial.requestPort({filters:[{...FM1_SERIAL_USB}]});
+      stage='opening';
       if(epoch!==this._epoch)throw fail('connection_canceled','Browser serial connection was canceled.');
       const info=selected?.getInfo?.();
       if(info?.usbVendorId!==FM1_SERIAL_USB.usbVendorId||info?.usbProductId!==FM1_SERIAL_USB.usbProductId)throw fail('wrong_device','Select the FM1 diagnostics USB serial device.');
@@ -109,7 +110,11 @@ export class BrowserSerial{
       this._publish({connecting:false,connected:true,profile,statusCommand:RULES[profile].command,error:null});
       return this.getState();
     }catch(error){
-      const safe=error instanceof BrowserSerialError?error:fail(error?.name==='NotFoundError'?'permission_canceled':error?.name==='SecurityError'||error?.name==='NotAllowedError'?'permission_denied':'serial_open_failed',error?.name==='NotFoundError'?'FM1 serial selection was canceled.':error?.name==='SecurityError'||error?.name==='NotAllowedError'?'The host did not allow FM1 serial access.':'Could not open the FM1 diagnostics serial port.');
+      const safe=error instanceof BrowserSerialError?error:error?.name==='NotFoundError'
+        ?stage==='chooser'
+          ?fail('permission_canceled','No FM1 serial port was selected. If no chooser appeared, this host may not support serial device selection.')
+          :fail('serial_open_failed','The selected FM1 serial port is unavailable.')
+        :fail(error?.name==='SecurityError'||error?.name==='NotAllowedError'?'permission_denied':'serial_open_failed',error?.name==='SecurityError'||error?.name==='NotAllowedError'?'The host did not allow FM1 serial access.':'Could not open the FM1 diagnostics serial port.');
       // A canceled chooser/open must never close a newer connection. A port
       // whose open() completes after close() still needs its own cleanup.
       if(epoch!==this._epoch){

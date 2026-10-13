@@ -1,5 +1,11 @@
 # FM1 Forge
 
+The current Codex build exposes Web Serial but supplies no visible chooser on
+the tested connection attempt. Direct native serial connection is blocked;
+API/storage checks are not device acceptance. See
+[the host evidence](DIRECT_DEVICE_ACCESS_20261013.md). A plugin cannot add the
+missing native chooser from its iframe, and no helper is started as a fallback.
+
 FM1 Forge **3.2.0** is the private firmware workspace plugin. Its existing
 plugin ID and Site URL remain in use. The default connection path runs inside
 the panel with Web Serial and Web MIDI; it requires no separately installed
@@ -9,7 +15,7 @@ While the conversation is active, use
 This opens Forge's native conversation tab. The global shortcut opens a separate
 app view; returning to an earlier chat selects that chat's own panel instance.
 
-The current source resource is `ui://fm1/forge-panel-v18.html`; older resource
+The current source resource is `ui://fm1/forge-panel-v19.html`; older resource
 aliases remain available. Open a fresh native conversation tab after an update.
 Reopening alone does not prove that a host with cached descriptors selected the
 new URI; check the dated native-host evidence before claiming an updated panel.

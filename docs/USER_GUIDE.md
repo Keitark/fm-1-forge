@@ -1,9 +1,14 @@
 # FM1 Forge user guide
 
+The current native Codex serial connection test is blocked: clicking Connect
+USB serial produced no chooser while Windows saw FM1 on COM4. JavaScript and
+storage are working, but device access is not established. See
+[the current host evidence](DIRECT_DEVICE_ACCESS_20261013.md).
+
 For the current **3.2.0** helper-free device flow, black default panel and
 graphical firmware configuration, read
 [FORGE_GUIDE.md](FORGE_GUIDE.md). The current source resource is
-`ui://fm1/forge-panel-v18.html`; dated deployment checks are recorded separately.
+`ui://fm1/forge-panel-v19.html`; dated deployment checks are recorded separately.
 Open the
 native conversation tab through **New Tab (+) → More tools… → Plugins and MCPs
 → FM1 Forge** to see configuration drafts, native settings, file editing and

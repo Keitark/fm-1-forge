@@ -1,5 +1,10 @@
 # FM1 Forge
 
+**Current native-host limitation:** the installed Codex `26.1007.2314.0` exposes
+Web Serial but does not display a device chooser. A real connection attempt
+failed before opening FM1. The JavaScript transport is implemented; this host's
+device access is blocked. See [the connection evidence](docs/DIRECT_DEVICE_ACCESS_20261013.md).
+
 **FM1 Forge 3.2.0** opens a native Codex plugin panel for graphical firmware
 configuration, browser-local app sets and direct FM1 connections. Its default
 device path runs JavaScript inside the panel through Web Serial and Web MIDI.
@@ -11,7 +16,7 @@ mentions, native forms and chat actions.
 
 Read the current [Forge guide](docs/FORGE_GUIDE.md). The owner-private Site hosts
 the UI and MCP endpoint. The current source resource is
-`ui://fm1/forge-panel-v18.html`. The same private
+`ui://fm1/forge-panel-v19.html`. The same private
 [FM1 Forge plugin](https://chatgpt.com/plugins/plugins_6ac9ad3fc1c8819195580a4747c50052)
 was updated in place.
 
@@ -90,7 +95,7 @@ npx --no-install tsc --noEmit
 npm run build
 ```
 
-The final 3.2.0 source passed 417 Site tests with no skips, TypeScript checking
+The final 3.2.0 source passed 418 Site tests with no skips, TypeScript checking
 and the production build. Live permission, storage partition and device results
 are recorded separately in the dated evidence. Legacy Python tests remain for
 the retained optional bench implementation, rather than the normal panel path.

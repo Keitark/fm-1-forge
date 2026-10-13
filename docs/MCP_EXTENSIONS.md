@@ -10,7 +10,7 @@ Browser WebMCP is a separate interface and does not discover the native panel.
 The panel build freezes its browser runtime strings before production server
 minification. Changes to those source runtimes require `npm run build:panel`;
 contract tests reject stale generated strings and execute the minified UI.
-The canonical source UI resource is `ui://fm1/forge-panel-v18.html`, with prior
+The canonical source UI resource is `ui://fm1/forge-panel-v19.html`, with prior
 resource aliases retained.
 
 ## Official SDK source
@@ -75,10 +75,10 @@ permissions or recreating the plugin.
 
 ## Direct connection and host permission
 
-The current source panel is `ui://fm1/forge-panel-v18.html`; older resource aliases
+The current source panel is `ui://fm1/forge-panel-v19.html`; older resource aliases
 remain served for installed descriptors. OpenAI treats UI resource URIs as cache
 keys. A host with old registered descriptors may require refreshing the existing
-connection metadata before a newly opened panel selects v18. Reopening alone does
+connection metadata before a newly opened panel selects v19. Reopening alone does
 not prove that updated scripts loaded. See [OpenAI UI guidance](https://developers.openai.com/plugins/build/chatgpt-ui).
 
 Forge paints its selected background and pattern on an app-owned full-viewport
@@ -214,7 +214,7 @@ and platform support; passing a mocked host test is reported separately from
 a successful action in Codex. No extension test authorizes or performs a
 firmware flash.
 
-The 3.2.0 source passed 417 Site tests with no skips, TypeScript checking and
+The 3.2.0 source passed 418 Site tests with no skips, TypeScript checking and
 the production build. The new Forge UVC candidate remains unflashed; the
 ProTracker capture and October 12 CPU benchmark are separate hardware receipts.
 

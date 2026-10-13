@@ -1,5 +1,40 @@
 # Direct browser access in the native Codex panel
 
+## Current connection blocker
+
+A real user click on **Connect USB serial** returned `NotFoundError` without
+displaying any device chooser. Windows still enumerates FM1 CDC on COM4 with
+VID `3654` / PID `5155`. The first connection path invokes `requestPort`
+synchronously before any await; there is no activation-losing timer or automatic
+selection. API presence and allowed iframe policy did not establish usable
+host device access.
+
+Read-only inspection of the installed Codex `26.1007.2314.0` application bundle
+found no `select-serial-port`, `select-usb-device` or `setDevicePermissionHandler`
+registration strings. Electron's host must supply device selection through
+its native session handler. This absence is consistent with the observed
+no-chooser failure; it does not prove what every Codex release supports.
+
+The serial adapter now distinguishes a rejected chooser from a selected port
+that disappears during open. It no longer states that the user canceled a
+chooser they never saw. No helper fallback, broadened USB filter or automatic
+retry is used. Serial identity and physical stock SysEx remain unverified.
+
+The native panel's UI and durable recovery-storage checks below remain valid,
+but the current Codex build's direct serial path is blocked. Foreground browser
+JavaScript can implement the protocol; the plugin cannot install a missing
+native host chooser from inside its iframe.
+
+References: [Electron device access](https://www.electronjs.org/docs/latest/tutorial/devices)
+and [serial selection handler](https://www.electronjs.org/docs/latest/api/session#event-select-serial-port).
+
+The v19 correction passed 418 Site/browser/UI/SDK tests with zero skips,
+TypeScript and the production build. Source:
+`ff48b4d791f2fcdee261a4102b38833508c9696a`; deployment
+`appgdep_6ace45b7b3788191a63c11e1303140d6`; archive SHA-256
+`63bab064c5774efce02402cc8e577ec06116f77dea7948e89e403d74d53fdb2f`.
+It improves failure reporting and does not add the missing native chooser.
+
 The actual FM1 Forge panel was checked on 2026-10-13 using JavaScript executed
 inside its real document, rather than an automation DOM facade. It reported:
 
