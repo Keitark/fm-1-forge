@@ -98,11 +98,11 @@ test('chooser cancel and host denial are actionable and do not try fallback hard
 });
 test('NotFoundError distinguishes an unselected chooser from an unavailable selected port',async()=>{
   const noSelection=fixture({chooseError:new DOMException('Private chooser detail','NotFoundError')});
-  await assert.rejects(noSelection.controller.connect(),{code:'permission_canceled',message:'No FM1 serial port was selected. If no chooser appeared, this host may not support serial device selection.'});
+  await assert.rejects(noSelection.controller.connect(),{code:'permission_canceled',message:'No FM-1 serial port was selected. If no chooser appeared, this host may not support serial device selection.'});
   assert.deepEqual(noSelection.calls.map(call=>call[0]),['choose']);assert.equal(noSelection.controller.getState().connected,false);
   const unavailable=fixture();
   unavailable.port.open=async()=>{unavailable.calls.push(['open']);throw new DOMException('Private device detail','NotFoundError');};
-  await assert.rejects(unavailable.controller.connect(),{code:'serial_open_failed',message:'The selected FM1 serial port is unavailable.'});
+  await assert.rejects(unavailable.controller.connect(),{code:'serial_open_failed',message:'The selected FM-1 serial port is unavailable.'});
   assert.deepEqual(unavailable.calls.map(call=>call[0]),['choose','open','close']);assert.equal(unavailable.controller.getState().connected,false);assert.equal(unavailable.calls.some(call=>call[0]==='signals'||call[0]==='write'),false);
 });
 test('missing readiness control cannot silently handshake with an unconfigured CDC session',async()=>{

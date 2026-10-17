@@ -9,7 +9,7 @@ import './fm1-browser-library.mjs';
 // These official SDKs are bundled locally into the MCP App resource.
 export class FM1PluginHost {
   constructor({onToolResult=()=>{},onToolInput=()=>{},onTeardown=()=>{},onContext=()=>{}}={}) {
-    this.app=new App({name:'FM1 Forge',version:'3.2.0'},
+    this.app=new App({name:'FM-1 Forge',version:'3.2.1'},
       {availableDisplayModes:['inline','fullscreen']},{autoResize:false});
     this.extensions=new OpenAIExtensions(this.app);
     this.closed=false;this.transportClosed=false;this.resources=new Set();

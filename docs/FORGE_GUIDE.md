@@ -1,4 +1,4 @@
-# FM1 Forge
+# FM-1 Forge
 
 The current Codex build exposes Web Serial but supplies no visible chooser on
 the tested connection attempt. Direct native serial connection is blocked;
@@ -6,16 +6,16 @@ API/storage checks are not device acceptance. See
 [the host evidence](DIRECT_DEVICE_ACCESS_20261013.md). A plugin cannot add the
 missing native chooser from its iframe, and no helper is started as a fallback.
 
-FM1 Forge **3.2.0** is the private firmware workspace plugin. Its existing
+FM-1 Forge **3.2.1** is the private firmware workspace plugin. Its existing
 plugin ID and Site URL remain in use. The default connection path runs inside
 the panel with Web Serial and Web MIDI; it requires no separately installed
 JavaScript runtime, Python/Node helper, relay or startup process.
 While the conversation is active, use
-**Side-panel New Tab (+) → More tools… → Plugins and MCPs → FM1 Forge**.
+**Side-panel New Tab (+) → More tools… → Plugins and MCPs → FM-1 Forge**.
 This opens Forge's native conversation tab. The global shortcut opens a separate
 app view; returning to an earlier chat selects that chat's own panel instance.
 
-The current source resource is `ui://fm1/forge-panel-v19.html`; older resource
+The current source resource is `ui://fm1/forge-panel-v20.html`; older resource
 aliases remain available. Open a fresh native conversation tab after an update.
 Reopening alone does not prove that a host with cached descriptors selected the
 new URI; check the dated native-host evidence before claiming an updated panel.
@@ -29,7 +29,7 @@ is opened at startup. The serial path checks USB VID `3654` / PID `5155`, opens
 115200 baud and verifies a known HELLO identity. It uses only that profile's
 read-only status command on **Refresh**. The existing CDC firmware requires
 one DTR readiness assertion; the panel never pulses it or sends STOP/UBOOT.
-MIDI connection selects an exact FM1 input/output pair and verifies its model.
+MIDI connection selects an exact FM-1 input/output pair and verifies its model.
 Unrelated, generic or ambiguous MIDI devices are refused.
 
 Once connected, device disconnect events update the label automatically.
@@ -66,14 +66,14 @@ qualify hardware; consult the dated verification receipt for actual tests.
    separate manual/legacy UBOOT installation. The direct panel does not flash
    custom packages or install the diagnostics baseline.
 5. After an authorized diagnostics installation, test the LCD, all 41
-   buttons/keys, seven encoders, master volume and audible key tones at FM1.
+   buttons/keys, seven encoders, master volume and audible key tones at FM-1.
    UAC playback/capture, UVC capture and long-run stability need real tests.
 
 The basic firmware is independent diagnostic software, not the vendor's stock
 firmware. It contains no ROM, WAD, song or proprietary bank. The LCD displays
 input states, coverage, encoder counts, volume and measured LCD frame rate.
 Piano keys play a quiet triangle tone with short ramps and a two-second cap.
-The source and offline LCD preview are in the FM1 repository's
+The source and offline LCD preview are in the FM-1 repository's
 `firmware/forge/README.md` and `firmware/forge/preview/diagnostics.png`.
 
 ## Module designer
@@ -127,7 +127,7 @@ action requests coding; it does not report a completed build or flash a device.
 The panel hands design data to Codex; the C firmware compiler runs in the
 developer's source checkout. These finite build tools are separate from device
 connections and do not require a background bridge. For example, set **Project
-folder** to `first-synth` before downloading. In the FM1 source checkout:
+folder** to `first-synth` before downloading. In the FM-1 source checkout:
 
 ```powershell
 python firmware/forge/create_project.py --base projects --slug first-synth --config first-synth.fm1-forge.json
@@ -215,7 +215,7 @@ deliberately using that separate bench path.
 
 The status text shows the last confirmed connection. Automatic checks use a
 small blinking circle beside that text; they do not replace the heading with
-“Checking connection.” A fresh observation updates the text when FM1 connects,
+“Checking connection.” A fresh observation updates the text when FM-1 connects,
 disconnects, changes port or enters a different mode.
 
 The default path uses the confirmed browser connection, not old relay

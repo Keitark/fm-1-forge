@@ -42,12 +42,12 @@ function fixture({saved=null,stockError=null,inspection=metadata,storage=scope,u
   return {el,nodes,calls,events,controller,Serial,stockFactory,runtime,serialPublish:value=>serialPublish(value),stockPublish:value=>stockPublish(value)};
 }
 test('mount initializes durable metadata only, with no chooser, device open, read or write',async()=>{
-  const f=fixture();await f.controller.ready;assert.deepEqual(f.calls,['storage.initialize','storage.savedAttempt']);assert.equal(f.el('device-heading').textContent,'FM1 disconnected');
+  const f=fixture();await f.controller.ready;assert.deepEqual(f.calls,['storage.initialize','storage.savedAttempt']);assert.equal(f.el('device-heading').textContent,'FM-1 disconnected');
   assert.equal(f.el('direct-stock-review').disabled,true);assert.deepEqual(JSON.parse(f.el('direct-storage-report').textContent),scope);f.controller.dispose();
 });
 test('synthetic chooser clicks do nothing; trusted serial connection uses real profile without invented COM port',async()=>{
   const f=fixture();await f.controller.ready;await f.controller.connectSerial({isTrusted:false});assert.ok(!f.calls.includes('serial.connect'));
-  await f.controller.connectSerial(event);assert.equal(f.el('device-heading').textContent,'FM1 via USB serial · MOD-EDITOR/1');assert.ok(!/COM\d/.test(f.el('device-heading').textContent));
+  await f.controller.connectSerial(event);assert.equal(f.el('device-heading').textContent,'FM-1 via USB serial · MOD-EDITOR/1');assert.ok(!/COM\d/.test(f.el('device-heading').textContent));
   const stable=f.el('device-heading').textContent,pending=f.controller.refresh();assert.equal(f.el('device-heading').textContent,stable);assert.equal(f.el('connection-check').hidden,false);await pending;
   assert.equal(f.el('device-heading').textContent,stable);assert.equal(f.el('connection-check').hidden,true);assert.ok(![...f.nodes.keys()].some(id=>/keymask|activity|counter/.test(id)));f.controller.dispose();
 });
@@ -98,7 +98,7 @@ test('main native default stays direct, ignores old cloud COM inventory, and nev
   const document={body:{dataset:{},style:{setProperty(){}},classList:{add(){}}},documentElement:{style:{}},hidden:false,getElementById:f.el,addEventListener:()=>{}};
   const context=vm.createContext({window,document,AbortController,Map,Object,Number,JSON,RegExp,String,Error,URL,crypto:globalThis.crypto,Date,setTimeout:fn=>{queueMicrotask(fn);return 1;},clearTimeout(){}});
   const script=[...UI_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1];vm.runInContext(script,context);await tick();
-  assert.equal(document.body.dataset.deviceMode,'direct');assert.equal(f.el('device-heading').textContent,'FM1 disconnected');assert.equal(f.el('install-diagnostics').disabled,true);assert.equal(f.el('library-add').disabled,false);assert.equal(f.el('forge-ask').disabled,false);assert.equal(requests.length,0);
+  assert.equal(document.body.dataset.deviceMode,'direct');assert.equal(f.el('device-heading').textContent,'FM-1 disconnected');assert.equal(f.el('install-diagnostics').disabled,true);assert.equal(f.el('library-add').disabled,false);assert.equal(f.el('forge-ask').disabled,false);assert.equal(requests.length,0);
   f.el('library-add').onclick({isTrusted:false});assert.equal(f.el('direct-library-files').clicks,0);f.el('library-add').onclick(event);assert.equal(f.el('direct-library-files').clicks,1);
   const localFile={name:'exported-nes.json'},nonPackage={name:'README.txt'};f.el('direct-library-files').files=[localFile,nonPackage];f.el('direct-library-name').value='My local set';f.el('direct-library-files').onchange(event);await tick();
   assert.equal(imports.length,1);assert.equal(imports[0].files[0],localFile);assert.equal(imports[0].files.length,2);assert.equal(imports[0].files[1],nonPackage);assert.equal(imports[0].options.name,'My local set');assert.match(f.el('library').innerHTML,/Local NES.*manual UBOOT/);assert.equal(requests.length,0);

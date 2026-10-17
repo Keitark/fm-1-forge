@@ -77,7 +77,7 @@ test('catalog refresh is single flight and resumes metadata only without touchin
 test('unavailable host tools produce an actionable error without fallback mutation',async()=>{
   const p=setup(()=>{throw new Error('Unknown tool');});
   p.el('library-add').onclick();await p.tick();
-  assert.match(p.el('library-status').textContent,/Reconnect FM1 Forge/);
+  assert.match(p.el('library-status').textContent,/Reconnect FM-1 Forge/);
   assert.deepEqual(p.requests.map(r=>r.name),['open_fm1_local_import']);
   p.ui.close();
 });

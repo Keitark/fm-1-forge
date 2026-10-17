@@ -15,13 +15,13 @@
         "category": "Productivity",
         "composerIcon": "./assets/fm1-tab-light-128.png",
         "composerIconDark": "./assets/fm1-tab-dark-128.png",
-        "defaultPrompt": "Open FM1 Forge and connect FM1 directly in the native panel.",
+        "defaultPrompt": "Open FM-1 Forge and connect FM-1 directly in the native panel.",
         "developerName": "Keitarou Kondou",
-        "displayName": "FM1 Forge",
+        "displayName": "FM-1 Forge",
         "logo": "./assets/fm1-tab-light-128.png",
         "logoDark": "./assets/fm1-tab-dark-128.png",
-        "longDescription": "Connect FM1 using browser MIDI or USB serial without a local bridge process. Review the exact official stock package before a SysEx update, configure firmware modules graphically, and ask Codex to build. Keep local firmware bytes in the browser and preserve durable recovery evidence. Existing UBOOT mass-storage recovery remains manual.",
-        "shortDescription": "Build and test FM1 firmware"
+        "longDescription": "Connect FM-1 using browser MIDI or USB serial without a local bridge process. Review the exact official stock package before a SysEx update, configure firmware modules graphically, and ask Codex to build. Keep local firmware bytes in the browser and preserve durable recovery evidence. Existing UBOOT mass-storage recovery remains manual.",
+        "shortDescription": "Build and test FM-1 firmware"
       },
       "onboardingSkill": "./skills/fm1-forge-setup/SKILL.md"
     }
@@ -29,5 +29,5 @@
   "homepage": "https://fm1-app-library.keitark.chatgpt.site/",
   "name": "fm1-app-library",
   "repository": "https://github.com/Keitark/fm1-marketplace-plugin",
-  "version": "3.2.0"
+  "version": "3.2.1"
 }

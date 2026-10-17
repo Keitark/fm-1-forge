@@ -37,12 +37,12 @@ function filePath(file){
   return path;
 }
 function validateDisplay(value){
-  if(!ident.test(value?.id)||typeof value.id!=='string'||!PROFILES.has(value.profile))throw fail('invalid_bundle','Choose exported FM1 catalog bundle JSON files.');
-  for(const [name,limit] of [['title',80],['description',500],['variant',120]])if(!textValid(value[name],limit))throw fail('invalid_metadata','An FM1 bundle contains invalid display metadata.');
+  if(!ident.test(value?.id)||typeof value.id!=='string'||!PROFILES.has(value.profile))throw fail('invalid_bundle','Choose exported FM-1 catalog bundle JSON files.');
+  for(const [name,limit] of [['title',80],['description',500],['variant',120]])if(!textValid(value[name],limit))throw fail('invalid_metadata','An FM-1 bundle contains invalid display metadata.');
 }
 function decodeImage(encoded){
   if(typeof encoded!=='string'||encoded.length!==1398104||!/^([A-Za-z0-9+/]+)==$/.test(encoded)||
-     (base64Values[encoded.charCodeAt(encoded.length-3)]&15)!==0)throw fail('invalid_image','An FM1 bundle must contain a canonical base64 1 MiB firmware image.');
+     (base64Values[encoded.charCodeAt(encoded.length-3)]&15)!==0)throw fail('invalid_image','An FM-1 bundle must contain a canonical base64 1 MiB firmware image.');
   const bytes=new Uint8Array(BROWSER_LIBRARY_LIMITS.imageBytes);let output=0;
   for(let offset=0;offset<encoded.length;offset+=4){
     const a=base64Values[encoded.charCodeAt(offset)],b=base64Values[encoded.charCodeAt(offset+1)];
@@ -51,7 +51,7 @@ function decodeImage(encoded){
     if(output<bytes.length)bytes[output++]=(b<<4)|(c>>2);
     if(output<bytes.length)bytes[output++]=(c<<6)|d;
   }
-  if(output!==bytes.length)throw fail('invalid_image','An FM1 bundle has an invalid firmware image size.');
+  if(output!==bytes.length)throw fail('invalid_image','An FM-1 bundle has an invalid firmware image size.');
   return bytes;
 }
 function makeMember(bundle){return {id:bundle.id,profile:bundle.profile,title:bundle.title,description:bundle.description,variant:bundle.variant,sha256:bundle.request.sha256,baseline_sha256:bundle.request.baseline_sha256,size_bytes:BROWSER_LIBRARY_LIMITS.imageBytes,ready:false,verification:'imported_unverified',transfer:'manual_uboot',image_hash_verified:true,device_baseline_verified:false};}
@@ -125,15 +125,15 @@ export function createBrowserLibrary({indexedDB=safeGlobal('indexedDB'),crypto=s
   }
   async function importFiles(selection,{name}={}){
     requireAvailable();let selected;
-    try{selected=Array.from(selection??[]);}catch{throw fail('invalid_selection','Choose 1–8 exported FM1 catalog bundle JSON files.');}
+    try{selected=Array.from(selection??[]);}catch{throw fail('invalid_selection','Choose 1–8 exported FM-1 catalog bundle JSON files.');}
     if(selected.length>BROWSER_LIBRARY_LIMITS.selectedFiles)throw fail('selection_too_large','Choose an exported app bundle folder rather than a large source folder.');
     selected.forEach(filePath);const files=selected.filter(file=>/\.json$/i.test(file.name));
-    if(files.length<1||files.length>BROWSER_LIBRARY_LIMITS.members)throw fail('invalid_selection','Choose 1–8 exported FM1 catalog bundle JSON files.');
+    if(files.length<1||files.length>BROWSER_LIBRARY_LIMITS.members)throw fail('invalid_selection','Choose 1–8 exported FM-1 catalog bundle JSON files.');
     const jsonPaths=files.map(filePath);
     if(new Set(jsonPaths.map(path=>path.toLowerCase())).size!==jsonPaths.length)throw fail('duplicate_path','The selected app bundles have duplicate file paths.');
     if(files.some(file=>!Number.isSafeInteger(file.size)||file.size<1||file.size>BROWSER_LIBRARY_LIMITS.bundleBytes||typeof file.arrayBuffer!=='function')||files.reduce((sum,file)=>sum+file.size,0)>BROWSER_LIBRARY_LIMITS.setBytes)throw fail('bundle_size_limit','Choose bundle JSON files up to 1.5 MB each and 12 MiB per set.');
     const roots=files.map(file=>file.webkitRelativePath?.split('/')[0]).filter(Boolean);
-    const inferred=roots.length===files.length&&new Set(roots).size===1?[...roots[0]].slice(0,80).join(''):'My FM1 apps';
+    const inferred=roots.length===files.length&&new Set(roots).size===1?[...roots[0]].slice(0,80).join(''):'My FM-1 apps';
     name=requireName(name===undefined?inferred:name);
     const staged=[],ids=new Set();
     for(const file of files){
@@ -141,12 +141,12 @@ export function createBrowserLibrary({indexedDB=safeGlobal('indexedDB'),crypto=s
       try{raw=await file.arrayBuffer();}catch{throw fail('file_read_failed','A selected bundle could not be read. No files were imported.');}
       if(raw.byteLength!==file.size||raw.byteLength>BROWSER_LIBRARY_LIMITS.bundleBytes)throw fail('bundle_size_limit','A selected bundle changed size or exceeds the import limit.');
       try{bundle=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(raw).replace(/^\uFEFF/,''));}catch{throw fail('invalid_json','A selected bundle is not valid UTF-8 JSON.');}
-      if(!exactKeys(bundle,BUNDLE_KEYS))throw fail('invalid_bundle','Choose exported FM1 catalog bundle JSON files.');validateDisplay(bundle);
+      if(!exactKeys(bundle,BUNDLE_KEYS))throw fail('invalid_bundle','Choose exported FM-1 catalog bundle JSON files.');validateDisplay(bundle);
       const request=bundle.request;
-      if(!exactKeys(request,REQUEST_KEYS)||request.op!=='plan'||typeof request.sha256!=='string'||!hex.test(request.sha256)||typeof request.baseline_sha256!=='string'||!hex.test(request.baseline_sha256))throw fail('invalid_request','An FM1 bundle has invalid offline plan metadata.');
+      if(!exactKeys(request,REQUEST_KEYS)||request.op!=='plan'||typeof request.sha256!=='string'||!hex.test(request.sha256)||typeof request.baseline_sha256!=='string'||!hex.test(request.baseline_sha256))throw fail('invalid_request','An FM-1 bundle has invalid offline plan metadata.');
       if(ids.has(bundle.id))throw fail('duplicate_package','The selected bundles contain duplicate package IDs.');ids.add(bundle.id);
       const image=decodeImage(request.image);
-      if(await sha256(image)!==request.sha256)throw fail('image_hash_mismatch','A selected FM1 bundle failed its firmware SHA256 check. No files were imported.');
+      if(await sha256(image)!==request.sha256)throw fail('image_hash_mismatch','A selected FM-1 bundle failed its firmware SHA256 check. No files were imported.');
       staged.push({schemaVersion:1,id:bundle.id,member:makeMember(bundle),image:new Blob([image],{type:'application/octet-stream'})});
     }
     // Validation of the complete selected set happens before any package writes.

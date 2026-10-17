@@ -1,4 +1,4 @@
-/** Foreground FM1 CDC diagnostics. Device permission is requested by connect() only.
+/** Foreground FM-1 CDC diagnostics. Device permission is requested by connect() only.
  * This transport has no firmware, STOP, UBOOT or arbitrary command API.
  * UBOOT exposes a vendor mass-storage protocol outside standard Web Serial.
  */
@@ -46,19 +46,19 @@ function parseStatus(line,profile){
   const values={};
   for(const token of body.split(' ')){
     const match=/^([a-z_]+)=(-?[0-9]+|[0-9a-fA-F]{16})$/.exec(token);
-    if(!match||!spec.allowed.has(match[1])||Object.hasOwn(values,match[1]))throw fail('invalid_status','FM1 returned an invalid diagnostics record.');
+    if(!match||!spec.allowed.has(match[1])||Object.hasOwn(values,match[1]))throw fail('invalid_status','FM-1 returned an invalid diagnostics record.');
     const [,name,raw]=match;
     if(profile==='FM1-FORGE/1'&&name==='keys'){
-      if(!/^[0-9a-fA-F]{16}$/.test(raw))throw fail('invalid_status','FM1 returned an invalid diagnostics record.');
+      if(!/^[0-9a-fA-F]{16}$/.test(raw))throw fail('invalid_status','FM-1 returned an invalid diagnostics record.');
       values[name]=raw;
     }else{
-      if(!/^-?[0-9]+$/.test(raw))throw fail('invalid_status','FM1 returned an invalid diagnostics record.');
+      if(!/^-?[0-9]+$/.test(raw))throw fail('invalid_status','FM-1 returned an invalid diagnostics record.');
       const value=Number(raw);
-      if(!Number.isSafeInteger(value)||value < -0x80000000||value > 0xffffffff)throw fail('invalid_status','FM1 diagnostics value exceeds its bound.');
+      if(!Number.isSafeInteger(value)||value < -0x80000000||value > 0xffffffff)throw fail('invalid_status','FM-1 diagnostics value exceeds its bound.');
       values[name]=value;
     }
   }
-  if(!spec.required.every(name=>Object.hasOwn(values,name)))throw fail('invalid_status','FM1 returned an incomplete diagnostics record.');
+  if(!spec.required.every(name=>Object.hasOwn(values,name)))throw fail('invalid_status','FM-1 returned an incomplete diagnostics record.');
   const counters=Object.fromEntries(Object.entries(values).filter(([name])=>PUBLIC_COUNTERS.has(name)));
   return {profile,command:spec.command,counters,diagnosticOnly:true,bootVerified:false};
 }
@@ -88,22 +88,22 @@ export class BrowserSerial{
       stage='opening';
       if(epoch!==this._epoch)throw fail('connection_canceled','Browser serial connection was canceled.');
       const info=selected?.getInfo?.();
-      if(info?.usbVendorId!==FM1_SERIAL_USB.usbVendorId||info?.usbProductId!==FM1_SERIAL_USB.usbProductId)throw fail('wrong_device','Select the FM1 diagnostics USB serial device.');
+      if(info?.usbVendorId!==FM1_SERIAL_USB.usbVendorId||info?.usbProductId!==FM1_SERIAL_USB.usbProductId)throw fail('wrong_device','Select the FM-1 diagnostics USB serial device.');
       this._port=selected;selected.addEventListener?.('disconnect',this._portDisconnect);
       await selected.open({baudRate:115200,dataBits:8,stopBits:1,parity:'none',flowControl:'none',bufferSize:4096});
       if(epoch!==this._epoch)throw fail('connection_canceled','Browser serial connection was canceled.');
       // Existing CDC overlay gates ready/transmit on DTR (bmTransceiver &17).
       // Match flash_session_worker.py once: DTR true, RTS false. Never pulse it.
-      if(typeof selected.setSignals!=='function')throw fail('signals_unavailable','FM1 diagnostics requires the CDC DTR readiness signal.');
+      if(typeof selected.setSignals!=='function')throw fail('signals_unavailable','FM-1 diagnostics requires the CDC DTR readiness signal.');
       await selected.setSignals({dataTerminalReady:true,requestToSend:false});
       if(epoch!==this._epoch)throw fail('connection_canceled','Browser serial connection was canceled.');
-      if(!selected.readable||!selected.writable)throw fail('serial_stream_unavailable','FM1 serial streams are unavailable.');
+      if(!selected.readable||!selected.writable)throw fail('serial_stream_unavailable','FM-1 serial streams are unavailable.');
       this._reader=selected.readable.getReader();this._writer=selected.writable.getWriter();
       this._reading=this._readLoop(this._reader,epoch);
       const profile=await this._exchange('HELLO',line=>{
         if(!line.startsWith('FM1DIAG/1'))return null;
         const recognized=serialHelloProfile(line);
-        if(!recognized)throw fail('unknown_firmware','FM1 serial firmware identity is not recognized.');
+        if(!recognized)throw fail('unknown_firmware','FM-1 serial firmware identity is not recognized.');
         return recognized;
       });
       if(epoch!==this._epoch)throw fail('connection_canceled','Browser serial connection was canceled.');
@@ -112,9 +112,9 @@ export class BrowserSerial{
     }catch(error){
       const safe=error instanceof BrowserSerialError?error:error?.name==='NotFoundError'
         ?stage==='chooser'
-          ?fail('permission_canceled','No FM1 serial port was selected. If no chooser appeared, this host may not support serial device selection.')
-          :fail('serial_open_failed','The selected FM1 serial port is unavailable.')
-        :fail(error?.name==='SecurityError'||error?.name==='NotAllowedError'?'permission_denied':'serial_open_failed',error?.name==='SecurityError'||error?.name==='NotAllowedError'?'The host did not allow FM1 serial access.':'Could not open the FM1 diagnostics serial port.');
+          ?fail('permission_canceled','No FM-1 serial port was selected. If no chooser appeared, this host may not support serial device selection.')
+          :fail('serial_open_failed','The selected FM-1 serial port is unavailable.')
+        :fail(error?.name==='SecurityError'||error?.name==='NotAllowedError'?'permission_denied':'serial_open_failed',error?.name==='SecurityError'||error?.name==='NotAllowedError'?'The host did not allow FM-1 serial access.':'Could not open the FM-1 diagnostics serial port.');
       // A canceled chooser/open must never close a newer connection. A port
       // whose open() completes after close() still needs its own cleanup.
       if(epoch!==this._epoch){
@@ -125,7 +125,7 @@ export class BrowserSerial{
     }
   }
   async readStatus(){
-    if(!this._state.connected||!this._state.profile)throw fail('not_connected','Connect to FM1 serial diagnostics first.');
+    if(!this._state.connected||!this._state.profile)throw fail('not_connected','Connect to FM-1 serial diagnostics first.');
     if(this._waiter||this._state.checking)throw fail('operation_busy','A serial diagnostics request is already active.');
     const profile=this._state.profile;
     this._publish({checking:true});
@@ -133,22 +133,22 @@ export class BrowserSerial{
       const status=await this._exchange(RULES[profile].command,line=>parseStatus(line,profile));
       this._publish({status,checking:false,error:null});return this.getState().status;
     }catch(error){
-      const safe=error instanceof BrowserSerialError?error:fail('serial_io_failed','Could not read FM1 serial diagnostics.');
+      const safe=error instanceof BrowserSerialError?error:fail('serial_io_failed','Could not read FM-1 serial diagnostics.');
       await this._close(safe.code);throw safe;
     }
   }
   async _exchange(command,accept){
     if(this._waiter)throw fail('operation_busy','A serial diagnostics request is already active.');
-    if(!this._writer)throw fail('not_connected','The FM1 serial port is closed.');
+    if(!this._writer)throw fail('not_connected','The FM-1 serial port is closed.');
     let resolve,reject;
     const reply=new Promise((yes,no)=>{resolve=yes;reject=no;});
     const waiter={accept,resolve,reject,timer:null};this._waiter=waiter;
-    waiter.timer=this._clock.setTimeout(()=>this._finishWaiter(waiter,fail('serial_timeout','FM1 serial diagnostics did not respond in time.')),this._timeoutMs);
+    waiter.timer=this._clock.setTimeout(()=>this._finishWaiter(waiter,fail('serial_timeout','FM-1 serial diagnostics did not respond in time.')),this._timeoutMs);
     try{
       const write=this._writer.write(new TextEncoder().encode(command+'\n'));
       const [,answer]=await Promise.all([write,reply]);return answer;
     }catch(error){
-      const safe=error instanceof BrowserSerialError?error:fail('serial_io_failed','Could not exchange FM1 serial diagnostics.');
+      const safe=error instanceof BrowserSerialError?error:fail('serial_io_failed','Could not exchange FM-1 serial diagnostics.');
       this._finishWaiter(waiter,safe);throw safe;
     }
   }
@@ -168,20 +168,20 @@ export class BrowserSerial{
       while(epoch===this._epoch){
         const {value,done}=await reader.read();
         if(epoch!==this._epoch)return;
-        if(done)throw fail('disconnected','FM1 serial disconnected.');
-        if(!(value instanceof Uint8Array)||value.byteLength>MAX_CHUNK)throw fail('serial_bounds','FM1 serial data exceeds its bound.');
+        if(done)throw fail('disconnected','FM-1 serial disconnected.');
+        if(!(value instanceof Uint8Array)||value.byteLength>MAX_CHUNK)throw fail('serial_bounds','FM-1 serial data exceeds its bound.');
         pending+=decoder.decode(value,{stream:true});
         let end;
         while((end=pending.indexOf('\n'))!==-1){
-          if(end>MAX_LINE)throw fail('serial_bounds','FM1 serial line exceeds its bound.');
+          if(end>MAX_LINE)throw fail('serial_bounds','FM-1 serial line exceeds its bound.');
           const line=pending.slice(0,end).replace(/\r$/,'');pending=pending.slice(end+1);
           this._line(line);
         }
-        if(pending.length>MAX_LINE)throw fail('serial_bounds','FM1 serial line exceeds its bound.');
+        if(pending.length>MAX_LINE)throw fail('serial_bounds','FM-1 serial line exceeds its bound.');
       }
     }catch(error){
       if(epoch!==this._epoch)return;
-      const safe=error instanceof BrowserSerialError?error:fail('serial_read_failed','FM1 serial stream could not be read.');
+      const safe=error instanceof BrowserSerialError?error:fail('serial_read_failed','FM-1 serial stream could not be read.');
       if(this._waiter)this._finishWaiter(this._waiter,safe);
       // Do not await this loop's own cancellation during cleanup.
       void this._close(safe.code);
@@ -191,7 +191,7 @@ export class BrowserSerial{
   async _close(error){
     if(this._closing)return this._closing;
     ++this._epoch;
-    if(this._waiter)this._finishWaiter(this._waiter,fail('disconnected','The FM1 serial connection was closed.'));
+    if(this._waiter)this._finishWaiter(this._waiter,fail('disconnected','The FM-1 serial connection was closed.'));
     const port=this._port,reader=this._reader,writer=this._writer;
     this._port=null;this._reader=null;this._writer=null;this._reading=null;
     this._publish({connected:false,connecting:false,checking:false,profile:null,statusCommand:null,status:null,error});

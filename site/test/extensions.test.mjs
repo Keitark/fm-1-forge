@@ -45,7 +45,7 @@ test('official settings register discovery capabilities and native structured la
       assert.equal(configure._meta.ui.resourceUri,RESOURCE_URI);assert.equal(configure._meta['openai/ui'].preferredModelDisplayMode,'fullscreen');assert.ok(configure.icons.length);
       const quickAction=listed.tools.find(tool=>tool.name==='open_fm1_library')._meta['openai/ui'].entrypoints[0].quickAction;assert.equal(quickAction.target.name,configure.name);
       const form=await client.callTool({name:configure.name,arguments:{}});assert.equal(form.structuredContent.action,'unsupported');assert.equal(form.structuredContent.created,false);
-      const nativePanel=await client.readResource({uri:configure._meta.ui.resourceUri});assert.equal(nativePanel.contents[0].mimeType,'text/html;profile=mcp-app');assert.match(nativePanel.contents[0].text,/FM1 Forge/);assert.equal(mutations(env),0);
+      const nativePanel=await client.readResource({uri:configure._meta.ui.resourceUri});assert.equal(nativePanel.contents[0].mimeType,'text/html;profile=mcp-app');assert.match(nativePanel.contents[0].text,/FM-1 Forge/);assert.equal(mutations(env),0);
     }finally{await client.close();}
   }
 });

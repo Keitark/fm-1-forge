@@ -14,7 +14,7 @@ const defaults=Object.freeze({palette:'forge-black',pattern:'solid',entry_method
 const settingShape={palette:z.enum(PRESETS.map(item=>item.id)),pattern:z.enum(PATTERNS.map(item=>item.id)),entry_method:z.enum(['auto','serial','already_uboot']),default_module:moduleName,default_usb_audio:z.boolean()};
 const valuesSchema=z.strictObject(settingShape);
 const settingsLayout=[{kind:'group',title:'Appearance',items:[{kind:'property',property:'palette'},{kind:'property',property:'pattern'}]},{kind:'group',title:'Firmware defaults',items:[{kind:'property',property:'entry_method'},{kind:'property',property:'default_module'},{kind:'property',property:'default_usb_audio'},{kind:'tool',tool:'configure_fm1_project',description:'Open a firmware configuration form'}]}];
-const settingTitles={palette:'FM1 color palette',pattern:'Background pattern',entry_method:'Preferred transfer entry',default_module:'Default user module',default_usb_audio:'Enable USB audio in new drafts'};
+const settingTitles={palette:'FM-1 color palette',pattern:'Background pattern',entry_method:'Preferred transfer entry',default_module:'Default user module',default_usb_audio:'Enable USB audio in new drafts'};
 const settingInput=z.strictObject({set:z.strictObject(settingShape).partial().refine(value=>Object.keys(value).length>0)});
 const canonicalShape={project:z.strictObject({slug:z.string().max(48),displayName:z.string().max(64)}),profile:z.literal('forge-diag'),clockPreset:clock,lcdPreset:lcd,module:moduleName,usb:z.strictObject({cdc:z.literal(true),uac:z.boolean(),uboot:z.literal(true)})};
 const halShape={buttons:z.boolean(),encoders:z.boolean(),volume:z.boolean(),lcd:z.boolean(),audio:z.boolean()};
@@ -113,7 +113,7 @@ export async function configureForgeProject(env,owner,context,extensions,server)
   try{
     const projects=await listForgeProjects(env,owner),requestedSchema=structuredClone(PROJECT_FORM);
     if(projects.length)requestedSchema.properties.referenceProject={type:'array',title:'Saved configuration reference (optional)',minItems:0,maxItems:1,items:{type:'string',format:'uri'},'x-openai-input':{type:'resource',selection:'explicit',options:projects.map(project=>({uri:project.resource_uri,name:project.title,mimeType:'application/json'}))}};
-    const params={mode:'form',message:'Configure an FM1 firmware draft. A saved reference is context; the fields you enter are saved. This does not build or flash firmware.',requestedSchema};
+    const params={mode:'form',message:'Configure an FM-1 firmware draft. A saved reference is context; the fields you enter are saved. This does not build or flash firmware.',requestedSchema};
     answer=revision>='2026-07-28'?requestFormInput(context,{...params,key:PROJECT_FORM_KEY}):await extensions.elicitInputLegacy(context,params);
   }catch{throw new PublicError('The native form response is invalid or unavailable. No project was saved.');}
   if(answer.resultType==='input_required')return answer;
@@ -135,7 +135,7 @@ export async function callExtensionTool(env,owner,name,input={},context,extensio
   if(name==='list_fm1_projects')return {projects:await listForgeProjects(env,owner),gate:await forgeGate(env,owner)};
   if(name==='save_fm1_project')return saveForgeProject(env,owner,args);
   if(name==='get_fm1_project')return {project:await getForgeProject(env,owner,args.project_id),gate:await forgeGate(env,owner)};
-  if(name==='open_fm1_project')return {file:validateFile(args.file),mode:'project_file',gate:await forgeGate(env,owner),message:'Read this opaque resource through the host. Opening it does not create a project or contact the FM1.'};
+  if(name==='open_fm1_project')return {file:validateFile(args.file),mode:'project_file',gate:await forgeGate(env,owner),message:'Read this opaque resource through the host. Opening it does not create a project or contact the FM-1.'};
   return configureForgeProject(env,owner,context,extensions,server);
 }
 async function latestCatalog(env,owner){const row=await database(env).prepare("SELECT result FROM relay_tasks WHERE user_id=? AND operation='catalog' AND state='succeeded' ORDER BY created DESC,rowid DESC LIMIT 1").bind(owner).first();return row?.result?JSON.parse(row.result).data:null;}
@@ -146,7 +146,7 @@ export async function searchForgeMentions(env,owner,query){
   const projects=await listForgeProjects(env,owner),catalog=await latestCatalog(env,owner);
   const jobs=(await database(env).prepare('SELECT id,operation,state FROM relay_tasks WHERE user_id=? ORDER BY created DESC,rowid DESC LIMIT 24').bind(owner).all()).results;
   const items=[...projects.map(item=>({type:'resource',resourceUri:item.resource_uri,title:item.title,subtitle:'Forge configuration draft',icons:ICONS})),
-    ...catalogVariants(catalog).filter(item=>CATALOG_ID.test(item?.id||'')).map(item=>({type:'resource',resourceUri:'fm1-forge://catalog/'+item.id,title:mentionTitle(item.title,item.id),subtitle:'FM1 package metadata',icons:ICONS})),
+    ...catalogVariants(catalog).filter(item=>CATALOG_ID.test(item?.id||'')).map(item=>({type:'resource',resourceUri:'fm1-forge://catalog/'+item.id,title:mentionTitle(item.title,item.id),subtitle:'FM-1 package metadata',icons:ICONS})),
     ...jobs.map(item=>({type:'resource',resourceUri:'fm1-forge://jobs/'+item.id,title:item.operation+' · '+item.id.slice(0,8),subtitle:'Saved '+item.state+' request',icons:ICONS}))];
   const needle=query.toLowerCase().trim();
   return {items:items.filter(item=>(item.title+' '+item.subtitle+' '+item.resourceUri).toLowerCase().includes(needle)).slice(0,24)};
@@ -163,20 +163,20 @@ export async function readForgeResource(env,owner,uri){
 export function registerForgeExtensions(server,env,owner){
   const extensions=new OpenAIExtensions(server);
   extensions.settings.register({fields:{
-    palette:{schema:settingShape.palette,title:'FM1 color palette'},pattern:{schema:settingShape.pattern,title:'Background pattern'},
+    palette:{schema:settingShape.palette,title:'FM-1 color palette'},pattern:{schema:settingShape.pattern,title:'Background pattern'},
     entry_method:{schema:settingShape.entry_method,title:'Preferred transfer entry'},default_module:{schema:settingShape.default_module,title:'Default user module'},
     default_usb_audio:{schema:settingShape.default_usb_audio,title:'Enable USB audio in new drafts'},
   },layout:settingsLayout,read:()=>readForgeSettings(env,owner()),update:set=>updateForgeSettings(env,owner(),set)});
   extensions.mentions.setHandler(params=>searchForgeMentions(env,owner(),params.query));
   const descriptions={list_fm1_projects:'List saved configuration drafts for the signed-in owner.',save_fm1_project:'Save a validated configuration draft. Does not create a directory, build firmware or contact hardware.',get_fm1_project:'Read one saved Forge configuration draft.',open_fm1_project:'Open a .fm1-forge.json configuration in the native Forge viewer.',configure_fm1_project:'Show a native configuration form and save the accepted draft. No build or device transfer.'};
   for(const name of Object.keys(descriptions)){
-    server.registerTool(name,{title:name==='open_fm1_project'?'FM1 Forge project':name==='configure_fm1_project'?'Configure FM1 project':descriptions[name].split('.')[0],description:descriptions[name],inputSchema:inputSchemas[name],annotations:{readOnlyHint:['list_fm1_projects','get_fm1_project','open_fm1_project'].includes(name),destructiveHint:false,openWorldHint:false},
+    server.registerTool(name,{title:name==='open_fm1_project'?'FM-1 Forge project':name==='configure_fm1_project'?'Configure FM-1 project':descriptions[name].split('.')[0],description:descriptions[name],inputSchema:inputSchemas[name],annotations:{readOnlyHint:['list_fm1_projects','get_fm1_project','open_fm1_project'].includes(name),destructiveHint:false,openWorldHint:false},
       ...(['open_fm1_project','configure_fm1_project'].includes(name)?{icons:ICONS,_meta:{ui:{resourceUri:RESOURCE_URI},'openai/ui':OpenAIUiToolMetadataSchema.parse({...(name==='open_fm1_project'?{entrypoints:[{type:'file',extensions:['.fm1-forge.json']}]}:{}),preferredModelDisplayMode:'fullscreen'})}}:{})},async(args,context)=>{
       try{const data=await callExtensionTool(env,owner(),name,args,context,extensions,server);return data.resultType==='input_required'?data:result(data);}
       catch(error){return {isError:true,content:[{type:'text',text:error instanceof PublicError?error.message:'Forge storage is temporarily unavailable.'}]};}
     });
   }
-  for(const [kind,label] of [['projects','Forge project configurations'],['jobs','FM1 saved requests'],['catalog','FM1 package metadata']]){
+  for(const [kind,label] of [['projects','Forge project configurations'],['jobs','FM-1 saved requests'],['catalog','FM-1 package metadata']]){
     server.registerResource(label,new ResourceTemplate('fm1-forge://'+kind+'/{id}',{list:undefined}),{mimeType:'application/json'},uri=>readForgeResource(env,owner(),uri.href));
   }
   return extensions;

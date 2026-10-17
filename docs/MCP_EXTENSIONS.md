@@ -1,6 +1,6 @@
-# FM1 Forge native extensions
+# FM-1 Forge native extensions
 
-Forge 3.2.0 uses the official OpenAI MCP Extensions TypeScript SDK on the
+Forge 3.2.1 uses the official OpenAI MCP Extensions TypeScript SDK on the
 hosted MCP server and native MCP App. ChatGPT Sites hosts the server and UI.
 The default hardware path executes JavaScript in the panel through Web Serial
 and Web MIDI; it uses no Python/Node helper, relay or Startup process. The
@@ -10,7 +10,7 @@ Browser WebMCP is a separate interface and does not discover the native panel.
 The panel build freezes its browser runtime strings before production server
 minification. Changes to those source runtimes require `npm run build:panel`;
 contract tests reject stale generated strings and execute the minified UI.
-The canonical source UI resource is `ui://fm1/forge-panel-v19.html`, with prior
+The canonical source UI resource is `ui://fm1/forge-panel-v20.html`, with prior
 resource aliases retained.
 
 ## Official SDK source
@@ -48,12 +48,12 @@ An unsupported draft action never falls back to immediately sending a message.
 ## Conversation tabs and icons
 
 For Forge beside an existing Codex chat, use **Side-panel New Tab (+) → More
-tools… → Plugins and MCPs → FM1 Forge**. This selects the native thread
+tools… → Plugins and MCPs → FM-1 Forge**. This selects the native thread
 entrypoint. The global shortcut opens its own app view and conversation
 instance. Expanding a model-generated app card uses another host rendering
 route; its tab icon may be supplied by Codex rather than the tool's icons.
 
-Forge supplies a separate FM1 tab outline with an LCD, knobs, pads and
+Forge supplies a separate FM-1 tab outline with an LCD, knobs, pads and
 keys. Its transparent interior preserves these features when Codex masks the
 icon. Light and dark 128×128 PNGs are advertised on opening tools, quick actions
 and server metadata; matching packaged composer/logo assets use the same mark.
@@ -75,10 +75,10 @@ permissions or recreating the plugin.
 
 ## Direct connection and host permission
 
-The current source panel is `ui://fm1/forge-panel-v19.html`; older resource aliases
+The current source panel is `ui://fm1/forge-panel-v20.html`; older resource aliases
 remain served for installed descriptors. OpenAI treats UI resource URIs as cache
 keys. A host with old registered descriptors may require refreshing the existing
-connection metadata before a newly opened panel selects v19. Reopening alone does
+connection metadata before a newly opened panel selects v20. Reopening alone does
 not prove that updated scripts loaded. See [OpenAI UI guidance](https://developers.openai.com/plugins/build/chatgpt-ui).
 
 Forge paints its selected background and pattern on an app-owned full-viewport
@@ -113,7 +113,7 @@ The direct stock path is in `site/lib/browser-stock/`. Its JavaScript runs in
 the panel and calls standard Web MIDI; no separate JavaScript runtime is
 installed and no helper, Node module, MCP queue or local HTTP bridge performs
 the transfer. **Connect stock MIDI** requests SysEx access under a trusted
-gesture and exclusive Web Lock, selects an exact unique FM1 pair and checks its
+gesture and exclusive Web Lock, selects an exact unique FM-1 pair and checks its
 model identity. Generic USB Composite Device names are rejected because Web
 MIDI does not provide trusted USB-interface correlation.
 
@@ -224,8 +224,8 @@ The previous Python bridge/relay, protected serial/UBOOT writer, local Node
 stock worker and vendor M-UPGRADE handoff remain compatibility operations.
 Their saved job receipts, one-use approvals and unknown-outcome latches are
 preserved. Legacy `get_fm1_status` is passive inventory and `relay.connected`
-means the service heartbeat, not physical FM1 presence. These APIs are not
-the 3.2.0 panel's automatic detection or transfer path.
+means the service heartbeat, not physical FM-1 presence. These APIs are not
+the 3.2.1 panel's automatic detection or transfer path.
 
 UBOOT uses a vendor mass-storage protocol outside standard Web Serial/Web MIDI,
 and direct CDC COMMIT remains blocked. A custom flash therefore uses an

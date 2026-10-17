@@ -1,17 +1,17 @@
 ---
 name: fm1-app-library
-description: Use FM1 Forge for direct browser MIDI/serial, reviewed stock updates, graphical firmware modules and Codex build requests.
+description: Use FM-1 Forge for direct browser MIDI/serial, reviewed stock updates, graphical firmware modules and Codex build requests.
 ---
 
-# FM1 Forge
+# FM-1 Forge
 
-Open open_fm1_library from this installed plugin. Discover actual tool schemas for cloud settings, projects and file resources. Keep the existing private Site, plugin identity and saved work. The internal package remains fm1-app-library; the displayed name is FM1 Forge.
+Open open_fm1_library from this installed plugin. Discover actual tool schemas for cloud settings, projects and file resources. Keep the existing private Site, plugin identity and saved work. The internal package remains fm1-app-library; the displayed name is FM-1 Forge.
 
 ## Direct device connection
 
 Normal hardware access is foreground panel JavaScript. No Python/Node helper process is required. Do not start the old bridge/relay or install a runtime to demonstrate this flow. API/policy checks are separate from permission, device identity and transfer acceptance.
 
-The user explicitly selects browser serial or stock MIDI access. Serial accepts only FM1 USB IDs and known HELLO replies. It exposes fixed read-only status commands, not arbitrary commands, STOP, UBOOT or flashing. Do not add sampled key/knob activity.
+The user explicitly selects browser serial or stock MIDI access. Serial accepts only FM-1 USB IDs and known HELLO replies. It exposes fixed read-only status commands, not arbitrary commands, STOP, UBOOT or flashing. Do not add sampled key/knob activity.
 
 Stock updating accepts only the unmodified official V15 .fwsc: 699,956 bytes, SHA-256 db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a. Select and check it locally; never upload firmware bytes/device paths to Sites, MCP or chat. Review digest, size, identity and selected MIDI pair before the panel confirmation. Durable IndexedDB state and a shared Web Lock are mandatory before upgrade; no memory-only downgrade, automatic retry or different-job resume. Completion and FM-1_015 reboot identity do not establish full readback or physical LCD/audio acceptance.
 

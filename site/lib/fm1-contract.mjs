@@ -1,10 +1,10 @@
 import { ICONS } from './fm1-icon.mjs';
 import { OpenAIUiToolMetadataSchema } from '@openai/mcp-extensions';
-export const RESOURCE_URI = 'ui://fm1/forge-panel-v19.html';
+export const RESOURCE_URI = 'ui://fm1/forge-panel-v20.html';
 export const PROFILES = [
   {profile:'diagnostics',title:'Forge diagnostics',description:'Test inputs, LCD and audio before starting your firmware project.',symbol:'F'},
   {profile:'nes',title:'NES',description:'Play your prepared cartridge collection.',symbol:'N'},
-  {profile:'doom',title:'Doom',description:'The original engine, adapted for FM1.',symbol:'D'},
+  {profile:'doom',title:'Doom',description:'The original engine, adapted for FM-1.',symbol:'D'},
   {profile:'mdx',title:'MDX',description:'FM music playback and keyboard performance.',symbol:'M'},
   {profile:'buddha',title:'Buddha',description:'An Amiga module performance.',symbol:'B'},
   {profile:'protracker',title:'ProTracker',description:'Explore and perform tracker music.',symbol:'P'},
@@ -36,11 +36,11 @@ const schemas = {
   entry_method:{type:'string',enum:['auto','serial','already_uboot']},
 };
 const definitions = [
-  ['open_fm1_library','FM1 Forge','Open the installed FM1 Forge panel with direct browser USB serial and stock MIDI access, graphical firmware modules and browser-local app sets. No device helper process is started.',[],true],
+  ['open_fm1_library','FM-1 Forge','Open the installed FM-1 Forge panel with direct browser USB serial and stock MIDI access, graphical firmware modules and browser-local app sets. No device helper process is started.',[],true],
   ['get_fm1_status','Refresh legacy bench status','Request legacy relay inventory and persisted bridge/session state. This does not read the direct browser connection. No device I/O.',[],true],
-  ['get_fm1_input_snapshot','Sample hardware inputs','Request one bounded read-only serial input sample from the locally selected FM1. Reports supported keys, encoders and volume; never changes firmware, clocks, sound or recovery mode. Inspect its saved request ID after a timeout.',[],true],
+  ['get_fm1_input_snapshot','Sample hardware inputs','Request one bounded read-only serial input sample from the locally selected FM-1. Reports supported keys, encoders and volume; never changes firmware, clocks, sound or recovery mode. Inspect its saved request ID after a timeout.',[],true],
   ['list_fm1_apps','Refresh app packages','Request validated package metadata and readiness; never returns firmware bytes.',[],true],
-  ['open_fm1_local_import','Add local app set','Open the local companion importer so the user can choose built FM1 package JSON files and save a named app set. Firmware bytes remain local. No device I/O. Inspect the saved request ID after a timeout.',[],false],
+  ['open_fm1_local_import','Add local app set','Open the local companion importer so the user can choose built FM-1 package JSON files and save a named app set. Firmware bytes remain local. No device I/O. Inspect the saved request ID after a timeout.',[],false],
   ['plan_fm1_app','Plan app change','Submit an offline plan for an existing catalog ID. No device I/O. Returns a saved request ID; inspect it with get_fm1_request.',['catalog_id'],false],
   ['get_fm1_job','Inspect saved job','Request a saved bridge job by its exact ID. Does not resubmit any operation.',['job_id'],true],
   ['get_fm1_request','Inspect relay request','Read the saved delivery outcome, including the authoritative bridge job status.',['request_id'],true],

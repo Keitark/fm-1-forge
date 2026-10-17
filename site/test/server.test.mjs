@@ -15,7 +15,7 @@ async function request(env,path,value,{owner='alice',relay=false,origin,method='
   return {status:response.status,body:data?JSON.parse(data):null};
 }
 const api=(env,name,args={},options)=>request(env,'/api/fm1',{name,arguments:args},options);
-const rpc=(env,method,params={},options)=>request(env,'/mcp',{jsonrpc:'2.0',id:7,method,params:method==='initialize'?{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'FM1 test',version:'1'},...params}:params},options);
+const rpc=(env,method,params={},options)=>request(env,'/mcp',{jsonrpc:'2.0',id:7,method,params:method==='initialize'?{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'FM-1 test',version:'1'},...params}:params},options);
 test('generated migration creates expected durable storage',()=>{const env=database();assert.equal(env.DB.sqlite.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").get().n,7);});
 test('private user authentication is required for API and MCP tool execution',async()=>{const env=database();assert.equal((await api(env,'open_fm1_library',{}, {owner:null})).status,401);assert.equal((await rpc(env,'tools/call',{name:'open_fm1_library'},{owner:null})).status,401);});
 test('foreign origin is rejected on both transports',async()=>{const env=database();assert.equal((await api(env,'open_fm1_library',{}, {origin:'https://evil.test'})).status,403);assert.equal((await rpc(env,'initialize',{}, {origin:'https://evil.test'})).status,403);});
@@ -280,7 +280,7 @@ test('legacy inventory without a receipt timestamp and expired observations rema
   }
 });
 
-test('relay heartbeat health never renews inventory or claims that FM1 is physically present',async()=>{
+test('relay heartbeat health never renews inventory or claims that FM-1 is physically present',async()=>{
   const env=database();connect(env);cacheInventory(env,'alice',serialInventory,{observedAt:seconds()-60});
   assert.equal((await request(env,'/relay/heartbeat',{allow_switch:false},{relay:true})).status,200);
   let snapshot=await callTool(env,'alice','open_fm1_library',{});assert.equal(snapshot.relay.connected,true);assert.equal(snapshot.inventory_status.state,'stale');

@@ -30,7 +30,7 @@ const INVENTORY_OBSERVED_FIELD='_site_inventory_observed_at';
 function publicResult(encoded){const value=JSON.parse(encoded);delete value[INVENTORY_OBSERVED_FIELD];delete value._site_input_observed_at;return value;}
 const parse=(row)=>row?{id:row.id,operation:row.operation,state:row.state,created:row.created,...(row.result?publicResult(row.result):{})}:null;
 function db(env){if(!env.DB)throw new PublicError('Saved requests are unavailable.',503);return env.DB;}
-function user(request){const value=request.headers.get('oai-authenticated-user-id');if(!value)throw new PublicError('Sign in to use your FM1 library.',401);return value;}
+function user(request){const value=request.headers.get('oai-authenticated-user-id');if(!value)throw new PublicError('Sign in to use your FM-1 library.',401);return value;}
 function safeOrigin(request,env){const origin=request.headers.get('origin');if(origin&&origin!==(env.SITE_ORIGIN||new URL(request.url).origin))throw new PublicError('Origin is not permitted.',403);}
 async function relayState(env) {
   const row=await db(env).prepare("SELECT last_seen,allow_switch,allow_official_update,allow_stock_update FROM relay_state WHERE id='bench'").first();
@@ -146,11 +146,11 @@ async function stagedSwitch(env,owner,args){
 }
 async function officialState(env,owner){
   const status=await inventorySnapshot(env,owner,await relayState(env)),inventory=status.inventory;
-  if(status.inventory_status.state!=='fresh')throw new PublicError('Refresh the device: official updating needs fresh FM1 MIDI/SysEx inventory.',409);
+  if(status.inventory_status.state!=='fresh')throw new PublicError('Refresh the device: official updating needs fresh FM-1 MIDI/SysEx inventory.',409);
   const engine=inventory?.engine;
   if(engine?.active||engine?.blocked_unknown||engine?.storage_fault||engine?.updater_handoff)throw new PublicError('Resolve the saved bench job or updater handoff before another official update.',409);
   const update=inventory?.device?.official_update;
-  if(!update?.configured||!update.available||!/^[a-f0-9]{64}$/.test(update.sha256||''))throw new PublicError('Refresh the device: the pinned official updater needs a recognized FM1 MIDI/SysEx connection.',409);
+  if(!update?.configured||!update.available||!/^[a-f0-9]{64}$/.test(update.sha256||''))throw new PublicError('Refresh the device: the pinned official updater needs a recognized FM-1 MIDI/SysEx connection.',409);
   return update;
 }
 async function stagedOfficial(env,owner){
@@ -158,7 +158,7 @@ async function stagedOfficial(env,owner){
   if(!connection.connected||!connection.allow_official_update)throw new PublicError('Official updating is disabled or the bench is disconnected.',403);
   const update=await officialState(env,owner),approval=ident(),expires=now()+180;
   await db(env).prepare('INSERT INTO official_update_approvals(id,user_id,digest,expires,used) VALUES(?,?,?,?,0)').bind(approval,owner,update.sha256,expires).run();
-  return {review:{title:'Official FM1 SysEx update',sha256:update.sha256,package_format:'.fwsc',expires,handoff:true},_approval:approval,message:'Review and open the official Windows updater. Select the official .fwsc package there; the vendor tool handles the MIDI/OTA transfer. No updater has been launched.'};
+  return {review:{title:'Official FM-1 SysEx update',sha256:update.sha256,package_format:'.fwsc',expires,handoff:true},_approval:approval,message:'Review and open the official Windows updater. Select the official .fwsc package there; the vendor tool handles the MIDI/OTA transfer. No updater has been launched.'};
 }
 async function commitOfficial(env,owner,args){
   const approval=await db(env).prepare('SELECT * FROM official_update_approvals WHERE id=? AND user_id=?').bind(args.approval_id,owner).first();
@@ -181,11 +181,11 @@ async function commitOfficial(env,owner,args){
 }
 async function stockState(env,owner,connection){
   const snapshot=await inventorySnapshot(env,owner,connection),inventory=snapshot.inventory;
-  if(snapshot.inventory_status.state!=='fresh')throw new PublicError('Refresh the device: stock updating needs fresh FM1 MIDI inventory.',409);
+  if(snapshot.inventory_status.state!=='fresh')throw new PublicError('Refresh the device: stock updating needs fresh FM-1 MIDI inventory.',409);
   const engine=inventory?.engine,update=inventory?.device?.stock_update,mode=inventory?.device?.update_mode;
   if(engine?.active||engine?.blocked_unknown||engine?.storage_fault||engine?.updater_handoff||engine?.stock_baseline_invalidated)throw new PublicError('Resolve the saved bench job or establish a fresh baseline before a stock update.',409);
-  if(mode?.mode==='ota_sysex')throw new PublicError('FM1 is already in OTA mode. Inspect and recover the original transfer locally; a new update approval cannot resume it.',409);
-  if(!update?.configured||!update.available||update.native_runtime!==true||update.sha256!==STOCK_PACKAGE_SHA256||update.size!==699956||update.identity!=='FM-1_015'||!stockPair(update.expected_stock_pair)||mode?.mode!=='sysex')throw new PublicError('The pinned stock package and native SysEx runtime need one recognized stock FM1 MIDI connection. Custom CDC firmware must be restored separately first.',409);
+  if(mode?.mode==='ota_sysex')throw new PublicError('FM-1 is already in OTA mode. Inspect and recover the original transfer locally; a new update approval cannot resume it.',409);
+  if(!update?.configured||!update.available||update.native_runtime!==true||update.sha256!==STOCK_PACKAGE_SHA256||update.size!==699956||update.identity!=='FM-1_015'||!stockPair(update.expected_stock_pair)||mode?.mode!=='sysex')throw new PublicError('The pinned stock package and native SysEx runtime need one recognized stock FM-1 MIDI connection. Custom CDC firmware must be restored separately first.',409);
   return update;
 }
 async function stagedStock(env,owner){
@@ -193,7 +193,7 @@ async function stagedStock(env,owner){
   if(!connection.connected||!connection.allow_stock_update)throw new PublicError('Stock SysEx updating is disabled or the bench is disconnected.',403);
   const update=await stockState(env,owner,connection),approval=ident(),expires=now()+180;
   await db(env).prepare('INSERT INTO official_update_approvals(id,user_id,digest,expires,used,kind,route_review) VALUES(?,?,?,?,0,?,?)').bind(approval,owner,update.sha256,expires,'stock_sysex',JSON.stringify(update.expected_stock_pair)).run();
-  return {review:{title:'Stock FM1 firmware · V15',sha256:update.sha256,size:update.size,identity:update.identity,pair:update.expected_stock_pair,expires,handoff:false,readback_verified:false},_approval:approval,message:'Review the exact official package and stock MIDI connection, then confirm once. The local native worker handles SysEx/OTA; full flash readback is not supported.'};
+  return {review:{title:'Stock FM-1 firmware · V15',sha256:update.sha256,size:update.size,identity:update.identity,pair:update.expected_stock_pair,expires,handoff:false,readback_verified:false},_approval:approval,message:'Review the exact official package and stock MIDI connection, then confirm once. The local native worker handles SysEx/OTA; full flash readback is not supported.'};
 }
 async function commitStock(env,owner,args){
   const approval=await db(env).prepare('SELECT * FROM official_update_approvals WHERE id=? AND user_id=?').bind(args.approval_id,owner).first();
@@ -305,9 +305,9 @@ async function mcp(request,env){
     if(rpc?.method==='tools/call'||(rpc?.method==='resources/read'&&String(rpc.params?.uri||'').startsWith('fm1-forge:')))user(request);
   }
   const handler=createMcpHandler(()=>{
-    const server=new McpServer({name:'FM1 Forge',version:'3.2.0',icons:ICONS},{
+    const server=new McpServer({name:'FM-1 Forge',version:'3.2.1',icons:ICONS},{
       jsonSchemaValidator:new CfWorkerJsonSchemaValidator(),
-      instructions:'Open FM1 Forge through this installed plugin. Normal device actions use browser JavaScript; do not start Python or Node helpers. Configure USB/system, HAL and user modules and use Ask Codex to request a build; drafts and builds do not install firmware. Stock updates require review of the exact local package and fresh MIDI identity, followed by explicit panel confirmation. Recover the original saved attempt after a disconnect; never resubmit it as another write. Custom firmware uses manual UBOOT recovery and current-unit verification. Preserve the SDK-default CPU setting; nondefault LCD presets need device validation. Screen, sound and controls require separate physical acceptance.',
+      instructions:'Open FM-1 Forge through this installed plugin. Normal device actions use browser JavaScript; do not start Python or Node helpers. Configure USB/system, HAL and user modules and use Ask Codex to request a build; drafts and builds do not install firmware. Stock updates require review of the exact local package and fresh MIDI identity, followed by explicit panel confirmation. Recover the original saved attempt after a disconnect; never resubmit it as another write. Custom firmware uses manual UBOOT recovery and current-unit verification. Preserve the SDK-default CPU setting; nondefault LCD presets need device validation. Screen, sound and controls require separate physical acceptance.',
     });
     registerForgeExtensions(server,env,()=>user(request));
     for(const tool of TOOLS){
@@ -322,21 +322,21 @@ async function mcp(request,env){
           return result(data);
         }catch(error){
           if(error instanceof PublicError)return {isError:true,content:[{type:'text',text:error.message}],structuredContent:{error:error.message}};
-          console.error('FM1 tool storage failure');
+          console.error('FM-1 tool storage failure');
           return {isError:true,content:[{type:'text',text:'The library is temporarily unavailable.'}]};
         }
       });
     }
     // Older installed descriptors can still fetch the current panel at their
     // original URI. New descriptors exclusively advertise RESOURCE_URI.
-    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v18.html','ui://fm1/forge-panel-v17.html','ui://fm1/forge-panel-v16.html','ui://fm1/forge-panel-v15.html','ui://fm1/forge-panel-v14.html','ui://fm1/forge-panel-v13.html','ui://fm1/forge-panel-v12.html','ui://fm1/forge-panel-v11.html','ui://fm1/forge-panel-v10.html','ui://fm1/forge-panel-v9.html','ui://fm1/forge-panel-v8.html','ui://fm1/forge-panel-v7.html','ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
-      registerAppResource(server,'FM1 Forge',uri,{},async()=>({contents:[{
+    for(const uri of [RESOURCE_URI,'ui://fm1/forge-panel-v19.html','ui://fm1/forge-panel-v18.html','ui://fm1/forge-panel-v17.html','ui://fm1/forge-panel-v16.html','ui://fm1/forge-panel-v15.html','ui://fm1/forge-panel-v14.html','ui://fm1/forge-panel-v13.html','ui://fm1/forge-panel-v12.html','ui://fm1/forge-panel-v11.html','ui://fm1/forge-panel-v10.html','ui://fm1/forge-panel-v9.html','ui://fm1/forge-panel-v8.html','ui://fm1/forge-panel-v7.html','ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
+      registerAppResource(server,'FM-1 Forge',uri,{},async()=>({contents:[{
         uri,mimeType:'text/html;profile=mcp-app',text:UI_HTML,
         _meta:{ui:{prefersBorder:true,csp:{connectDomains:[],resourceDomains:[]}},'openai/ui':OpenAIUiResourceMetadataSchema.parse({availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'fullscreen'})},
       }]}));
     }
     return server;
-  },{legacy:'stateless',responseMode:'auto',maxRequestBodySize:65536,onerror:error=>console.error('FM1 MCP serving failure:',sanitize(error.message))});
+  },{legacy:'stateless',responseMode:'auto',maxRequestBodySize:65536,onerror:error=>console.error('FM-1 MCP serving failure:',sanitize(error.message))});
   const response=await handler.fetch(request);
   const headers=new Headers(response.headers);
   headers.set('Cache-Control','private, no-store');
@@ -357,5 +357,5 @@ export async function handleFm1Request(request,env){
     }
     if(path==='/'&&request.method==='GET')return new Response(UI_HTML,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"}});
     return null;
-  }catch(error){if(!(error instanceof PublicError))console.error('FM1 storage/request failure:',error instanceof Error?error.message:'Unknown error');return json({error:error instanceof PublicError?error.message:'The library is temporarily unavailable.'},error instanceof PublicError?error.status:503);}
+  }catch(error){if(!(error instanceof PublicError))console.error('FM-1 storage/request failure:',error instanceof Error?error.message:'Unknown error');return json({error:error instanceof PublicError?error.message:'The library is temporarily unavailable.'},error instanceof PublicError?error.status:503);}
 }

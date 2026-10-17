@@ -1,17 +1,17 @@
-# FM1 Forge user guide
+# FM-1 Forge user guide
 
 The current native Codex serial connection test is blocked: clicking Connect
-USB serial produced no chooser while Windows saw FM1 on COM4. JavaScript and
+USB serial produced no chooser while Windows saw FM-1 on COM4. JavaScript and
 storage are working, but device access is not established. See
 [the current host evidence](DIRECT_DEVICE_ACCESS_20261013.md).
 
-For the current **3.2.0** helper-free device flow, black default panel and
+For the current **3.2.1** helper-free device flow, black default panel and
 graphical firmware configuration, read
 [FORGE_GUIDE.md](FORGE_GUIDE.md). The current source resource is
-`ui://fm1/forge-panel-v19.html`; dated deployment checks are recorded separately.
+`ui://fm1/forge-panel-v20.html`; dated deployment checks are recorded separately.
 Open the
 native conversation tab through **New Tab (+) → More tools… → Plugins and MCPs
-→ FM1 Forge** to see configuration drafts, native settings, file editing and
+→ FM-1 Forge** to see configuration drafts, native settings, file editing and
 chat context/draft actions. Read [MCP_EXTENSIONS.md](MCP_EXTENSIONS.md)
 for the complete extension surfaces and platform capability checks. Older
 expanded cards can retain earlier UI.
@@ -51,9 +51,9 @@ message or provides a copyable prompt. Local C compiler/build work is separate
 from a connection helper; the panel does not flash custom firmware or certify
 a build. Physical inputs, LCD and audible sound checks remain separate.
 
-## Connect FM1 directly
+## Connect FM-1 directly
 
-Click **Connect USB serial** for custom CDC firmware. Choose the FM1 diagnostics
+Click **Connect USB serial** for custom CDC firmware. Choose the FM-1 diagnostics
 device and accept the host permission prompt. The panel checks VID `3654` /
 PID `5155`, opens 115200 baud and recognizes the firmware's HELLO identity.
 **Refresh** then sends only the known read-only status command. One DTR
@@ -61,7 +61,7 @@ assertion is required by the existing CDC firmware; no reset pulse, STOP,
 UBOOT or raw command is exposed.
 
 For stock firmware, use **Connect stock MIDI** and allow SysEx access. The
-panel selects an exact unique FM1 pair and checks its model. It refuses
+panel selects an exact unique FM-1 pair and checks its model. It refuses
 unrelated devices, ambiguous duplicates and generic USB Composite Device
 names whose physical USB identity the browser cannot establish.
 
@@ -95,7 +95,7 @@ an in-memory library and calls it durable.
 
 ## Install official V15 through browser SysEx
 
-1. Connect normal stock MIDI and verify the FM1 identity.
+1. Connect normal stock MIDI and verify the FM-1 identity.
 2. Expand **Stock firmware · V15 SysEx update**, then select the official V15
    `.fwsc` file. Firmware bytes remain inside the panel.
 3. Click **Review stock update**. Check the package digest, current identity
@@ -150,7 +150,7 @@ rollback copy preserved.
 
 Everything below describes the earlier helper/relay architecture. The dated
 observations are preserved as history; its startup, polling, job inspector
-and transfer instructions are not the 3.2.0 default flow.
+and transfer instructions are not the 3.2.1 default flow.
 
 ## Legacy automatic device detection (3.1.4)
 

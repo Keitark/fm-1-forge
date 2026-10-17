@@ -39,7 +39,7 @@ function createForgeProjectEngine() {
   function projectPrompt(config,goal='') {
     const safe=normalizeProjectConfig(config);
     if(typeof goal!=='string'||goal.length>2000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(goal))throw new Error('Describe your firmware goal in up to 2000 characters.');
-    return 'Create and build my FM1 Forge firmware project from the repository starter '+STARTER+'.\n'+
+    return 'Create and build my FM-1 Forge firmware project from the repository starter '+STARTER+'.\n'+
       'Read the repository instructions and the Forge starter guide first. Preserve active firmware work and rollback.\n'+
       'Use the selected shared HAL access for the user module: '+(HAL_KEYS.filter(key=>safe.hal[key]).join(', ')||'none')+'. Disabled selections are unavailable to user callbacks; they do not power down fixed hardware drivers.\n'+
       'Preserve fixed diagnostics, CDC serial, UBOOT recovery, USB audio mixing and the physical master-volume gain. The HAL covers all 41 inputs, 7 encoders, volume ADC, LCD and audio.\n'+

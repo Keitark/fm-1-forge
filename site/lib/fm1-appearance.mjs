@@ -2,7 +2,7 @@
 function createAppearanceEngine() {
   const PRESETS = Object.freeze([
     { id:'forge-black', name:'Forge Black', scheme:'dark', background:'#000000', accent:'#a3efcc' },
-    { id:'fm1-mint', name:'FM1 Mint', scheme:'dark', background:'#101a18', accent:'#a3efcc' },
+    { id:'fm1-mint', name:'FM-1 Mint', scheme:'dark', background:'#101a18', accent:'#a3efcc' },
     { id:'mint-light', name:'Mint Light', scheme:'light', background:'#edf8f1', accent:'#16744f' },
     { id:'midnight-blue', name:'Midnight Blue', scheme:'dark', background:'#0c1729', accent:'#86baff' },
     { id:'ocean-cyan', name:'Ocean Cyan', scheme:'dark', background:'#09262b', accent:'#67e6eb' },

@@ -35,7 +35,7 @@ async function panel({html=UI_HTML,embedded=false,initial=true,serverTools=true,
   const nodes=new Map(),registered=new Map(),requests=[],requestArgs=[],events=new Map(),notifications=[],timers=new Map(),pollTimers=new Map(),delays=[],storage=new Map(),storageWrites=[];let panelNow=Date.now(),pollKey=0;
   if(preferences!==null)storage.set('fm1.appearance.v2',typeof preferences==='string'?preferences:JSON.stringify(preferences));
   if(legacyPreferences!==null)storage.set('fm1.appearance.v1',JSON.stringify(legacyPreferences));
-  const initialValues={'forge-project-name':'My FM1 firmware','forge-project-slug':'my-fm1-firmware','forge-project-goal':'','forge-clock-preset':'sdk-default','forge-lcd-preset':'stock-dma','forge-module':'diagnostics','diag-entry-method':'auto'};
+  const initialValues={'forge-project-name':'My FM-1 firmware','forge-project-slug':'my-fm1-firmware','forge-project-goal':'','forge-clock-preset':'sdk-default','forge-lcd-preset':'stock-dma','forge-module':'diagnostics','diag-entry-method':'auto'};
   function node(id){if(!nodes.has(id)){let text='';const attributes=new Map();nodes.set(id,{history:[],get textContent(){return text;},set textContent(value){text=value;this.history.push(value);},innerHTML:'',value:initialValues[id]??(id==='variant-nes'?'nes-test':''),checked:id==='forge-usb-audio'||id.startsWith('forge-hal-'),dataset:{profile:'nes',plan:'nes',switch:'nes'},hidden:true,open:id==='forge-designer',style:{},querySelectorAll:selector=>id==='library'&&nativeControls?selector==='select'?[node('variant-nes')]:selector==='[data-plan]'?[node('plan-nes')]:selector==='[data-switch]'?[node('switch-nes')]:[]:[],querySelector:selector=>id==='library'&&nativeControls?(selector.startsWith('[data-profile=')?node('variant-nes'):node('digest-nes')):null,setAttribute(name,value){attributes.set(name,String(value));},getAttribute(name){return attributes.get(name)??null;},removeAttribute(name){attributes.delete(name);if(name==='value')delete this.value;},showModal(){this.open=true;},close(){this.open=false;},addEventListener(name,fn){this[name]=fn;}});}return nodes.get(id);}
   const initialData=await callTool(env,'alice','open_fm1_library',{});
   if(baseline)initialData.forge={diagnostic_baseline:baseline};
@@ -44,7 +44,7 @@ async function panel({html=UI_HTML,embedded=false,initial=true,serverTools=true,
   const parent=embedded?{postMessage(message){notifications.push(message);if(message.id===undefined||!message.method)return;queueMicrotask(async()=>{
     let response;
     try{
-      const result=message.method==='ui/initialize'?{protocolVersion:'2026-01-26',hostInfo:{name:'FM1 fixture host',version:'1'},hostCapabilities:{...(serverTools?{serverTools:{}}:{}),...(hostMessages?{message:{text:{}}}:{}),...(nativeExtensions?{experimental:{'openai/message':{}}}:{})},hostContext:{theme:'light',displayMode:'fullscreen'}}:message.method==='ui/message'?{isError:hostRejectMessage}:toolResult(await backend(message.params.name,message.params.arguments));
+      const result=message.method==='ui/initialize'?{protocolVersion:'2026-01-26',hostInfo:{name:'FM-1 fixture host',version:'1'},hostCapabilities:{...(serverTools?{serverTools:{}}:{}),...(hostMessages?{message:{text:{}}}:{}),...(nativeExtensions?{experimental:{'openai/message':{}}}:{})},hostContext:{theme:'light',displayMode:'fullscreen'}}:message.method==='ui/message'?{isError:hostRejectMessage}:toolResult(await backend(message.params.name,message.params.arguments));
       if(loseConfirmationReply&&message.params?.name?.startsWith('confirm_'))throw new Error('Confirmation reply lost.');
       response={result};
     }catch(error){response={error:{code:-32000,message:error.message}};}
@@ -85,7 +85,7 @@ for(const mode of ['source','production minified']){
       for(const [name,methods] of Object.entries({FM1Appearance:['resolveAppearance'],FM1Forge:['projectConfig','normalizeProjectConfig','projectPrompt','verifiedBaseline'],FM1ModuleGraph:['mount'],FM1Inventory:['freshness','monitor'],FM1Library:['filterLibrary','mount']})){
         for(const method of methods)assert.equal(typeof p.window[name]?.[method],'function',name+'.'+method);
       }
-      assert.equal(p.node('relay-state').textContent,'Connected');assert.equal(p.node('surface-label').textContent,'FM1 Forge plugin');
+      assert.equal(p.node('relay-state').textContent,'Connected');assert.equal(p.node('surface-label').textContent,'FM-1 Forge plugin');
       assert.equal(p.window.FM1InputActivity,undefined);assert.equal(p.requests.length,0);
     }finally{p.dispose();}
   });
@@ -140,7 +140,7 @@ test('native local importer and metadata refresh preserve firmware draft and sav
   assert.ok(!p.requests.some(name=>/^(confirm_|prepare_|plan_)/.test(name)));
   p.dispose();
 });
-test('native plugin opens on device controls with detected port and no duplicate refresh',async()=>{const p=await panel({embedded:true,inventory:{device:{serial_ports:[{port:'COM7'}],session_configured:false},engine:{active:null,blocked_unknown:false}}});assert.equal(p.node('surface-label').textContent,'FM1 Forge plugin');assert.equal(p.node('device-heading').textContent,'FM1 on COM7');assert.equal(p.node('physical-device').textContent,'FM1 on COM7');assert.equal(p.requests.length,0);p.dispose();});
+test('native plugin opens on device controls with detected port and no duplicate refresh',async()=>{const p=await panel({embedded:true,inventory:{device:{serial_ports:[{port:'COM7'}],session_configured:false},engine:{active:null,blocked_unknown:false}}});assert.equal(p.node('surface-label').textContent,'FM-1 Forge plugin');assert.equal(p.node('device-heading').textContent,'FM-1 on COM7');assert.equal(p.node('physical-device').textContent,'FM-1 on COM7');assert.equal(p.requests.length,0);p.dispose();});
 test('host with serverTools falls back once if initial result absent',async()=>{const p=await panel({embedded:true,initial:false});assert.deepEqual(p.requests,['open_fm1_library']);p.dispose();});
 test('resource teardown is acknowledged and aborts the panel lifecycle',async()=>{const p=await panel({embedded:true});p.events.get('message')({source:p.parent,data:{jsonrpc:'2.0',id:91,method:'ui/resource-teardown',params:{}}});await tick();const ack=p.notifications.find(m=>m.id===91);assert.deepEqual(JSON.parse(JSON.stringify(ack)),{jsonrpc:'2.0',id:91,result:{}});const n=p.requests.length;p.node('refresh').onclick();await tick();assert.equal(p.requests.length,n);p.dispose();});
 test('top-level document registers eight stage-only tools and abort removes them',async()=>{const p=await panel();assert.equal(p.registered.size,8);for(const name of ['confirm_fm1_switch','confirm_fm1_official_update','confirm_fm1_stock_update'])assert.ok(!p.registered.has(name));p.dispose();assert.equal(p.registered.size,0);});
@@ -586,8 +586,8 @@ test('invalid custom hex inputs keep the applied colours and do not save invalid
 });
 
 const forgeBaseline={catalog_id:'factory-diag',job_id:'1'.repeat(32),sha256:digest,verified_at:'2026-10-11T01:00:00Z',write_verified:true,full_readback_verified:true,boot_verified:true};
-const diagCatalog={apps:[{profile:'diagnostics',title:'Hardware diagnostics',variants:[{id:'factory-diag',title:'FM1 diagnostics',variant:'baseline',ready:true,sha256:digest}]}]};
-const defaultProject={slug:'my-fm1-firmware',displayName:'My FM1 firmware',clockPreset:'sdk-default',clockOptIn:false,lcdPreset:'stock-dma',module:'diagnostics',usbAudio:true};
+const diagCatalog={apps:[{profile:'diagnostics',title:'Hardware diagnostics',variants:[{id:'factory-diag',title:'FM-1 diagnostics',variant:'baseline',ready:true,sha256:digest}]}]};
+const defaultProject={slug:'my-fm1-firmware',displayName:'My FM-1 firmware',clockPreset:'sdk-default',clockOptIn:false,lcdPreset:'stock-dma',module:'diagnostics',usbAudio:true};
 
 test('Forge starts opaque black and solid under a light host and ignores old version-one preferences',async()=>{
   const p=await panel({embedded:true,legacyPreferences:{version:1,preset:'mint-light',pattern:'circuit-grid'}});
@@ -632,9 +632,9 @@ test('a completed saved job without canonical baseline evidence cannot unlock th
 
 test('module configuration generates the canonical version-three config with fixed recovery',async()=>{
   const p=await panel({embedded:true,baseline:forgeBaseline});
-  p.node('forge-project-name').value='FM1 Pad Lab';p.node('forge-project-slug').value='pad-lab';p.node('forge-module').value='user';
+  p.node('forge-project-name').value='FM-1 Pad Lab';p.node('forge-project-slug').value='pad-lab';p.node('forge-module').value='user';
   p.node('forge-usb-audio').checked=false;p.node('forge-lcd-preset').value='spi15-rgb444';p.node('forge-module').onchange();
-  assert.deepEqual(JSON.parse(p.node('forge-config').textContent),{schemaVersion:3,project:{slug:'pad-lab',displayName:'FM1 Pad Lab'},profile:'forge-diag',clockPreset:'sdk-default',lcdPreset:'spi15-rgb444',module:'user',usb:{cdc:true,uac:false,uvc:false,uboot:true},hal:{buttons:true,encoders:true,volume:true,lcd:true,audio:true}});
+  assert.deepEqual(JSON.parse(p.node('forge-config').textContent),{schemaVersion:3,project:{slug:'pad-lab',displayName:'FM-1 Pad Lab'},profile:'forge-diag',clockPreset:'sdk-default',lcdPreset:'spi15-rgb444',module:'user',usb:{cdc:true,uac:false,uvc:false,uboot:true},hal:{buttons:true,encoders:true,volume:true,lcd:true,audio:true}});
   assert.equal(p.node('forge-module-title').textContent,'Your module');assert.match(p.node('forge-prompt').value,/shared HAL/);
   assert.equal(JSON.parse(p.node('forge-config').textContent).clockPreset,'sdk-default');assert.equal(p.node('forge-clock-opt-in').checked,false);
   assertAppearanceStaysLocal(p);p.dispose();
@@ -827,10 +827,10 @@ for(const [name,inventory] of [['missing',null],['stale',{device:{serial_ports:[
     const p=await panel({embedded:true,nativeControls:true,initialToolResult,jobData:({name,defaultJob})=>name==='get_fm1_status'?null:defaultJob});
     try{
       if(inventory)cacheInventory(p.env,'alice',inventory,{observedAt:instant-20});else p.env.DB.sqlite.prepare("DELETE FROM relay_tasks WHERE operation='status'").run();
-      assert.equal(p.node('device-heading').textContent,'FM1');assert.equal(p.node('physical-device').textContent,'Not checked');assert.equal(p.node('connection-check').hidden,true);
+      assert.equal(p.node('device-heading').textContent,'FM-1');assert.equal(p.node('physical-device').textContent,'Not checked');assert.equal(p.node('connection-check').hidden,true);
       p.node('device-heading').history.length=0;p.node('physical-device').history.length=0;await p.advancePoll(6500);
-      assert.equal(p.node('device-heading').textContent,'FM1');assert.equal(p.node('physical-device').textContent,'Not checked');assert.equal(p.node('connection-check').hidden,false);assert.equal(p.node('switch-nes').disabled,true);
-      assert.ok(p.node('device-heading').history.every(label=>label==='FM1'),JSON.stringify(p.node('device-heading').history));assert.ok(p.node('physical-device').history.every(label=>label==='Not checked'),JSON.stringify(p.node('physical-device').history));assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
+      assert.equal(p.node('device-heading').textContent,'FM-1');assert.equal(p.node('physical-device').textContent,'Not checked');assert.equal(p.node('connection-check').hidden,false);assert.equal(p.node('switch-nes').disabled,true);
+      assert.ok(p.node('device-heading').history.every(label=>label==='FM-1'),JSON.stringify(p.node('device-heading').history));assert.ok(p.node('physical-device').history.every(label=>label==='Not checked'),JSON.stringify(p.node('physical-device').history));assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
     }finally{p.dispose();}
   });
 }
@@ -843,10 +843,10 @@ for(const mode of ['source','production minified']){
       assert.equal(p.node('connection-check').hidden,true);await p.advancePoll(1500);assert.equal(p.node('connection-check').hidden,false);assert.equal(p.node('switch-nes').disabled,false);
       await p.advancePoll(13500);p.events.get('focus')();await tick();assert.equal(p.node('switch-nes').disabled,false);
       await p.advancePoll(1001);p.events.get('focus')();await tick();assert.equal(p.node('switch-nes').disabled,true);assert.equal(p.node('official-state').textContent,'Unavailable');assert.equal(p.node('connection-check').hidden,false);
-      assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.equal(p.node('physical-device').textContent,'FM1 on COM10');
+      assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.equal(p.node('physical-device').textContent,'FM-1 on COM10');
       const saved=p.requestArgs.find(item=>item.name==='get_fm1_request').args.request_id;t.mock.timers.tick(16001);const instant=Math.floor(Date.now()/1000),data={device:{serial_ports:[{port:'COM10'}],update_mode:{mode:'serial'},observation:{started_at:instant,completed_at:instant}},engine:{active:null,blocked_unknown:false}};
       p.env.DB.sqlite.prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=?').run('succeeded',JSON.stringify({status:'succeeded',data,_site_inventory_observed_at:instant}),saved);p.events.get('focus')();await until(()=>p.node('switch-nes').disabled===false&&p.node('connection-check').hidden);
-      assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.equal(p.node('physical-device').textContent,'FM1 on COM10');assert.ok(p.node('device-heading').history.every(label=>label==='FM1 on COM10'),JSON.stringify(p.node('device-heading').history));assert.ok(p.node('physical-device').history.every(label=>label==='FM1 on COM10'),JSON.stringify(p.node('physical-device').history));assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
+      assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.equal(p.node('physical-device').textContent,'FM-1 on COM10');assert.ok(p.node('device-heading').history.every(label=>label==='FM-1 on COM10'),JSON.stringify(p.node('device-heading').history));assert.ok(p.node('physical-device').history.every(label=>label==='FM-1 on COM10'),JSON.stringify(p.node('physical-device').history));assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
     }finally{p.dispose();}
   });
 }
@@ -860,28 +860,28 @@ test('the accessible connection circle appears only for a visible online check a
     p.document.hidden=true;p.events.get('visibilitychange')();assert.equal(p.node('connection-check').hidden,true);p.document.hidden=false;p.events.get('visibilitychange')();await tick();assert.equal(p.node('connection-check').hidden,false);
     p.window.navigator.onLine=false;p.events.get('offline')();assert.equal(p.node('connection-check').hidden,true);p.window.navigator.onLine=true;p.events.get('online')();await tick();assert.equal(p.node('connection-check').hidden,false);
     p.env.DB.sqlite.prepare("UPDATE relay_state SET last_seen=0 WHERE id='bench'").run();p.events.get('focus')();await until(()=>p.node('relay-state').textContent==='Offline');assert.equal(p.node('connection-check').hidden,true);
-    assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.equal(p.node('physical-device').textContent,'FM1 on COM10');
+    assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.equal(p.node('physical-device').textContent,'FM-1 on COM10');
   }finally{hold=false;release?.();p.dispose();}
 });
-for(const [label,device] of [['FM1 on COM6',{serial_ports:[{port:'COM6'}],update_mode:{mode:'serial'}}],['FM1 in UBOOT',{serial_ports:[],uboot_disks:[{drive:'H:'}],update_mode:{mode:'uboot'}}],['FM1 on MIDI',{serial_ports:[],uboot_disks:[],update_mode:{mode:'sysex'}}]]){
+for(const [label,device] of [['FM-1 on COM6',{serial_ports:[{port:'COM6'}],update_mode:{mode:'serial'}}],['FM-1 in UBOOT',{serial_ports:[],uboot_disks:[{drive:'H:'}],update_mode:{mode:'uboot'}}],['FM-1 on MIDI',{serial_ports:[],uboot_disks:[],update_mode:{mode:'sysex'}}]]){
   test('a completed fresh observation changes the confirmed device label to '+label,async t=>{
     t.mock.timers.enable({apis:['Date'],now:Date.UTC(2026,9,12,12,0,0)});
     const p=await panel({embedded:true,nativeControls:true,jobData:({name,defaultJob})=>name==='get_fm1_status'?null:defaultJob});
     try{
       p.node('device-heading').history.length=0;p.node('physical-device').history.length=0;await p.advancePoll(1500);
-      assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.equal(p.node('physical-device').textContent,'FM1 on COM10');
+      assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.equal(p.node('physical-device').textContent,'FM-1 on COM10');
       const saved=p.requestArgs.find(item=>item.name==='get_fm1_request').args.request_id,instant=Math.floor(Date.now()/1000),data={device:{...device,observation:{started_at:instant,completed_at:instant}},engine:{active:null,blocked_unknown:false}};
       p.env.DB.sqlite.prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=?').run('succeeded',JSON.stringify({status:'succeeded',data,_site_inventory_observed_at:instant}),saved);await p.advancePoll(1000);await until(()=>p.node('device-heading').textContent===label);
-      assert.equal(p.node('physical-device').textContent,label);for(const id of ['device-heading','physical-device']){const history=p.node(id).history;assert.ok(history.includes(label));assert.ok(history.every(value=>['FM1 on COM10',label].includes(value)),JSON.stringify(history));}
+      assert.equal(p.node('physical-device').textContent,label);for(const id of ['device-heading','physical-device']){const history=p.node(id).history;assert.ok(history.includes(label));assert.ok(history.every(value=>['FM-1 on COM10',label].includes(value)),JSON.stringify(history));}
     }finally{p.dispose();}
   });
 }
 test('native panel automatically observes physical disconnection without recataloging or replacing cards',async()=>{
   const p=await panel({embedded:true,nativeControls:true,jobData:({name,defaultJob})=>name==='get_fm1_status'?disconnectedInventory():defaultJob});
   p.node('device-heading').history.length=0;p.node('physical-device').history.length=0;
-  const cards=p.node('library').innerHTML;assert.equal(p.node('device-heading').textContent,'FM1 on COM10');await p.advancePoll(1499);assert.equal(p.requests.length,0);await p.advancePoll(1);await until(()=>p.node('device-heading').textContent==='FM1 disconnected');
-  assert.equal(p.node('device-heading').textContent,'FM1 disconnected');assert.equal(p.node('physical-device').textContent,'FM1 disconnected');assert.equal(p.node('relay-state').textContent,'Connected');assert.match(p.node('inventory-freshness').textContent,/Checked \d+s ago/);
-  for(const id of ['device-heading','physical-device']){const history=p.node(id).history;assert.ok(history.includes('FM1 disconnected'));assert.ok(history.every(label=>['FM1 on COM10','FM1 disconnected'].includes(label)),JSON.stringify(history));}
+  const cards=p.node('library').innerHTML;assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');await p.advancePoll(1499);assert.equal(p.requests.length,0);await p.advancePoll(1);await until(()=>p.node('device-heading').textContent==='FM-1 disconnected');
+  assert.equal(p.node('device-heading').textContent,'FM-1 disconnected');assert.equal(p.node('physical-device').textContent,'FM-1 disconnected');assert.equal(p.node('relay-state').textContent,'Connected');assert.match(p.node('inventory-freshness').textContent,/Checked \d+s ago/);
+  for(const id of ['device-heading','physical-device']){const history=p.node(id).history;assert.ok(history.includes('FM-1 disconnected'));assert.ok(history.every(label=>['FM-1 on COM10','FM-1 disconnected'].includes(label)),JSON.stringify(history));}
   assert.equal(p.node('switch-nes').disabled,true);assert.equal(p.node('library').innerHTML,cards);assert.deepEqual(p.requests,['open_fm1_library','get_fm1_status','get_fm1_request','open_fm1_library']);await p.advancePoll(1000);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,2);assert.ok(!p.requests.includes('list_fm1_apps'));assert.ok(!p.requests.some(name=>name.startsWith('confirm_')));p.dispose();assert.equal(p.pollTimers.size,0);
 });
 test('native pending observation detects a stopped relay and resumes the original check after reconnect',async()=>{
@@ -892,14 +892,14 @@ test('native pending observation detects a stopped relay and resumes the origina
   p.env.DB.sqlite.prepare("UPDATE relay_state SET last_seen=0 WHERE id='bench'").run();
   await p.advancePoll(5000);
   assert.equal(p.node('connection-label').textContent,'Bench disconnected');assert.equal(p.node('relay-state').textContent,'Offline');
-  assert.equal(p.node('physical-device').textContent,'FM1 on COM10');assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.equal(p.node('connection-check').hidden,true);assert.equal(p.node('switch-nes').disabled,true);
+  assert.equal(p.node('physical-device').textContent,'FM-1 on COM10');assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.equal(p.node('connection-check').hidden,true);assert.equal(p.node('switch-nes').disabled,true);
   assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
   assert.equal(p.requestArgs.filter(item=>item.name==='get_fm1_request').length,2); // The last saved read overlaps the heartbeat that detects relay loss.
   connect(p.env,true);
   const data={device:{serial_ports:[{port:'COM4'}],update_mode:{mode:'serial'}},engine:{active:null,blocked_unknown:false}};
   p.env.DB.sqlite.prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=?').run('succeeded',JSON.stringify({status:'succeeded',data,_site_inventory_observed_at:Math.floor(Date.now()/1000)}),pending);
   await p.advancePoll(1000);
-  assert.equal(p.node('connection-label').textContent,'Bench connected');assert.equal(p.node('physical-device').textContent,'FM1 on COM4');
+  assert.equal(p.node('connection-label').textContent,'Bench connected');assert.equal(p.node('physical-device').textContent,'FM-1 on COM4');
   assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
   assert.ok(p.requestArgs.filter(item=>item.name==='get_fm1_request').every(item=>item.args.request_id===pending));
   assert.equal(p.node('forge-project-goal').value,'Keep my unfinished firmware');assert.equal(p.node('active-operation').dataset.jobId,'e'.repeat(32));assert.equal(p.node('library').innerHTML,cards);
@@ -907,7 +907,7 @@ test('native pending observation detects a stopped relay and resumes the origina
 });
 test('pending automatic observations disable stale actions while retaining the last confirmed port',async()=>{
   const p=await panel({embedded:true,nativeControls:true,jobData:({name,defaultJob})=>name==='get_fm1_status'?null:defaultJob});await p.advancePoll(16500);
-  assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.equal(p.node('physical-device').textContent,'FM1 on COM10');assert.match(p.node('inventory-freshness').textContent,/Last confirmed FM1 on COM10.*check \d+s old/);assert.equal(p.node('connection-check').hidden,false);assert.equal(p.node('switch-nes').disabled,true);assert.equal(p.node('official-state').textContent,'Unavailable');assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
+  assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.equal(p.node('physical-device').textContent,'FM-1 on COM10');assert.match(p.node('inventory-freshness').textContent,/Last confirmed FM-1 on COM10.*check \d+s old/);assert.equal(p.node('connection-check').hidden,false);assert.equal(p.node('switch-nes').disabled,true);assert.equal(p.node('official-state').textContent,'Unavailable');assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
   const id=p.requestArgs.find(item=>item.name==='get_fm1_status');assert.ok(id);const deliveries=p.requestArgs.filter(item=>item.name==='get_fm1_request');assert.ok(deliveries.length>=3);assert.equal(new Set(deliveries.map(item=>item.args.request_id)).size,1);p.dispose();
 });
 test('a stale native heading stays at its confirmed label throughout a delayed automatic refresh',async t=>{
@@ -917,18 +917,18 @@ test('a stale native heading stays at its confirmed label throughout a delayed a
   try{
     const stale=await callTool(p.env,'alice','open_fm1_library',{});stale.inventory={...stale.inventory,device:{...stale.inventory.device,serial_ports:[{port:'COM99'}]}};stale.inventory_status={...stale.inventory_status,state:'stale',age_seconds:20,observed_at:Math.floor(Date.now()/1000)-20};
     p.events.get('message')({source:p.parent,data:{jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{content:[],structuredContent:stale}}});
-    await until(()=>p.node('switch-nes').disabled===true);assert.equal(p.node('device-heading').textContent,'FM1 on COM10');
+    await until(()=>p.node('switch-nes').disabled===true);assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');
     p.node('forge-project-goal').value='Keep the unsaved firmware draft';p.node('active-operation').dataset.jobId='e'.repeat(32);p.node('active-status').textContent='Saved sector progress';p.node('variant-nes').value='nes-test';const cards=p.node('library').innerHTML;
     p.node('device-heading').history.length=0;p.node('physical-device').history.length=0;
-    p.events.get('focus')();await tick();assert.ok(release);assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.equal(p.node('connection-check').hidden,false);assert.equal(p.node('switch-nes').disabled,true);
-    await p.advancePoll(5000);assert.ok(p.node('device-heading').history.every(label=>label==='FM1 on COM10'),JSON.stringify(p.node('device-heading').history));assert.ok(p.node('physical-device').history.every(label=>label==='FM1 on COM10'),JSON.stringify(p.node('physical-device').history));
+    p.events.get('focus')();await tick();assert.ok(release);assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.equal(p.node('connection-check').hidden,false);assert.equal(p.node('switch-nes').disabled,true);
+    await p.advancePoll(5000);assert.ok(p.node('device-heading').history.every(label=>label==='FM-1 on COM10'),JSON.stringify(p.node('device-heading').history));assert.ok(p.node('physical-device').history.every(label=>label==='FM-1 on COM10'),JSON.stringify(p.node('physical-device').history));
     hold=false;release();await until(()=>p.node('switch-nes').disabled===false);
-    assert.ok(p.node('device-heading').history.every(label=>label==='FM1 on COM10'),JSON.stringify(p.node('device-heading').history));assert.ok(p.node('physical-device').history.every(label=>label==='FM1 on COM10'),JSON.stringify(p.node('physical-device').history));assert.equal(p.node('forge-project-goal').value,'Keep the unsaved firmware draft');assert.equal(p.node('active-operation').dataset.jobId,'e'.repeat(32));assert.equal(p.node('active-status').textContent,'Saved sector progress');assert.equal(p.node('variant-nes').value,'nes-test');assert.equal(p.node('library').innerHTML,cards);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
+    assert.ok(p.node('device-heading').history.every(label=>label==='FM-1 on COM10'),JSON.stringify(p.node('device-heading').history));assert.ok(p.node('physical-device').history.every(label=>label==='FM-1 on COM10'),JSON.stringify(p.node('physical-device').history));assert.equal(p.node('forge-project-goal').value,'Keep the unsaved firmware draft');assert.equal(p.node('active-operation').dataset.jobId,'e'.repeat(32));assert.equal(p.node('active-status').textContent,'Saved sector progress');assert.equal(p.node('variant-nes').value,'nes-test');assert.equal(p.node('library').innerHTML,cards);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
   }finally{hold=false;release?.();p.dispose();}
 });
 test('slow native startup cannot let the fixture advance observation time before its first monitor timer exists',async()=>{
   const p=await panel({embedded:true,nativeControls:true,nativeStartupDelay:60,jobData:({name,defaultJob})=>name==='get_fm1_status'?null:defaultJob});
-  try{await p.advancePoll(16500);assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.equal(p.node('physical-device').textContent,'FM1 on COM10');assert.equal(p.node('connection-check').hidden,false);assert.equal(p.node('switch-nes').disabled,true);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);}finally{p.dispose();}
+  try{await p.advancePoll(16500);assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.equal(p.node('physical-device').textContent,'FM-1 on COM10');assert.equal(p.node('connection-check').hidden,false);assert.equal(p.node('switch-nes').disabled,true);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);}finally{p.dispose();}
 });
 
 test('connection-only snapshots preserve drafts and cards without exposing passive request history',async()=>{
@@ -942,9 +942,9 @@ test('connection-only snapshots preserve drafts and cards without exposing passi
 });
 test('a failed automatic check retains last seen history and does not claim physical disconnection',async()=>{
   const p=await panel({embedded:true,nativeControls:true,beforeCall:name=>{if(name==='get_fm1_status')throw new Error('Connection timed out.');}});await p.advancePoll(1500);
-  assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.match(p.node('inventory-freshness').textContent,/Checked \d+s ago.*refresh retrying/);assert.equal(p.node('switch-nes').disabled,false);
+  assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.match(p.node('inventory-freshness').textContent,/Checked \d+s ago.*refresh retrying/);assert.equal(p.node('switch-nes').disabled,false);
   await p.advancePoll(16000);p.events.get('focus')();await tick();
-  assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.equal(p.node('physical-device').textContent,'FM1 on COM10');assert.match(p.node('inventory-freshness').textContent,/Last confirmed FM1 on COM10.*refresh retrying/);assert.equal(p.node('official-state').textContent,'Unavailable');assert.equal(p.node('switch-nes').disabled,true);assert.ok(!p.node('physical-device').history.includes('FM1 disconnected'));assert.equal(p.node('relay-state').textContent,'Connected');p.dispose();
+  assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.equal(p.node('physical-device').textContent,'FM-1 on COM10');assert.match(p.node('inventory-freshness').textContent,/Last confirmed FM-1 on COM10.*refresh retrying/);assert.equal(p.node('official-state').textContent,'Unavailable');assert.equal(p.node('switch-nes').disabled,true);assert.ok(!p.node('physical-device').history.includes('FM-1 disconnected'));assert.equal(p.node('relay-state').textContent,'Connected');p.dispose();
 });
 
 test('saved delivery timeouts preserve another panel fresh observation until it expires',async()=>{
@@ -952,11 +952,11 @@ test('saved delivery timeouts preserve another panel fresh observation until it 
   p.node('forge-project-goal').value='Keep this oscillator draft';p.node('active-operation').dataset.jobId='e'.repeat(32);p.node('active-status').textContent='Verified saved job progress';p.node('message').textContent='Keep this job message';
   const cards=p.node('library').innerHTML,otherPanel={device:{serial_ports:[{port:'COM4'}],update_mode:{mode:'serial'}},engine:{active:null,blocked_unknown:false}};
   cacheInventory(p.env,'alice',otherPanel);await p.advancePoll(1500);
-  assert.equal(p.node('physical-device').textContent,'FM1 on COM4');assert.equal(p.node('device-heading').textContent,'FM1 on COM4');assert.equal(p.node('switch-nes').disabled,false);
+  assert.equal(p.node('physical-device').textContent,'FM-1 on COM4');assert.equal(p.node('device-heading').textContent,'FM-1 on COM4');assert.equal(p.node('switch-nes').disabled,false);
   assert.match(p.node('inventory-freshness').textContent,/Checked \d+s ago.*refresh retrying/);assert.match(p.node('bench-note').textContent,/retrying.*still fresh/);
   const pending=p.requestArgs.find(item=>item.name==='get_fm1_request').args.request_id;
   await p.advancePoll(16000);p.events.get('focus')();await tick();
-  assert.equal(p.node('physical-device').textContent,'FM1 on COM4');assert.equal(p.node('device-heading').textContent,'FM1 on COM4');assert.equal(p.node('switch-nes').disabled,true);assert.match(p.node('inventory-freshness').textContent,/Last confirmed FM1 on COM4.*refresh retrying/);
+  assert.equal(p.node('physical-device').textContent,'FM-1 on COM4');assert.equal(p.node('device-heading').textContent,'FM-1 on COM4');assert.equal(p.node('switch-nes').disabled,true);assert.match(p.node('inventory-freshness').textContent,/Last confirmed FM-1 on COM4.*refresh retrying/);
   assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);assert.ok(p.requestArgs.filter(item=>item.name==='get_fm1_request').every(item=>item.args.request_id===pending));
   assert.equal(p.nodes.has('requests'),false);
   assert.equal(p.node('forge-project-goal').value,'Keep this oscillator draft');assert.equal(p.node('active-operation').dataset.jobId,'e'.repeat(32));assert.equal(p.node('active-status').textContent,'Verified saved job progress');assert.equal(p.node('message').textContent,'Keep this job message');assert.equal(p.node('library').innerHTML,cards);
@@ -970,7 +970,7 @@ test('successful snapshot retry clears a transient saved delivery notice without
   await p.advancePoll(1500);assert.match(p.node('bench-note').textContent,/retrying/);
   const pending=p.requestArgs.find(item=>item.name==='get_fm1_request').args.request_id,data={device:{serial_ports:[{port:'COM6'}],update_mode:{mode:'serial'}},engine:{active:null,blocked_unknown:false}};
   p.env.DB.sqlite.prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=?').run('succeeded',JSON.stringify({status:'succeeded',data,_site_inventory_observed_at:Math.floor(Date.now()/1000)}),pending);
-  rejectDelivery=false;p.events.get('focus')();await until(()=>p.node('physical-device').textContent==='FM1 on COM6');
+  rejectDelivery=false;p.events.get('focus')();await until(()=>p.node('physical-device').textContent==='FM-1 on COM6');
   assert.equal(p.node('switch-nes').disabled,false);assert.ok(!p.node('inventory-freshness').textContent.includes('retrying'));assert.ok(!p.node('bench-note').textContent.includes('retrying'));
   assert.equal(p.node('forge-project-goal').value,'Keep my unfinished synth');assert.equal(p.node('active-operation').dataset.jobId,'f'.repeat(32));assert.equal(p.node('active-status').textContent,'Saved sector progress');assert.equal(p.node('message').textContent,'Inspect this saved job');
   assert.ok(!p.requests.some(name=>/^(confirm_|prepare_|plan_)/.test(name)));assert.ok(!p.requests.includes('list_fm1_apps'));p.dispose();
@@ -978,12 +978,12 @@ test('successful snapshot retry clears a transient saved delivery notice without
 test('successful transport with an enumeration error cannot replace connection history with disconnected',async()=>{
   const failed={...disconnectedInventory(),device:{...disconnectedInventory().device,inventory_error:'Windows device enumeration failed'}};
   const p=await panel({embedded:true,nativeControls:true,jobData:({name,defaultJob})=>name==='get_fm1_status'?failed:defaultJob});await p.advancePoll(1500);
-  assert.equal(p.node('physical-device').textContent,'FM1 on COM10');assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.match(p.node('inventory-freshness').textContent,/Last confirmed FM1 on COM10.*refresh failed/);assert.equal(p.node('official-state').textContent,'Unavailable');assert.ok(!p.node('physical-device').history.includes('FM1 disconnected'));p.dispose();
+  assert.equal(p.node('physical-device').textContent,'FM-1 on COM10');assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.match(p.node('inventory-freshness').textContent,/Last confirmed FM-1 on COM10.*refresh failed/);assert.equal(p.node('official-state').textContent,'Unavailable');assert.ok(!p.node('physical-device').history.includes('FM-1 disconnected'));p.dispose();
 });
 test('cached native observations with old or future timestamps cannot revive connected headings',async()=>{
   for(const observed_at of [Math.floor(Date.now()/1000)-7200,Math.floor(Date.now()/1000)+7200]){
     const p=await panel({embedded:true,serverTools:false,initialToolResult:{profiles:[],catalog:{apps:[]},relay:{connected:true,allow_switch:true},inventory:{device:{serial_ports:[{port:'COM10'}],update_mode:{mode:'serial'}}},inventory_status:{state:'fresh',observed_at,age_seconds:1,max_age_seconds:15},recent_requests:[]}});
-    assert.equal(p.node('physical-device').textContent,'Not checked');assert.equal(p.node('device-heading').textContent,'FM1');assert.ok(!p.node('physical-device').history.includes('FM1 on COM10'));assert.ok(!p.node('device-heading').history.includes('FM1 on COM10'));await p.advancePoll(60000);assert.equal(p.requests.length,0);assert.equal(p.pollTimers.size,0);p.dispose();
+    assert.equal(p.node('physical-device').textContent,'Not checked');assert.equal(p.node('device-heading').textContent,'FM-1');assert.ok(!p.node('physical-device').history.includes('FM-1 on COM10'));assert.ok(!p.node('device-heading').history.includes('FM-1 on COM10'));await p.advancePoll(60000);assert.equal(p.requests.length,0);assert.equal(p.pollTimers.size,0);p.dispose();
   }
 });
 test('automatic metadata preserves job progress, firmware drafts, theme, selected variant and diagnostic proof',async()=>{
@@ -992,7 +992,7 @@ test('automatic metadata preserves job progress, firmware drafts, theme, selecte
   p.node('plan-nes').onclick();await until(()=>p.node('progress-bar').value===96);const id=p.node('active-operation').dataset.jobId;
   p.node('variant-nes').value='nes-second';p.node('forge-project-goal').value='Keep this unfinished synthesizer draft';p.node('forge-project-goal').oninput();p.node('palette-forge-black').onclick();
   const before={detail:p.node('active-status').textContent,message:p.node('message').textContent,cards:p.node('library').innerHTML,config:p.node('forge-config').textContent,prompt:p.node('forge-prompt').value};await p.advancePoll(1500);
-  assert.equal(p.node('device-heading').textContent,'FM1 disconnected');assert.equal(p.node('active-operation').dataset.jobId,id);assert.equal(p.node('active-status').textContent,before.detail);assert.equal(p.node('message').textContent,before.message);assert.equal(p.node('progress-bar').value,96);assert.equal(p.node('library').innerHTML,before.cards);assert.equal(p.node('variant-nes').value,'nes-second');assert.equal(p.node('forge-config').textContent,before.config);assert.equal(p.node('forge-prompt').value,before.prompt);assert.equal(p.document.body.dataset.appearance,'forge-black');assert.equal(p.node('new-forge-project').disabled,false);p.dispose();
+  assert.equal(p.node('device-heading').textContent,'FM-1 disconnected');assert.equal(p.node('active-operation').dataset.jobId,id);assert.equal(p.node('active-status').textContent,before.detail);assert.equal(p.node('message').textContent,before.message);assert.equal(p.node('progress-bar').value,96);assert.equal(p.node('library').innerHTML,before.cards);assert.equal(p.node('variant-nes').value,'nes-second');assert.equal(p.node('forge-config').textContent,before.config);assert.equal(p.node('forge-prompt').value,before.prompt);assert.equal(p.document.body.dataset.appearance,'forge-black');assert.equal(p.node('new-forge-project').disabled,false);p.dispose();
 });
 test('manual Refresh shares a slow automatic observation and preserves a selected job result',async()=>{
   let release;const held=new Promise(done=>{release=done;});const p=await panel({embedded:true,nativeControls:true,beforeCall:name=>name==='get_fm1_status'?held:undefined,jobData:({name,defaultJob})=>name==='get_fm1_status'?disconnectedInventory():['plan_fm1_app','get_fm1_job'].includes(name)?progressJob(defaultJob.id,'succeeded',96):defaultJob});
@@ -1002,7 +1002,7 @@ test('manual Refresh shares a slow automatic observation and preserves a selecte
 });
 test('automatic connection render keeps app cards without variants unavailable',async()=>{
   const p=await panel({embedded:true,nativeControls:true,catalogValue:{apps:[{profile:'nes',title:'NES',variants:[]}]},jobData:({name,defaultJob})=>name==='get_fm1_status'?{device:{serial_ports:[{port:'COM10'}],update_mode:{mode:'serial'}},engine:{blocked_unknown:false}}:defaultJob});await p.advancePoll(1500);
-  assert.equal(p.node('physical-device').textContent,'FM1 on COM10');assert.equal(p.node('plan-nes').disabled,true);assert.equal(p.node('switch-nes').disabled,true);p.dispose();
+  assert.equal(p.node('physical-device').textContent,'FM-1 on COM10');assert.equal(p.node('plan-nes').disabled,true);assert.equal(p.node('switch-nes').disabled,true);p.dispose();
 });
 const stockPanelHash='db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a';
 function stockPanelInventory(){return {engine:{active:null,blocked_unknown:false},device:{serial_ports:[],uboot_disks:[],update_mode:{mode:'sysex',official_available:true},stock_update:{configured:true,available:true,native_runtime:true,sha256:stockPanelHash,size:699956,identity:'FM-1_015',expected_stock_pair:{inputName:'FM-1',outputName:'FM-1'}}}};}
@@ -1045,6 +1045,6 @@ test('native reopening restores only the active stock transfer by its original I
 test('hidden and offline panels pause observation; visible, focus and online events resume once',async()=>{
   const p=await panel({embedded:true,jobData:({name,defaultJob})=>name==='get_fm1_status'?disconnectedInventory():defaultJob});p.document.hidden=true;p.events.get('visibilitychange')();await p.advancePoll(30000);assert.equal(p.requests.length,0);assert.equal(p.pollTimers.size,0);
   p.document.hidden=false;p.events.get('visibilitychange')();p.events.get('focus')();await tick();assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
-  p.window.navigator.onLine=false;p.events.get('offline')();await p.advancePoll(30000);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);assert.equal(p.pollTimers.size,0);assert.equal(p.node('device-heading').textContent,'FM1 on COM10');assert.equal(p.node('connection-check').hidden,true);
+  p.window.navigator.onLine=false;p.events.get('offline')();await p.advancePoll(30000);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);assert.equal(p.pollTimers.size,0);assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.equal(p.node('connection-check').hidden,true);
   p.window.navigator.onLine=true;p.events.get('online')();p.events.get('focus')();await tick();assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,2);p.dispose();assert.equal(p.pollTimers.size,0);for(const event of ['visibilitychange','focus','online','offline','message'])assert.equal(p.events.has(event),false);await p.advancePoll(60000);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,2);
 });

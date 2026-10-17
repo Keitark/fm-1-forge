@@ -1,12 +1,12 @@
-# FM1 Forge
+# FM-1 Forge
 
 **Current native-host limitation:** the installed Codex `26.1007.2314.0` exposes
 Web Serial but does not display a device chooser. A real connection attempt
-failed before opening FM1. The JavaScript transport is implemented; this host's
+failed before opening FM-1. The JavaScript transport is implemented; this host's
 device access is blocked. See [the connection evidence](docs/DIRECT_DEVICE_ACCESS_20261013.md).
 
-**FM1 Forge 3.2.0** opens a native Codex plugin panel for graphical firmware
-configuration, browser-local app sets and direct FM1 connections. Its default
+**FM-1 Forge 3.2.1** opens a native Codex plugin panel for graphical firmware
+configuration, browser-local app sets and direct FM-1 connections. Its default
 device path runs JavaScript inside the panel through Web Serial and Web MIDI.
 No separate JavaScript installation, Python/Node helper, local relay or startup
 process is required for this flow. The existing plugin ID and owner-private
@@ -16,8 +16,8 @@ mentions, native forms and chat actions.
 
 Read the current [Forge guide](docs/FORGE_GUIDE.md). The owner-private Site hosts
 the UI and MCP endpoint. The current source resource is
-`ui://fm1/forge-panel-v19.html`. The same private
-[FM1 Forge plugin](https://chatgpt.com/plugins/plugins_6ac9ad3fc1c8819195580a4747c50052)
+`ui://fm1/forge-panel-v20.html`. The same private
+[FM-1 Forge plugin](https://chatgpt.com/plugins/plugins_6ac9ad3fc1c8819195580a4747c50052)
 was updated in place.
 
 Read [the extension guide](docs/MCP_EXTENSIONS.md) for the exact official SDK
@@ -29,9 +29,9 @@ to check the updated controls. A package release does not qualify hardware.
 
 Use **Connect USB serial** for known custom firmware diagnostics or **Connect
 stock MIDI** for the official update route. Device permission and connection
-require an explicit user action. Serial opens only the FM1 diagnostics USB IDs,
+require an explicit user action. Serial opens only the FM-1 diagnostics USB IDs,
 verifies a known firmware identity and sends its read-only status command on
-refresh. MIDI selects an exact FM1 pair and verifies its identity. Presence
+refresh. MIDI selects an exact FM-1 pair and verifies its identity. Presence
 changes use the authorized connection's events; startup never opens a device.
 The confirmed status stays steady during refresh, with a small blinking circle.
 The panel has no hardware-activity dashboard, request-history table or manual

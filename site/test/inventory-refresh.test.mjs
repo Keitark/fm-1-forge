@@ -116,7 +116,7 @@ test('unsupported native host never schedules an auto observation',async()=>{
 test('stale automatic, manual and wake refreshes publish checking before every synchronous age paint',async()=>{
   for(const mode of ['automatic','manual','wake']){
     const clock=fakeClock(),epoch=1000000,paints=[];let monitor,release,snapshot=fresh({inventory_status:{state:'stale',observed_at:980,age_seconds:20,max_age_seconds:15},_inventory_received_at:epoch});
-    const paint=()=>{const observation=inventoryFreshness(snapshot,epoch+clock.now());paints.push(!snapshot.relay.connected?'Connection status unavailable':observation.fresh?'FM1 on COM10':monitor.checking||monitor.pendingRequestId?'Checking connection':'Connection status unavailable');};
+    const paint=()=>{const observation=inventoryFreshness(snapshot,epoch+clock.now());paints.push(!snapshot.relay.connected?'Connection status unavailable':observation.fresh?'FM-1 on COM10':monitor.checking||monitor.pendingRequestId?'Checking connection':'Connection status unavailable');};
     monitor=createInventoryMonitor({clock,getSnapshot:()=>snapshot,readSnapshot:()=>new Promise(resolve=>{release=()=>{paint();resolve(snapshot);};}),call:async name=>name==='get_fm1_status'?{request_id:id}:{id,operation:'status',state:'pending'},onAge:paint});monitor.start();
     if(mode==='automatic')await clock.advance(1500);else if(mode==='manual')void monitor.refresh({manual:true});else monitor.wake();await flush();
     assert.equal(monitor.checking,true);assert.ok(paints.length>=1);assert.ok(paints.every(value=>value==='Checking connection'),mode+' must not flash unavailable before its heartbeat resolves');
