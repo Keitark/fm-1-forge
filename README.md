@@ -1,11 +1,11 @@
 # FM-1 Forge
 
-**Current native-host limitation:** the installed Codex `26.1007.2314.0` exposes
+**Recorded native-host limitation (2026-10-13):** Codex `26.1007.2314.0` exposes
 Web Serial but does not display a device chooser. A real connection attempt
 failed before opening FM-1. The JavaScript transport is implemented; this host's
 device access is blocked. See [the connection evidence](docs/DIRECT_DEVICE_ACCESS_20261013.md).
 
-**FM-1 Forge 3.2.1** opens a native Codex plugin panel for graphical firmware
+**FM-1 Forge 3.3.0** opens a native Codex plugin panel for graphical firmware
 configuration, browser-local app sets and direct FM-1 connections. Its default
 device path runs JavaScript inside the panel through Web Serial and Web MIDI.
 No separate JavaScript installation, Python/Node helper, local relay or startup
@@ -16,7 +16,7 @@ mentions, native forms and chat actions.
 
 Read the current [Forge guide](docs/FORGE_GUIDE.md). The owner-private Site hosts
 the UI and MCP endpoint. The current source resource is
-`ui://fm1/forge-panel-v20.html`. The same private
+`ui://fm1/forge-panel-v21.html`. The same private
 [FM-1 Forge plugin](https://chatgpt.com/plugins/plugins_6ac9ad3fc1c8819195580a4747c50052)
 was updated in place.
 
@@ -66,7 +66,7 @@ missing durable storage or locks disables writing. An uncertain attempt blocks
 new updates and requires explicit recovery of that original attempt in verified
 OTA mode. Completion verifies `FM-1_015` after reboot, not full flash readback.
 
-The current custom firmware exposes CDC on COM4 and no stock MIDI interface;
+The 2026-10-13 device check found CDC on COM4 and no stock MIDI interface;
 the physical stock/SysEx test remains pending. Browser API presence and offline
 tests do not establish permission or hardware acceptance. See
 [direct-device evidence](docs/DIRECT_DEVICE_ACCESS_20261013.md) and
@@ -75,6 +75,8 @@ UBOOT's vendor mass-storage protocol is outside standard Web Serial/Web MIDI;
 custom flashing and the retained protected writer/vendor GUI are separate,
 explicitly authorized legacy operations. The old helper startup entry is
 disabled reversibly; Forge's normal flow does not launch it.
+
+The experimental **Connect firmware MIDI** path is integrated into the native panel. Its separately reviewed local manifest and package target firmware with the common update interface. Normal candidate firmware advertises installation unavailable until the OTA loader/layout/preservation path is bench-qualified. This does not add common MIDI support to previously installed firmware. See [common update status and portability](docs/COMMON_MIDI_20261018.md).
 
 ## Current source and development checks
 

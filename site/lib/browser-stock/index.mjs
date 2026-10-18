@@ -10,7 +10,7 @@ export { STOCK, StockError } from './protocol.mjs';
 const LOCK = 'fm1-forge-stock-v15-device';
 const clone = value => JSON.parse(JSON.stringify(value));
 export function createBrowserStockUpdater({ navigator = globalThis.navigator, indexedDB = globalThis.indexedDB, crypto = globalThis.crypto,
-  locks = navigator?.locks, location = globalThis.location, secureContext = globalThis.isSecureContext, clock = realClock, timing = DEFAULT_TIMING, onEvent = () => {}, onState = () => {} } = {}) {
+  locks = navigator?.locks, location = globalThis.location, secureContext = globalThis.isSecureContext, clock = realClock, timing = DEFAULT_TIMING, onEvent = () => {}, onState = () => {}, beforeWrite = async () => {} } = {}) {
   let access = null, backend = null, database = null, selectedPair = null, identity = null, connected = false, updating = false;
   let recoveryRequired = false, lastError = null, localBusy = false;
   const origin = typeof location?.origin === 'string' ? location.origin : 'null';
@@ -127,6 +127,9 @@ export function createBrowserStockUpdater({ navigator = globalThis.navigator, in
         const artifact = await inspectStockPackage(packageBytes, crypto);
         const db = await getDatabase();
         if (!storageScope.durableReady || !storageScope.locksAvailable) throw new StockError('storage_unavailable', 'Durable shared stock update storage is not ready.');
+        // DEVICE_LOCK is held here. The native panel checks the other engine's
+        // current journal before preparing either a new or resumed stock write.
+        await beforeWrite(Object.freeze({ operation }));
         const journal = await BrowserAttemptJournal.prepare(db, { jobId, reviewId, pair: selectedPair, scope: storageScope }, crypto, { resume: operation === 'resume' });
         updating = true; lastError = null; notify();
         try {

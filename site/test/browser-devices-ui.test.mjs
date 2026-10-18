@@ -43,6 +43,7 @@ function fixture({saved=null,stockError=null,inspection=metadata,storage=scope,u
 }
 test('mount initializes durable metadata only, with no chooser, device open, read or write',async()=>{
   const f=fixture();await f.controller.ready;assert.deepEqual(f.calls,['storage.initialize','storage.savedAttempt']);assert.equal(f.el('device-heading').textContent,'FM-1 disconnected');
+  assert.ok(UI_HTML.includes('id="direct-connect-common"'));assert.ok(UI_HTML.includes('id="direct-common-dialog"'));
   assert.equal(f.el('direct-stock-review').disabled,true);assert.deepEqual(JSON.parse(f.el('direct-storage-report').textContent),scope);f.controller.dispose();
 });
 test('synthetic chooser clicks do nothing; trusted serial connection uses real profile without invented COM port',async()=>{

@@ -6,3 +6,6 @@ tools/jieli-wl82/* -text
 *.json text eol=lf
 .gitignore text eol=lf
 .gitattributes text eol=lf
+
+# Preserve the exact Apache updater bytes recorded by ORIGIN.md.
+site/lib/browser-common/* -text

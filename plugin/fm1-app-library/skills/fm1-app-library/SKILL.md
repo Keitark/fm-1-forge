@@ -15,7 +15,9 @@ The user explicitly selects browser serial or stock MIDI access. Serial accepts 
 
 Stock updating accepts only the unmodified official V15 .fwsc: 699,956 bytes, SHA-256 db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a. Select and check it locally; never upload firmware bytes/device paths to Sites, MCP or chat. Review digest, size, identity and selected MIDI pair before the panel confirmation. Durable IndexedDB state and a shared Web Lock are mandatory before upgrade; no memory-only downgrade, automatic retry or different-job resume. Completion and FM-1_015 reboot identity do not establish full readback or physical LCD/audio acceptance.
 
-Custom firmware may have CDC but no stock MIDI. A stock restore is then required before SysEx updating. Existing UBOOT uses mass storage and remains manual recovery because standard WebUSB protects its interface class.
+Custom firmware without the common USB-MIDI interface cannot use the common update path. Connect firmware MIDI only for a build that advertises FM1_FORGE_001 and its capabilities. The new common updater is experimental: normal builds keep installation disabled until the SDK OTA loader, flash layout and per-unit preservation path are bench-qualified. Its local JSON manifest and matching .fwsc package require exact hashes, target build identity, a full current-flash baseline digest check in firmware, durable IndexedDB and the same-origin device lock shared with stock updating. Never bypass the firmware capability gate, retry an uncertain write, force another attempt, or describe reboot identity/build checks as a full flash readback. Existing UBOOT uses mass storage and remains manual recovery because standard WebUSB protects its interface class.
+
+The JavaScript device path is designed for Windows, macOS and Linux where the native plugin host exposes Web MIDI and SysEx permission. API availability is not hardware acceptance on those operating systems. Current firmware compilation uses the Windows Jieli toolchain.
 
 ## Configuration and builds
 

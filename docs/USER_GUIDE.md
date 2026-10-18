@@ -1,14 +1,16 @@
 # FM-1 Forge user guide
 
+The experimental common firmware MIDI controls are included in 3.3.0. Installation remains disabled in the normal firmware candidate pending physical loader/layout qualification. See [common update status and portability](COMMON_MIDI_20261018.md).
+
 The current native Codex serial connection test is blocked: clicking Connect
 USB serial produced no chooser while Windows saw FM-1 on COM4. JavaScript and
 storage are working, but device access is not established. See
 [the current host evidence](DIRECT_DEVICE_ACCESS_20261013.md).
 
-For the current **3.2.1** helper-free device flow, black default panel and
+For the current **3.3.0** helper-free device flow, black default panel and
 graphical firmware configuration, read
 [FORGE_GUIDE.md](FORGE_GUIDE.md). The current source resource is
-`ui://fm1/forge-panel-v20.html`; dated deployment checks are recorded separately.
+`ui://fm1/forge-panel-v21.html`; dated deployment checks are recorded separately.
 Open the
 native conversation tab through **New Tab (+) → More tools… → Plugins and MCPs
 → FM-1 Forge** to see configuration drafts, native settings, file editing and
@@ -150,7 +152,7 @@ rollback copy preserved.
 
 Everything below describes the earlier helper/relay architecture. The dated
 observations are preserved as history; its startup, polling, job inspector
-and transfer instructions are not the 3.2.1 default flow.
+and transfer instructions are not the 3.3.0 default flow.
 
 ## Legacy automatic device detection (3.1.4)
 

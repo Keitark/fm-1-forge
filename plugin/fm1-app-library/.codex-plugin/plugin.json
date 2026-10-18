@@ -8,13 +8,13 @@
     "category": "Productivity",
     "composerIcon": "./assets/fm1-tab-light-128.png",
     "composerIconDark": "./assets/fm1-tab-dark-128.png",
-    "defaultPrompt": "Open my FM1 App Library and check the connection and available apps.",
+    "defaultPrompt": "Open FM-1 Forge and connect FM-1 directly in the native panel.",
     "developerName": "Keitarou Kondou",
-    "displayName": "FM1 Forge",
+    "displayName": "FM-1 Forge",
     "logo": "./assets/fm1-tab-light-128.png",
     "logoDark": "./assets/fm1-tab-dark-128.png",
-    "longDescription": "Install the diagnostic baseline, test controls, LCD and audio, configure USB/system and user modules graphically, and ask Codex to build a custom firmware project. The native panel has a plain black default, optional colours and saved transfer progress. Serial-to-UBOOT and direct UBOOT use validated private application packages; official .fwsc/SysEx updates use the vendor updater.",
-    "shortDescription": "Build and test FM1 firmware"
+    "longDescription": "Connect FM-1 using browser MIDI or USB serial without a local bridge process. Review the exact official stock package before a SysEx update, configure firmware modules graphically, and ask Codex to build. Keep local firmware bytes in the browser and preserve durable recovery evidence. Existing UBOOT mass-storage recovery remains manual.",
+    "shortDescription": "Build and test FM-1 firmware"
   },
   "extensions": {
     "com.openai": {
@@ -22,19 +22,12 @@
     }
   },
   "name": "fm1-app-library",
-  "version": "3.1.4",
-  "description": "FM1 diagnostic firmware, module configuration and custom firmware projects through the hosted Forge plugin panel.",
+  "version": "3.3.0",
+  "description": "Direct browser MIDI and serial, reviewed stock updates, graphical firmware modules and Codex project builds.",
   "author": {
     "name": "Keitarou Kondou"
   },
-  "keywords": [
-    "FM1",
-    "firmware",
-    "diagnostics",
-    "HAL",
-    "USB",
-    "Forge"
-  ],
+  "keywords": [],
   "homepage": "https://fm1-app-library.keitark.chatgpt.site/",
   "repository": "https://github.com/Keitark/fm1-marketplace-plugin",
   "skills": "./skills",

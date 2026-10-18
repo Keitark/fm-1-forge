@@ -1,6 +1,8 @@
 # FM-1 Forge native extensions
 
-Forge 3.2.1 uses the official OpenAI MCP Extensions TypeScript SDK on the
+The experimental common firmware MIDI controls are included in 3.3.0. Installation remains disabled in the normal firmware candidate pending physical loader/layout qualification. See [common update status and portability](COMMON_MIDI_20261018.md).
+
+Forge 3.3.0 uses the official OpenAI MCP Extensions TypeScript SDK on the
 hosted MCP server and native MCP App. ChatGPT Sites hosts the server and UI.
 The default hardware path executes JavaScript in the panel through Web Serial
 and Web MIDI; it uses no Python/Node helper, relay or Startup process. The
@@ -10,7 +12,7 @@ Browser WebMCP is a separate interface and does not discover the native panel.
 The panel build freezes its browser runtime strings before production server
 minification. Changes to those source runtimes require `npm run build:panel`;
 contract tests reject stale generated strings and execute the minified UI.
-The canonical source UI resource is `ui://fm1/forge-panel-v20.html`, with prior
+The canonical source UI resource is `ui://fm1/forge-panel-v21.html`, with prior
 resource aliases retained.
 
 ## Official SDK source
@@ -75,7 +77,7 @@ permissions or recreating the plugin.
 
 ## Direct connection and host permission
 
-The current source panel is `ui://fm1/forge-panel-v20.html`; older resource aliases
+The current source panel is `ui://fm1/forge-panel-v21.html`; older resource aliases
 remain served for installed descriptors. OpenAI treats UI resource URIs as cache
 keys. A host with old registered descriptors may require refreshing the existing
 connection metadata before a newly opened panel selects v20. Reopening alone does
@@ -225,7 +227,7 @@ stock worker and vendor M-UPGRADE handoff remain compatibility operations.
 Their saved job receipts, one-use approvals and unknown-outcome latches are
 preserved. Legacy `get_fm1_status` is passive inventory and `relay.connected`
 means the service heartbeat, not physical FM-1 presence. These APIs are not
-the 3.2.1 panel's automatic detection or transfer path.
+the 3.3.0 panel's automatic detection or transfer path.
 
 UBOOT uses a vendor mass-storage protocol outside standard Web Serial/Web MIDI,
 and direct CDC COMMIT remains blocked. A custom flash therefore uses an

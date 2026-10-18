@@ -21,7 +21,7 @@ for(const [era,revision] of [['modern','2026-07-28'],['legacy','2025-11-25']]){
       const tools=await client.listTools();
       assert.equal(tools.tools.length,22);
       const panel=tools.tools.find(tool=>tool.name==='open_fm1_library');
-      assert.equal(RESOURCE_URI,'ui://fm1/forge-panel-v20.html');
+      assert.equal(RESOURCE_URI,'ui://fm1/forge-panel-v21.html');
       assert.equal(panel._meta.ui.resourceUri,RESOURCE_URI);
       const boundTools=tools.tools.filter(tool=>tool._meta?.ui?.resourceUri);
       assert.deepEqual(boundTools.map(tool=>tool.name).sort(),['configure_fm1_project','open_fm1_library','open_fm1_project']);
@@ -92,7 +92,7 @@ test('modern discovery has typed result, identity and private cache semantics',a
   const {status,value}=await modern('server/discover',{_meta:meta()});
   assert.equal(status,200);assert.equal(value.result.resultType,'complete');
   assert.ok(value.result.supportedVersions.includes('2026-07-28'));
-  assert.equal(value.result._meta['io.modelcontextprotocol/serverInfo'].version,'3.2.1');
+  assert.equal(value.result._meta['io.modelcontextprotocol/serverInfo'].version,'3.3.0');
   assert.equal(value.result.ttlMs,0);assert.equal(value.result.cacheScope,'private');
 });
 test('modern missing envelope, unsupported revision and mismatched routing header reject before work',async()=>{
