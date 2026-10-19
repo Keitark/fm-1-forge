@@ -2,6 +2,11 @@
 
 FM-1 Forge 3.3.0 includes the new common updater in the native Codex plugin panel. The private Site supplies the MCP server and bundled panel UI; firmware bytes and device communication stay in the foreground panel JavaScript. No Python/Node device helper is started.
 
+> Native host result, 2026-10-19: Codex explicitly blocks `midiSysex` in its
+> MCP App sandbox before device enumeration. Windows detects stock FM-1 MIDI/audio.
+> These controls being present does not establish a working native MIDI connection.
+> See [connection diagnosis](CONNECTION_DIAGNOSIS_20261019.md).
+
 ## Controls and scope
 
 - **Connect stock MIDI** retains the exact official V15 update route and its existing recovery journal.
@@ -11,7 +16,33 @@ FM-1 Forge 3.3.0 includes the new common updater in the native Codex plugin pane
 
 The independently authored firmware module exposes class-compliant USB-MIDI, bounded SysEx framing and a pinned SDK active-update adapter. Before arming, firmware hashes its full current 1 MiB flash and compares the reviewed per-unit baseline. The normal build deliberately sets `FM1_MIDI_LOADER_COMPATIBLE=0`: the OTA loader, stock flash layout and preservation of calibration/protected ranges have not been physically qualified. Do not enable the gate or flash this candidate merely because its host tests and static link pass. Existing installed firmware needs that interface before it can use this path; the panel cannot add it remotely.
 
-The firmware candidate is currently built explicitly with `firmware/usb-diag/build.py --controller 0 --factory-diag --usb-midi-update`. The graphical project schema remains version 3 and does not yet enable MIDI for generated projects or existing app packages. MIDI uses USB0 IN4/OUT3; UVC also needs IN4, so MIDI plus UVC is rejected before compilation and by the native source guard. This candidate retains CDC/UBOOT and optional UAC.
+### Configuration source after the 3.3.0 release
+
+The graphical editor and native form now prepare strict schema v4 with explicit
+`usb.uacCapture` and `usb.midiUpdate` selections. New projects enable CDC,
+UBOOT recovery, audio playback, audio capture and firmware MIDI; UVC defaults
+off. Existing v1–v3 configurations migrate with MIDI off and audio capture equal
+to their previous audio setting, retaining their original intent. All v4 USB
+fields are required booleans; capture cannot remain enabled when audio is off.
+
+The USB0 IN endpoint budget is four. CDC notification and CDC data use two;
+audio capture, MIDI and UVC each use one. Audio playback does not use another
+IN endpoint. Any combination within this budget can be selected: keeping MIDI
+and video together requires explicitly disabling capture. Removing MIDI or
+video instead retains duplex audio. An overbudget fifth-IN selection is
+reported and blocks configuration export/build requests; it never silently
+changes the chosen modules. Playback-only audio is an explicit capture choice,
+not a side effect of enabling MIDI or video.
+
+The experimental MIDI/UVC composite implementation assigns their endpoint
+addresses according to the selected profile instead of retaining the previous
+fixed IN4 collision. The installation gate remains disabled. Configuration,
+descriptor and build checks are separate from enumeration, streaming, OTA
+loader/layout qualification and protected-range acceptance on a real FM-1.
+These source changes follow the 3.3.0 receipt below; that historical publication
+and its 436-test result do not establish their deployment or hardware results.
+Opening the new panel also cannot add MIDI to firmware already installed on
+the device.
 
 ## Portability and evidence
 

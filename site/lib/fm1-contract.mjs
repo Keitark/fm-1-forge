@@ -1,6 +1,6 @@
 import { ICONS } from './fm1-icon.mjs';
 import { OpenAIUiToolMetadataSchema } from '@openai/mcp-extensions';
-export const RESOURCE_URI = 'ui://fm1/forge-panel-v21.html';
+export const RESOURCE_URI = 'ui://fm1/forge-panel-v23.html';
 export const PROFILES = [
   {profile:'diagnostics',title:'Forge diagnostics',description:'Test inputs, LCD and audio before starting your firmware project.',symbol:'F'},
   {profile:'nes',title:'NES',description:'Play your prepared cartridge collection.',symbol:'N'},

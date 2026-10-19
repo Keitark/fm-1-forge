@@ -1,5 +1,27 @@
 # FM-1 Forge
 
+FM-1 Forge is a Codex plugin workspace for FM-1 device connections, graphical
+firmware configuration, local app sets and Codex project builds.
+
+Repository: [Keitark/fm-1-forge](https://github.com/Keitark/fm-1-forge).
+Firmware and HAL sources live separately in
+[Keitark/fm1-tracker](https://github.com/Keitark/fm1-tracker).
+
+## Windows desktop preview
+
+**FM-1 Forge Windows 3.4.0-alpha.3** packages its own runtime and native MIDI
+component. Its Codex panel and stock V15 identity/status connection were verified
+on 2026-10-19 without browser MIDI permission. The preview currently provides
+connection and configuration; firmware installation is not enabled in this
+checkpoint. Compiler distribution and macOS/Linux qualification remain pending.
+See [the Windows package guide](desktop/README.md) and
+[native panel evidence](docs/WINDOWS_MCP_ROUTING_20261019.md).
+
+The public repository name does not change existing installed plugin IDs,
+marketplace IDs, hosted Site URLs or saved settings.
+
+## Hosted edition
+
 **Recorded native-host limitation (2026-10-13):** Codex `26.1007.2314.0` exposes
 Web Serial but does not display a device chooser. A real connection attempt
 failed before opening FM-1. The JavaScript transport is implemented; this host's
@@ -150,7 +172,7 @@ At the historical v6 check, installed-host calls were unavailable: native
 **Refresh** rejects `open_fm1_library` as outside its trusted tool scope, and a
 repeated assistant open returned **Unknown tool**. The cause and recovery were
 unconfirmed at that check; reopening was not a verified fix. See
-[host availability issue #6](https://github.com/Keitark/fm1-marketplace-plugin/issues/6).
+[host availability issue #6](https://github.com/Keitark/fm-1-forge/issues/6).
 
 The v6 Appearance controls were published on 2026-10-10 at 11:27 JST; native
 Mint Light / Circuit Grid rendering is verified in the

@@ -7,6 +7,27 @@ export const DEFAULT_TIMING = Object.freeze({ open: 300, handshake: 1500, arm: 2
   terminal: 3000, poll: 1000, idleCheck: 8000, idleWrite: 180000, loader: 30000, reboot: 40000, enumerate: 1000, total: 900000 });
 export const realClock = Object.freeze({ now: () => performance.now(), sleep: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)) });
 const clone = value => JSON.parse(JSON.stringify(value));
+// Native rejection names are public diagnostics; arbitrary exception messages
+// can contain private host paths or unbounded text and are never displayed.
+const MIDI_ACCESS_REJECTIONS = Object.freeze({
+  SecurityError: 'The host security policy rejected MIDI/SysEx access.',
+  NotAllowedError: 'The host did not grant MIDI/SysEx access.',
+  NotSupportedError: 'The host does not support the requested MIDI/SysEx access.',
+  InvalidStateError: 'The host document or MIDI service is not ready.',
+  AbortError: 'The host canceled the MIDI/SysEx access request.',
+  OperationError: 'The host could not initialize MIDI/SysEx access.',
+  UnknownError: 'The host could not initialize MIDI/SysEx access.',
+  NotFoundError: 'The host MIDI service was unavailable before device selection.',
+  InvalidAccessError: 'The host rejected the requested MIDI/SysEx access mode.',
+});
+function midiAccessRejectionMessage(error) {
+  let name;
+  try {
+    const candidate = error?.name;
+    if (typeof candidate === 'string' && candidate.length <= 32 && Object.hasOwn(MIDI_ACCESS_REJECTIONS, candidate)) name = candidate;
+  } catch { /* Native diagnostic getters cannot change the failure handling. */ }
+  return 'MIDI/SysEx access request failed' + (name ? ' (' + name + '). ' + MIDI_ACCESS_REJECTIONS[name] : '. The host rejected the request without a recognized public error code.');
+}
 function cancelled(signal) { if (signal?.aborted) throw new UpdateError('cancelled', 'The original update attempt was stopped.'); }
 export async function runTransfer({ artifact, backend, journal, pair, expectedInitialBuildSha256, signal, clock = realClock, timing = DEFAULT_TIMING, onEvent = () => {} }) {
   const manifest = validateManifest(artifact.manifest), image = byteArray(artifact.image);
@@ -158,7 +179,9 @@ export function createCommonUpdater({ navigator = globalThis.navigator, indexedD
     requireValue(navigator?.userActivation?.isActive === true, 'user_gesture_required', 'Use Connect MIDI to grant device access.');
     requireValue(typeof navigator?.requestMIDIAccess === 'function', 'midi_unavailable', 'Web MIDI is unavailable in this browser host.');
     // Permission is requested in the actual Connect gesture, before storage awaits.
-    const permission = navigator.requestMIDIAccess({ sysex: true }).catch(() => { throw new UpdateError('midi_denied', 'MIDI SysEx permission was denied or unavailable.'); });
+    let permission;
+    try { permission = navigator.requestMIDIAccess({ sysex: true }).catch(error => { throw new UpdateError('midi_denied', midiAccessRejectionMessage(error)); }); }
+    catch (error) { throw new UpdateError('midi_denied', midiAccessRejectionMessage(error)); }
     const [access] = await Promise.all([permission, load()]);
     if (backend) await backend.close(); selected = null; evidence = null;
     backend = createWebMidiBackend(access, { onDisconnect: portId => {

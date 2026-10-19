@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { UI_HTML } from '../lib/fm1-ui.mjs';
+import { UI_HTML, WINDOWS_UI_HTML } from '../lib/fm1-ui.mjs';
 import * as generated from '../lib/fm1-app-sdk.generated.mjs';
 import { appearanceRuntime } from '../lib/fm1-appearance.mjs';
 import { moduleGraphRuntime } from '../lib/fm1-module-graph.mjs';
@@ -24,11 +24,11 @@ function minifiedPanelHtml(){
     return html;
   })();
 }
-async function panel({html=UI_HTML,embedded=false,initial=true,serverTools=true,hostMessages=false,hostRejectMessage=false,baseline=null,catalogValue=null,inventory=null,official=false,stock=false,loseConfirmationReply=false,jobData=null,beforeCall=null,nativeControls=false,omitPlanJobId=false,preferences=null,storageBlocked=false,legacyPreferences=null,nativeExtensions=false,initialFile=null,fileInputFirst=true,initialToolResult=null,nativeStartupDelay=1}={}){
+async function panel({html=UI_HTML,embedded=false,initial=true,serverTools=true,hostMessages=false,hostRejectMessage=false,baseline=null,catalogValue=null,inventory=null,official=false,stock=false,loseConfirmationReply=false,jobData=null,beforeCall=null,nativeControls=false,omitPlanJobId=false,preferences=null,storageBlocked=false,legacyPreferences=null,nativeExtensions=false,initialFile=null,fileInputFirst=true,initialToolResult=null,nativeStartupDelay=1,preserveDirectMode=false,backendOverride=null}={}){
   // Historical helper transport contracts remain exercised through test-local
   // injection. The shipped panel has no switch to enable helper autoload;
   // browser-devices-ui.test.mjs verifies its actual direct-mode default.
-  html=html.replace('const directMode=true;','const directMode=false;');
+  if(!preserveDirectMode)html=html.replace('const directMode=true;','const directMode=false;');
   const normalInventory=inventory||{device:{serial_ports:[{port:'COM10'}],update_mode:{mode:'serial',app_entry_method:'serial'},official_update:{configured:true,available:false,sha256:digest}},engine:{active:null,blocked_unknown:false}};
   const env=database();connect(env,true,official,stock);cacheCatalog(env,'alice',catalogValue||undefined);cacheInventory(env,'alice',normalInventory);
   const seededTasks=env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY id').all();
@@ -36,7 +36,7 @@ async function panel({html=UI_HTML,embedded=false,initial=true,serverTools=true,
   if(preferences!==null)storage.set('fm1.appearance.v2',typeof preferences==='string'?preferences:JSON.stringify(preferences));
   if(legacyPreferences!==null)storage.set('fm1.appearance.v1',JSON.stringify(legacyPreferences));
   const initialValues={'forge-project-name':'My FM-1 firmware','forge-project-slug':'my-fm1-firmware','forge-project-goal':'','forge-clock-preset':'sdk-default','forge-lcd-preset':'stock-dma','forge-module':'diagnostics','diag-entry-method':'auto'};
-  function node(id){if(!nodes.has(id)){let text='';const attributes=new Map();nodes.set(id,{history:[],get textContent(){return text;},set textContent(value){text=value;this.history.push(value);},innerHTML:'',value:initialValues[id]??(id==='variant-nes'?'nes-test':''),checked:id==='forge-usb-audio'||id.startsWith('forge-hal-'),dataset:{profile:'nes',plan:'nes',switch:'nes'},hidden:true,open:id==='forge-designer',style:{},querySelectorAll:selector=>id==='library'&&nativeControls?selector==='select'?[node('variant-nes')]:selector==='[data-plan]'?[node('plan-nes')]:selector==='[data-switch]'?[node('switch-nes')]:[]:[],querySelector:selector=>id==='library'&&nativeControls?(selector.startsWith('[data-profile=')?node('variant-nes'):node('digest-nes')):null,setAttribute(name,value){attributes.set(name,String(value));},getAttribute(name){return attributes.get(name)??null;},removeAttribute(name){attributes.delete(name);if(name==='value')delete this.value;},showModal(){this.open=true;},close(){this.open=false;},addEventListener(name,fn){this[name]=fn;}});}return nodes.get(id);}
+  function node(id){if(!nodes.has(id)){let text='';const attributes=new Map();nodes.set(id,{history:[],get textContent(){return text;},set textContent(value){text=value;this.history.push(value);},innerHTML:'',value:initialValues[id]??(id==='variant-nes'?'nes-test':''),checked:id==='forge-usb-audio'||id==='forge-usb-audio-capture'||id==='forge-usb-midi-update'||id.startsWith('forge-hal-'),dataset:{profile:'nes',plan:'nes',switch:'nes'},hidden:true,open:id==='forge-designer',style:{},querySelectorAll:selector=>id==='library'&&nativeControls?selector==='select'?[node('variant-nes')]:selector==='[data-plan]'?[node('plan-nes')]:selector==='[data-switch]'?[node('switch-nes')]:[]:[],querySelector:selector=>id==='library'&&nativeControls?(selector.startsWith('[data-profile=')?node('variant-nes'):node('digest-nes')):null,setAttribute(name,value){attributes.set(name,String(value));},getAttribute(name){return attributes.get(name)??null;},removeAttribute(name){attributes.delete(name);if(name==='value')delete this.value;},showModal(){this.open=true;},close(){this.open=false;},addEventListener(name,fn){this[name]=fn;}});}return nodes.get(id);}
   const initialData=await callTool(env,'alice','open_fm1_library',{});
   if(baseline)initialData.forge={diagnostic_baseline:baseline};
   if(inventory)initialData.inventory=inventory;
@@ -58,17 +58,17 @@ async function panel({html=UI_HTML,embedded=false,initial=true,serverTools=true,
   });}}:window;
   window.parent=parent;
   function toolResult(answer){const {_approval,...data}=answer;return {content:[],structuredContent:data,...(_approval?{_meta:{approval_id:_approval}}:{})};}
-  async function backend(name,args){requests.push(name);requestArgs.push({name,args});await beforeCall?.(name,args);const answer=await callTool(env,'alice',name,args);if(name==='open_fm1_library'&&baseline)answer.forge={diagnostic_baseline:baseline};if(answer.request_id){const defaultJob={id:args.job_id||answer.job_id||answer.request_id,status:'succeeded',simulation:true},data=jobData?await jobData({name,args,answer,defaultJob}):defaultJob;if(data!==null)env.DB.sqlite.prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=?').run('succeeded',JSON.stringify({status:'succeeded',data,...(name==='get_fm1_status'?{_site_inventory_observed_at:Math.floor(Date.now()/1000)}:{}),...(name==='get_fm1_input_snapshot'?{_site_input_observed_at:Math.floor(Date.now()/1000)}:{})}),answer.request_id);}if(omitPlanJobId&&name==='plan_fm1_app'){const {job_id,...queued}=answer;return queued;}return answer;}
+  async function backend(name,args){requests.push(name);requestArgs.push({name,args});await beforeCall?.(name,args);const answer=backendOverride?await backendOverride(name,args):await callTool(env,'alice',name,args);if(name==='open_fm1_library'&&baseline)answer.forge={diagnostic_baseline:baseline};if(answer.request_id){const defaultJob={id:args.job_id||answer.job_id||answer.request_id,status:'succeeded',simulation:true},data=jobData?await jobData({name,args,answer,defaultJob}):defaultJob;if(data!==null)env.DB.sqlite.prepare('UPDATE relay_tasks SET state=?,result=? WHERE id=?').run('succeeded',JSON.stringify({status:'succeeded',data,...(name==='get_fm1_status'?{_site_inventory_observed_at:Math.floor(Date.now()/1000)}:{}),...(name==='get_fm1_input_snapshot'?{_site_input_observed_at:Math.floor(Date.now()/1000)}:{})}),answer.request_id);}if(omitPlanJobId&&name==='plan_fm1_app'){const {job_id,...queued}=answer;return queued;}return answer;}
   const properties=new Map();
   const document={documentElement:{style:{setProperty(name,value){properties.set(name,String(value));}}},body:{classList:{add(){}},dataset:{},style:{setProperty(name,value){properties.set(name,String(value));},getPropertyValue(name){return properties.get(name)??'';}}},getElementById:id=>['job-id','inspect','requests','count','detail'].includes(id)?null:node(id),createElement(tag){return {tag,textContent:'',style:{}};},modelContext:{async registerTool(tool,{signal}){registered.set(tool.name,tool);signal.addEventListener('abort',()=>registered.delete(tool.name));}}};
   document.hidden=false;document.addEventListener=(name,fn,options)=>window.addEventListener(name,fn,options);window.navigator={onLine:true};
-  const context=vm.createContext({document,window,AbortController,Map,Object,Number,JSON,RegExp,String,Error,URL,TextEncoder,TextDecoder,crypto,queueMicrotask,Date:class PanelDate extends Date{static now(){return panelNow;}},setTimeout:(fn,ms)=>{delays.push(ms);if(['inventoryTick','inputTick','inputAgeTick'].includes(fn.name)){const timer='poll-'+(++pollKey);pollTimers.set(timer,{fn,time:panelNow+ms});return timer;}const timer=setTimeout(()=>{timers.delete(timer);fn();},ms>=10000?500:ms===1000?nativeStartupDelay:1);timers.set(timer,ms);return timer;},clearTimeout:timer=>{if(pollTimers.delete(timer))return;timers.delete(timer);clearTimeout(timer);},fetch:async(_url,options)=>{const input=JSON.parse(options.body);try{const answer=await backend(input.name,input.arguments);if(loseConfirmationReply&&input.name.startsWith('confirm_'))throw new Error('Confirmation reply lost.');return {ok:true,json:async()=>({structuredContent:answer})};}catch(error){return {ok:false,json:async()=>({error:error.message})};}}});
+  const context=vm.createContext({document,window,AbortController,Map,Object,Number,JSON,RegExp,String,Error,URL,TextEncoder,TextDecoder,crypto,queueMicrotask,Date:class PanelDate extends Date{static now(){return panelNow;}},setTimeout:(fn,ms)=>{delays.push(ms);if(['inventoryTick','inputTick','inputAgeTick',...(preserveDirectMode?['check']:[])].includes(fn.name)){const timer='poll-'+(++pollKey);pollTimers.set(timer,{fn,time:panelNow+ms});return timer;}const timer=setTimeout(()=>{timers.delete(timer);fn();},ms>=10000?500:ms===1000?nativeStartupDelay:1);timers.set(timer,ms);return timer;},clearTimeout:timer=>{if(pollTimers.delete(timer))return;timers.delete(timer);clearTimeout(timer);},fetch:async(_url,options)=>{const input=JSON.parse(options.body);try{const answer=await backend(input.name,input.arguments);if(loseConfirmationReply&&input.name.startsWith('confirm_'))throw new Error('Confirmation reply lost.');return {ok:true,json:async()=>({structuredContent:answer})};}catch(error){return {ok:false,json:async()=>({error:error.message})};}}});
   for(const script of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(script[1],context);
   await tick();
   // Native initialization may outlast one wall-clock tick under suite load.
   // Arm the expected inventory timer before advancing the simulated clock;
   // file/form entrypoints and hosts without tools intentionally do not arm it.
-  if((!embedded||serverTools)&&!initialFile&&!initialToolResult?.action)await until(()=>[...pollTimers.values()].some(timer=>timer.fn.name==='inventoryTick'));
+  if(!preserveDirectMode&&(!embedded||serverTools)&&!initialFile&&!initialToolResult?.action)await until(()=>[...pollTimers.values()].some(timer=>timer.fn.name==='inventoryTick'));
   return {env,nodes,registered,requests,requestArgs,events,notifications,timers,pollTimers,delays,parent,window,document,storage,storageWrites,seededTasks,node,async advancePoll(ms){const end=panelNow+ms;let count=0;while(true){const next=[...pollTimers].sort((a,b)=>a[1].time-b[1].time).find(([,timer])=>timer.time<=end);if(!next)break;if(++count>100)throw new Error('Polling timer storm.');panelNow=next[1].time;pollTimers.delete(next[0]);next[1].fn();await tick();}panelNow=end;await tick();},async invoke(name,args){return registered.get(name).execute(args);},dispose(){events.get('pagehide')?.();}};
 }
 for(const [name,runtime] of Object.entries({appearanceRuntime,forgeProjectRuntime,moduleGraphRuntime,extensionRuntime,inventoryRuntime,libraryRuntime})){
@@ -630,11 +630,11 @@ test('a completed saved job without canonical baseline evidence cannot unlock th
   assert.ok(!p.node('diagnostics-status').textContent.includes('startup verified'));p.dispose();
 });
 
-test('module configuration generates the canonical version-three config with fixed recovery',async()=>{
+test('module configuration generates the canonical version-four config with fixed recovery',async()=>{
   const p=await panel({embedded:true,baseline:forgeBaseline});
   p.node('forge-project-name').value='FM-1 Pad Lab';p.node('forge-project-slug').value='pad-lab';p.node('forge-module').value='user';
   p.node('forge-usb-audio').checked=false;p.node('forge-lcd-preset').value='spi15-rgb444';p.node('forge-module').onchange();
-  assert.deepEqual(JSON.parse(p.node('forge-config').textContent),{schemaVersion:3,project:{slug:'pad-lab',displayName:'FM-1 Pad Lab'},profile:'forge-diag',clockPreset:'sdk-default',lcdPreset:'spi15-rgb444',module:'user',usb:{cdc:true,uac:false,uvc:false,uboot:true},hal:{buttons:true,encoders:true,volume:true,lcd:true,audio:true}});
+  assert.deepEqual(JSON.parse(p.node('forge-config').textContent),{schemaVersion:4,project:{slug:'pad-lab',displayName:'FM-1 Pad Lab'},profile:'forge-diag',clockPreset:'sdk-default',lcdPreset:'spi15-rgb444',module:'user',usb:{cdc:true,uac:false,uacCapture:false,uvc:false,midiUpdate:true,uboot:true},hal:{buttons:true,encoders:true,volume:true,lcd:true,audio:true}});
   assert.equal(p.node('forge-module-title').textContent,'Your module');assert.match(p.node('forge-prompt').value,/shared HAL/);
   assert.equal(JSON.parse(p.node('forge-config').textContent).clockPreset,'sdk-default');assert.equal(p.node('forge-clock-opt-in').checked,false);
   assertAppearanceStaysLocal(p);p.dispose();
@@ -650,23 +650,24 @@ test(mode+' new drafts expose read-only SDK-default CPU information without a 32
 });
 
 test(mode+' an explicitly loaded legacy 320 MHz draft retains its reviewed setting and accurate read-only label',async()=>{
-  const current=projectConfig({...defaultProject,clockPreset:'sdk-320',clockOptIn:true}),{uvc,...legacyUsb}=current.usb,legacy={...current,schemaVersion:2,usb:legacyUsb};
+  const current=projectConfig({...defaultProject,clockPreset:'sdk-320',clockOptIn:true}),{uvc,midiUpdate,uacCapture,...legacyUsb}=current.usb,legacy={...current,schemaVersion:2,usb:legacyUsb};
   const html=mode==='source'?UI_HTML:await minifiedPanelHtml(),p=await panel({html,embedded:true,initialToolResult:{action:'accept',config:legacy,goal:'Keep my existing firmware configuration',gate:{diagnostics_verified:true,can_start_project:false},project:{id:'c'.repeat(32),config:legacy}}});
   try{
     assert.equal(p.node('forge-clock-preset').value,'sdk-320');assert.equal(p.node('forge-clock-opt-in').checked,true);assert.equal(p.node('forge-cpu-summary').textContent,'CPU: legacy draft · 320 MHz (retained)');
-    let exported=JSON.parse(p.node('forge-config').textContent);assert.equal(exported.schemaVersion,3);assert.equal(exported.clockPreset,'sdk-320');assert.equal(exported.usb.uvc,false);
+    let exported=JSON.parse(p.node('forge-config').textContent);assert.equal(exported.schemaVersion,4);assert.equal(exported.clockPreset,'sdk-320');assert.equal(exported.usb.uvc,false);
     p.node('forge-project-goal').value='Add another sequencer feature';p.node('forge-project-goal').oninput();exported=JSON.parse(p.node('forge-config').textContent);assert.equal(exported.clockPreset,'sdk-320');assert.match(p.node('forge-prompt').value,/"clockPreset": "sdk-320"/);assert.equal(p.node('forge-cpu-summary').textContent,'CPU: legacy draft · 320 MHz (retained)');assert.equal(p.requests.length,0);
   }finally{p.dispose();}
 });
 
 }
 
-test('optional UVC selection exports canonical v3 locally and restores accepted configurations',async()=>{
+test('optional UVC selection exports canonical v4 locally and restores accepted configurations',async()=>{
   const p=await panel({embedded:true,baseline:forgeBaseline});
   try{
     assert.equal(p.node('forge-usb-video').checked,false);assert.equal(JSON.parse(p.node('forge-config').textContent).usb.uvc,false);
+    p.node('forge-usb-audio-capture').checked=false;p.node('forge-usb-audio-capture').onchange();
     p.node('forge-usb-video').checked=true;p.node('forge-usb-video').onchange();
-    const config=JSON.parse(p.node('forge-config').textContent);assert.equal(config.schemaVersion,3);assert.equal(config.usb.uvc,true);assert.equal(config.usb.cdc,true);assert.equal(config.usb.uboot,true);assert.match(p.node('forge-prompt').value,/"uvc": true/);assertAppearanceStaysLocal(p);
+    const config=JSON.parse(p.node('forge-config').textContent);assert.equal(config.schemaVersion,4);assert.equal(config.usb.uvc,true);assert.equal(config.usb.cdc,true);assert.equal(config.usb.uboot,true);assert.match(p.node('forge-prompt').value,/"uvc": true/);assertAppearanceStaysLocal(p);
     const restored=await panel({embedded:true,initialToolResult:{action:'accept',config,goal:'Stream the screen through USB video',gate:{diagnostics_verified:true,can_start_project:false},project:{id:'b'.repeat(32),config}}});
     try{assert.equal(restored.node('forge-usb-video').checked,true);assert.equal(JSON.parse(restored.node('forge-config').textContent).usb.uvc,true);assert.equal(restored.requests.length,0);}finally{restored.dispose();}
   }finally{p.dispose();}
@@ -1047,4 +1048,74 @@ test('hidden and offline panels pause observation; visible, focus and online eve
   p.document.hidden=false;p.events.get('visibilitychange')();p.events.get('focus')();await tick();assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);
   p.window.navigator.onLine=false;p.events.get('offline')();await p.advancePoll(30000);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);assert.equal(p.pollTimers.size,0);assert.equal(p.node('device-heading').textContent,'FM-1 on COM10');assert.equal(p.node('connection-check').hidden,true);
   p.window.navigator.onLine=true;p.events.get('online')();p.events.get('focus')();await tick();assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,2);p.dispose();assert.equal(p.pollTimers.size,0);for(const event of ['visibilitychange','focus','online','offline','message'])assert.equal(p.events.has(event),false);await p.advancePoll(60000);assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,2);
+});
+
+
+for (const rendering of ['source', 'production']) test(rendering+' USB selections enforce the IN budget without silently dropping capture',async()=>{
+  const html=rendering==='source'?UI_HTML:await minifiedPanelHtml(),p=await panel({html,embedded:true,baseline:forgeBaseline});
+  const config=()=>JSON.parse(p.node('forge-config').textContent);
+  try {
+    assert.equal(config().schemaVersion,4);assert.equal(config().usb.midiUpdate,true);assert.equal(config().usb.uacCapture,true);
+    assert.equal(p.node('forge-usb-midi-update').checked,true);assert.equal(p.node('forge-card-usb-midi-update').hidden,false);
+    assert.match(p.node('forge-usb-budget').textContent,/4 \/ 4/);
+    const values=new Map(),dataTransfer={setData:(k,v)=>values.set(k,v),getData:k=>values.get(k)};
+    p.node('forge-card-usb-midi-update').dragstart({dataTransfer});p.node('forge-drop-library').drop({dataTransfer,preventDefault(){}});
+    assert.equal(config().usb.midiUpdate,false);assert.equal(p.node('forge-add-usb-midi-update').hidden,false);
+    p.node('forge-add-usb-midi-update').onclick();assert.equal(config().usb.midiUpdate,true);
+    p.node('forge-add-usb-uvc').onclick();
+    assert.equal(p.node('forge-usb-audio-capture').checked,true);assert.equal(p.node('forge-usb-midi-update').checked,true);assert.equal(p.node('forge-usb-video').checked,true);
+    assert.match(p.node('forge-usb-budget').textContent,/5 \/ 4/);assert.equal(p.node('forge-usb-budget').getAttribute('data-over-budget'),'true');
+    assert.match(p.node('forge-project-status').textContent,/endpoint budget exceeded/);assert.equal(p.node('forge-config').textContent,'');assert.equal(p.node('forge-prompt').value,'');
+    p.node('forge-download').onclick();assert.match(p.node('forge-project-status').textContent,/endpoint budget exceeded/);
+    p.node('forge-card-usb-uac-capture').dragstart({dataTransfer});p.node('forge-drop-library').drop({dataTransfer,preventDefault(){}});
+    assert.equal(config().usb.uvc,true);assert.equal(config().usb.midiUpdate,true);assert.equal(config().usb.uac,true);assert.equal(config().usb.uacCapture,false);
+    assert.match(p.node('forge-detail-usb-uac').textContent,/Playback only/);assert.match(p.node('forge-usb-budget').textContent,/4 \/ 4/);
+    assert.match(p.node('forge-prompt').value,/playback.only/);assert.match(p.node('forge-prompt').value,/"midiUpdate": true/);
+    p.node('forge-usb-midi-update').checked=false;p.node('forge-usb-midi-update').onchange();
+    p.node('forge-add-usb-uac-capture').onclick();assert.equal(config().usb.uacCapture,true);assert.equal(config().usb.uvc,true);
+    p.node('forge-remove-usb-uac').onclick();assert.equal(config().usb.uac,false);assert.equal(config().usb.uacCapture,false);assert.equal(p.node('forge-usb-audio-capture').disabled,true);
+    p.node('forge-add-usb-uac-capture').onclick();assert.equal(config().usb.uac,true);assert.equal(config().usb.uacCapture,true);
+    assert.equal(config().usb.cdc,true);assert.equal(config().usb.uboot,true);assert.equal(p.requests.length,0);assertAppearanceStaysLocal(p);
+  } finally {p.dispose();}
+});
+
+test('version 3 drafts keep firmware MIDI disabled while new projects enable it',async()=>{
+  const current=projectConfig(defaultProject),{midiUpdate,uacCapture,...usb}=current.usb,legacy={...current,schemaVersion:3,usb};
+  const p=await panel({embedded:true,initialToolResult:{action:'accept',config:legacy,project:{id:'d'.repeat(32),config:legacy}}});
+  try {const restored=JSON.parse(p.node('forge-config').textContent);assert.equal(restored.schemaVersion,4);assert.equal(restored.usb.midiUpdate,false);assert.equal(p.node('forge-usb-midi-update').checked,false);assert.equal(p.requests.length,0);}finally{p.dispose();}
+});
+
+
+test('Windows native panel mounts its fixed MCP transport without browser permission or automatic connection',async()=>{
+  let connected=false;
+  const status=()=>({connected,transport:connected?'stock-midi':null,identity:connected?'FM-1_015':null,loader:false,installationAvailable:false,supportedTransports:['stock-midi','firmware-midi'],lastError:null});
+  const p=await panel({html:WINDOWS_UI_HTML,embedded:true,preserveDirectMode:true,backendOverride:async(name,args)=>{
+    if(name==='connect_fm1_device'){assert.equal(args.transport,'stock-midi');connected=true;return status();}
+    if(name==='get_fm1_device_status')return status();
+    if(name==='disconnect_fm1_device'){connected=false;return status();}
+    assert.fail('Unexpected desktop tool '+name);
+  }});
+  try{
+    assert.equal(typeof p.window.FM1DesktopDevicesUI?.mount,'function');
+    assert.equal(p.node('surface-label').textContent,'FM-1 Forge Windows plugin');
+    assert.equal(p.node('device-heading').textContent,'FM-1 disconnected');
+    assert.equal(p.node('direct-midi').textContent,'Native MIDI · no browser permission');
+    assert.equal(p.node('direct-connect-serial').disabled,true);
+    assert.equal(p.node('direct-connect-midi').disabled,false);
+    assert.equal(p.node('direct-connect-common').disabled,false);
+    assert.deepEqual(p.requests,[]);
+    p.node('direct-connect-midi').onclick({isTrusted:false});await tick();assert.deepEqual(p.requests,[]);
+    p.node('direct-connect-midi').onclick({isTrusted:true});
+    await until(()=>p.node('device-heading').textContent.includes('FM-1_015'));
+    assert.equal(p.node('connection-label').textContent,'Device connected');
+    assert.equal(p.node('direct-stock-review').disabled,true);
+    assert.equal(p.node('direct-common-review').disabled,true);
+    await p.advancePoll(3000);
+    assert.ok(p.requests.includes('get_fm1_device_status'));
+    assert.ok(!p.node('device-heading').history.some(label=>/checking/i.test(label)));
+    p.node('direct-disconnect').onclick({isTrusted:true});
+    await until(()=>p.node('connection-label').textContent==='Device disconnected');
+    assert.deepEqual(p.requests.filter(name=>name==='connect_fm1_device'),['connect_fm1_device']);
+    assert.ok(p.requests.includes('disconnect_fm1_device'));
+  }finally{p.dispose();}
 });

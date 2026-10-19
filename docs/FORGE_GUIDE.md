@@ -8,6 +8,15 @@ API/storage checks are not device acceptance. See
 [the host evidence](DIRECT_DEVICE_ACCESS_20261013.md). A plugin cannot add the
 missing native chooser from its iframe, and no helper is started as a fallback.
 
+On 2026-10-19, Windows detected the stock FM-1 MIDI/audio device, but the
+native Codex sandbox explicitly logged `permission_blocked permission=midiSysex`
+on connection attempts. Stock and common MIDI access fail before enumeration;
+the absent prompt is a host permission block. Firmware endpoint configuration
+cannot grant that permission. The connection diagnostics now retain a safe native
+error name instead of calling every request rejection a permission denial. No
+host permission bypass or helper fallback is implemented. See
+[connection diagnosis](CONNECTION_DIAGNOSIS_20261019.md).
+
 FM-1 Forge **3.3.0** is the private firmware workspace plugin. Its existing
 plugin ID and Site URL remain in use. The default connection path runs inside
 the panel with Web Serial and Web MIDI; it requires no separately installed
@@ -17,7 +26,7 @@ While the conversation is active, use
 This opens Forge's native conversation tab. The global shortcut opens a separate
 app view; returning to an earlier chat selects that chat's own panel instance.
 
-The current source resource is `ui://fm1/forge-panel-v21.html`; older resource
+The current source resource is `ui://fm1/forge-panel-v23.html`; older resource
 aliases remain available. Open a fresh native conversation tab after an update.
 Reopening alone does not prove that a host with cached descriptors selected the
 new URI; check the dated native-host evidence before claiming an updated panel.
@@ -93,24 +102,47 @@ hardware. Firmware-resident UBOOT recovery and CDC serial are protected enabled
 defaults; this UBOOT module is not a laptop helper process.
 
 The graph separates fixed USB/system recovery from shared HAL and editable user
-code. CDC and UBOOT recovery remain enabled. USB Audio Class can be selected;
-it provides stereo playback and digital synth capture rather than analog mic
-capture or a flash protocol. HAL ABI1 exposes all inputs, LCD rendering, audio
-and immutable health snapshots. User code has init/update/render/audio/shutdown
-callbacks, with bounded IRQ audio work and output clipping.
+code. CDC and UBOOT recovery remain enabled. USB audio playback and **USB audio
+capture** are separate selections; capture carries the digital synth output,
+not an analog microphone. Removing playback also removes its dependent capture
+selection. HAL ABI1 exposes all inputs, LCD rendering, audio and immutable
+health snapshots. User code has init/update/render/audio/shutdown callbacks,
+with bounded IRQ audio work and output clipping.
 
-New exports and saved drafts use strict configuration schema v3 with five HAL
-booleans and optional `usb.uvc`. Existing v1/v2 files import with UVC disabled;
-v1 imports also enable all HAL access. Native
-forms, files, context restore and the local firmware generator share this
-contract. New projects preserve `sdk-default`; CPU is a read-only summary in
-the panel. Imported legacy `sdk-320` drafts retain their original setting.
+The configuration source uses strict schema v4 with five HAL booleans and USB
+fields `cdc`, `uac`, `uacCapture`, `uvc`, `midiUpdate` and `uboot`. CDC and UBOOT
+are required true; the other fields are explicit booleans. New drafts enable
+audio playback, audio capture and **Firmware MIDI update**; video defaults off.
+The MIDI module adds the experimental USB MIDI + SysEx receiver to generated
+firmware. Selecting it does not qualify the OTA loader or enable installation:
+the normal firmware keeps `FM1_MIDI_LOADER_COMPATIBLE=0` until physical
+loader/layout and protected-range qualification is complete.
+
+USB0 has four available IN endpoints. The protected CDC pair uses two; audio
+capture, firmware MIDI and UVC each use one. Choose at most two of those three
+optional IN functions. USB audio playback adds no IN endpoint. For example,
+keep capture and MIDI with video off, or explicitly remove capture to keep MIDI
+and video together. A fifth-IN selection stays visible and reports an endpoint
+budget error; no module is silently removed. A valid configuration is required
+before export or Ask Codex. Turning USB audio off also sets `uacCapture` false.
+
+Existing v1–v3 files migrate without enabling MIDI, preserving capture as the
+old USB audio setting. V1/v2 imports keep video disabled; v3 preserves its video
+selection. V1 imports also enable all HAL access. Native forms, files, context
+restore and the local firmware generator share this contract. New projects
+preserve `sdk-default`; CPU is a read-only summary in the panel. Imported legacy
+`sdk-320` drafts retain their original setting. Schema v4 is newer Site-side
+configuration work; the plugin package remains 3.3.0. The original 3.3.0
+publication receipt does not establish this newer Site deployment or its
+hardware acceptance. Resource v22 distinguishes the updated panel while v21
+and older resource aliases remain available.
 
 **USB video · UVC** adds 256×240 YUY2 screen output at a nominal 5 fps, using
 the transport physically confirmed in the ProTracker session. The 240×240 firmware screen
-has eight black pixels at either side. Video defaults off and does not remove
-CDC/UBOOT or optional UAC. The new Forge combination remains unflashed and needs its own device
-capture test; the ProTracker capture is evidence for the reused transport.
+has eight black pixels at either side. Video defaults off. MIDI and video may coexist when the explicit endpoint
+budget fits; neither is automatically removed. The new Forge combination
+remains unflashed and needs its own device capture test; the ProTracker capture
+is evidence for the reused transport.
 
 The module editor is expanded by default. **Getting started** holds the optional
 01–04 guide. The main panel omits saved-request history and manual job-ID entry.

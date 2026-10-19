@@ -733,7 +733,7 @@ but remote tool availability and native reopening were not accepted at that time
 Later installed-tool and native openings succeeded, as recorded in the newer
 entries above; this is historical failure evidence.
 No firmware operation was attempted during this check. Follow-up is tracked in
-[issue #6](https://github.com/Keitark/fm1-marketplace-plugin/issues/6).
+[issue #6](https://github.com/Keitark/fm-1-forge/issues/6).
 
 ![Installed native FM1 panel with Mint Light and Circuit Grid](images/fm1-native-appearance-mint-light.png)
 

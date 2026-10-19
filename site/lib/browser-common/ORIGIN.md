@@ -17,7 +17,7 @@ own package policy and journal.
 | journal.mjs | `858dc91e5ccfccd53b513abc4dc7d7a97e2cd5f04e4df20e492e824e6b617a5b` |
 | package.mjs | `1f8f951524c740da7b1029276719ac1f0ac8f34c7ec64fcc81863f7b769d23f1` |
 | protocol.mjs | `2214ed6301c9dc289f56c93381fe0baf7d7f3524fe33da6c7be28f7c68be0d64` |
-| updater.mjs | `9146b3d3f0ee6fc72fb93190712415d39f443c8cfce021908a96203f275b6e35` |
+| updater.mjs | `ac2a6a87f512c58f5aeb99ffe900e1d69c892f418bba165fe61e2485ca8c05d6` |
 | web-midi.mjs | `84d60040c59b8e297d8d7c34166000df21d48b98a9973b7ab9b99f0ada244eed` |
 
 Device access runs in the native panel through its actual browser APIs.

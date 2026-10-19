@@ -4,6 +4,7 @@ import { OpenAIFileEntrypointInputSchema } from '@openai/mcp-extensions';
 import { createResourceEditor, parseForgeRoute, validateLocalPath } from './fm1-extension-host.mjs';
 import { browserHardwareCapabilities } from './fm1-browser-hardware.mjs';
 import './fm1-browser-devices-ui.mjs';
+import './fm1-desktop-devices-ui.mjs';
 import './fm1-browser-library.mjs';
 
 // These official SDKs are bundled locally into the MCP App resource.

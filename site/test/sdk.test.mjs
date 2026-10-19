@@ -21,7 +21,7 @@ for(const [era,revision] of [['modern','2026-07-28'],['legacy','2025-11-25']]){
       const tools=await client.listTools();
       assert.equal(tools.tools.length,22);
       const panel=tools.tools.find(tool=>tool.name==='open_fm1_library');
-      assert.equal(RESOURCE_URI,'ui://fm1/forge-panel-v21.html');
+      assert.equal(RESOURCE_URI,'ui://fm1/forge-panel-v23.html');
       assert.equal(panel._meta.ui.resourceUri,RESOURCE_URI);
       const boundTools=tools.tools.filter(tool=>tool._meta?.ui?.resourceUri);
       assert.deepEqual(boundTools.map(tool=>tool.name).sort(),['configure_fm1_project','open_fm1_library','open_fm1_project']);

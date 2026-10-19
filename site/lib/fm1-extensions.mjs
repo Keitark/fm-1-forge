@@ -18,7 +18,7 @@ const settingTitles={palette:'FM-1 color palette',pattern:'Background pattern',e
 const settingInput=z.strictObject({set:z.strictObject(settingShape).partial().refine(value=>Object.keys(value).length>0)});
 const canonicalShape={project:z.strictObject({slug:z.string().max(48),displayName:z.string().max(64)}),profile:z.literal('forge-diag'),clockPreset:clock,lcdPreset:lcd,module:moduleName,usb:z.strictObject({cdc:z.literal(true),uac:z.boolean(),uboot:z.literal(true)})};
 const halShape={buttons:z.boolean(),encoders:z.boolean(),volume:z.boolean(),lcd:z.boolean(),audio:z.boolean()};
-const canonical=z.union([z.strictObject({schemaVersion:z.literal(1),...canonicalShape}),z.strictObject({schemaVersion:z.literal(2),...canonicalShape,hal:z.strictObject(halShape)}),z.strictObject({schemaVersion:z.literal(3),...canonicalShape,usb:z.strictObject({cdc:z.literal(true),uac:z.boolean(),uvc:z.boolean(),uboot:z.literal(true)}),hal:z.strictObject(halShape)})]);
+const canonical=z.union([z.strictObject({schemaVersion:z.literal(1),...canonicalShape}),z.strictObject({schemaVersion:z.literal(2),...canonicalShape,hal:z.strictObject(halShape)}),z.strictObject({schemaVersion:z.literal(3),...canonicalShape,usb:z.strictObject({cdc:z.literal(true),uac:z.boolean(),uvc:z.boolean(),uboot:z.literal(true)}),hal:z.strictObject(halShape)}),z.strictObject({schemaVersion:z.literal(4),...canonicalShape,usb:z.strictObject({cdc:z.literal(true),uac:z.boolean(),uacCapture:z.boolean(),uvc:z.boolean(),midiUpdate:z.boolean(),uboot:z.literal(true)}),hal:z.strictObject(halShape)})]);
 const configInput=z.strictObject({config:canonical,project_id:savedId.optional(),clock_opt_in:z.boolean().optional()});
 const fileInput=z.strictObject({file:z.strictObject({name:z.string().min(1).max(128),resourceUri:z.string().min(1).max(2048)})});
 const inputSchemas={
@@ -58,7 +58,7 @@ function validatedConfig(config,optIn=false){
   const value=parse(canonical,config);
   try{
     const normalized=normalizeProjectConfig(value);
-    const clean=projectConfig({slug:normalized.project.slug,displayName:normalized.project.displayName,clockPreset:normalized.clockPreset,clockOptIn:optIn,lcdPreset:normalized.lcdPreset,module:normalized.module,usbAudio:normalized.usb.uac,usbVideo:normalized.usb.uvc,hal:normalized.hal});
+    const clean=projectConfig({slug:normalized.project.slug,displayName:normalized.project.displayName,clockPreset:normalized.clockPreset,clockOptIn:optIn,lcdPreset:normalized.lcdPreset,module:normalized.module,usbAudio:normalized.usb.uac,usbAudioCapture:normalized.usb.uacCapture,usbVideo:normalized.usb.uvc,usbMidiUpdate:normalized.usb.midiUpdate,hal:normalized.hal});
     return clean;
   }catch(error){throw new PublicError(error.message);}
 }
@@ -89,14 +89,16 @@ function validateFile(file){
   return {name,resourceUri};
 }
 export const PROJECT_FORM_KEY='fm1-project-configuration';
-const formInput=z.strictObject({slug:z.string().max(48),displayName:z.string().max(64),lcdPreset:lcd,module:moduleName,usbAudio:z.boolean(),usbVideo:z.boolean().default(false),halButtons:z.boolean().default(true),halEncoders:z.boolean().default(true),halVolume:z.boolean().default(true),halLcd:z.boolean().default(true),halAudio:z.boolean().default(true),goal:z.string().max(2000).optional(),referenceProject:z.array(z.string().max(128)).max(1).optional()});
+const formInput=z.strictObject({slug:z.string().max(48),displayName:z.string().max(64),lcdPreset:lcd,module:moduleName,usbAudio:z.boolean(),usbAudioCapture:z.boolean().default(true),usbVideo:z.boolean().default(false),usbMidiUpdate:z.boolean().default(true),halButtons:z.boolean().default(true),halEncoders:z.boolean().default(true),halVolume:z.boolean().default(true),halLcd:z.boolean().default(true),halAudio:z.boolean().default(true),goal:z.string().max(2000).optional(),referenceProject:z.array(z.string().max(128)).max(1).optional()});
 const thumbnail=(text)=>({src:'data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect width="160" height="90" rx="8" fill="black"/><text x="80" y="50" fill="#a3efcc" text-anchor="middle" font-family="sans-serif" font-size="14">'+text+'</text></svg>'),mimeType:'image/svg+xml'});
 export const PROJECT_FORM=Object.freeze({type:'object',required:['slug','displayName','lcdPreset','module','usbAudio'],properties:{
   slug:{type:'string',title:'Project folder name',minLength:1,maxLength:48,pattern:'^[a-z][a-z0-9-]{0,47}$','x-openai-suggestions':[{const:'first-synth',title:'First synthesizer'},{const:'pad-instrument',title:'Pad instrument'}]},
   displayName:{type:'string',title:'Project display name',minLength:1,maxLength:64,'x-openai-suggestions':[{const:'First Synth',title:'First Synth'},{const:'Pad Instrument',title:'Pad Instrument'}]},
   lcdPreset:{type:'string',title:'LCD transfer',oneOf:[{const:'stock-dma',title:'Stock DMA',description:'Conservative baseline transfer','x-openai-thumbnail':thumbnail('Stock DMA')},{const:'spi15-rgb444',title:'SPI 15 RGB444',description:'Requires 60 MHz LSB bus and bench validation','x-openai-thumbnail':thumbnail('SPI 15 RGB444')},{const:'spi30-rgb444',title:'SPI 30 RGB444',description:'Requires 60 MHz LSB bus and bench validation','x-openai-thumbnail':thumbnail('SPI 30 RGB444')}]},
-  module:{type:'string',title:'User module',oneOf:[{const:'diagnostics',title:'Hardware diagnostics',description:'Inputs, LCD and key tones','x-openai-thumbnail':thumbnail('Diagnostics')},{const:'user',title:'Blank user module',description:'Silent starter for your own firmware','x-openai-thumbnail':thumbnail('User module')}]},usbAudio:{type:'boolean',title:'Enable USB audio'},
+  module:{type:'string',title:'User module',oneOf:[{const:'diagnostics',title:'Hardware diagnostics',description:'Inputs, LCD and key tones','x-openai-thumbnail':thumbnail('Diagnostics')},{const:'user',title:'Blank user module',description:'Silent starter for your own firmware','x-openai-thumbnail':thumbnail('User module')}]},usbAudio:{type:'boolean',title:'Enable USB audio',description:'USB audio playback. Capture is selected separately; no selected module is disabled automatically.'},
+  usbAudioCapture:{type:'boolean',title:'USB audio capture',description:'Requires USB audio and uses one USB IN endpoint. CDC uses two; MIDI and video each use one. Choose at most four USB IN endpoints.',default:true},
   usbVideo:{type:'boolean',title:'USB video (UVC) screen mirror',description:'256×240 YUY2 screen output at 5 fps. Experimental Forge integration; capture on this starter is not yet hardware-verified.',default:false},
+  usbMidiUpdate:{type:'boolean',title:'Firmware MIDI update',description:'Include the experimental USB MIDI + SysEx receiver in the composite device. Loader installation remains unqualified; this selection does not enable device installation.',default:true},
   halButtons:{type:'boolean',title:'User module: buttons and pads HAL',default:true},
   halEncoders:{type:'boolean',title:'User module: encoders HAL',default:true},
   halVolume:{type:'boolean',title:'User module: volume HAL',description:'User access to the volume snapshot; physical master gain remains protected.',default:true},

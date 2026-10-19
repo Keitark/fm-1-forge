@@ -240,7 +240,7 @@ is also available; sign in with the owner account when prompted. Both use the
 [black/mint FM-1 mark](../site/public/fm1-icon.png).
 
 An earlier 2026-10-10 host check failed with a trusted-tool-scope rejection and
-**Unknown tool**; [issue #6](https://github.com/Keitark/fm1-marketplace-plugin/issues/6)
+**Unknown tool**; [issue #6](https://github.com/Keitark/fm-1-forge/issues/6)
 records that observation. Later installed-tool and native panel openings
 succeeded. That historical failure does not describe current tool availability;
 the latest connection and deployment evidence is in

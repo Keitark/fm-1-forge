@@ -348,3 +348,34 @@ test('native classification ignores Electron standard-scheme URL trailing-slash 
   assert.equal(stockOriginKind('https://fm1-forge.test'), 'web');
   assert.equal(updater.midi.calls.permissions, 0); assert.equal(updater.midi.calls.opens, 0);
 });
+
+
+test('native MIDI request rejection identifies its public cause before device selection without exposing host internals', async () => {
+  for (const name of ['SecurityError', 'NotAllowedError', 'NotSupportedError']) for (const synchronous of [true, false]) {
+    const native = new DOMException('PRIVATE_HOST_DETAIL' + String.fromCharCode(0, 10, 0x202e) + 'x'.repeat(10000), name), c = setup();
+    c.midi.navigator.requestMIDIAccess = options => {
+      assert.deepEqual(options, { sysex: true }); c.midi.calls.permissions++;
+      if (synchronous) throw native;
+      return Promise.reject(native);
+    };
+    await assert.rejects(c.updater.connect(), error => {
+      assert.equal(error.code, 'midi_permission_denied'); assert.match(error.message, /access request failed/);
+      assert.ok(error.message.includes('(' + name + ')')); assert.ok(error.message.length < 256); assert.doesNotMatch(error.message, /PRIVATE_HOST_DETAIL/);
+      assert.equal([...error.message].some(character => character.codePointAt(0) < 32 || character.codePointAt(0) === 0x202e), false); return true;
+    });
+    assert.equal(c.midi.calls.permissions, 1); assert.equal(c.midi.calls.opens, 0); assert.equal(c.midi.calls.upgrades, 0); assert.equal(c.midi.calls.sends.length, 0);
+    assert.equal(c.updater.status().connected, false); assert.equal(c.updater.status().lastError.code, 'midi_permission_denied'); assert.equal(c.store.records.get('current'), undefined);
+  }
+});
+
+test('unrecognized or hostile MIDI exceptions stay bounded and do not become raw panel text', async () => {
+  const getterFailure = Object.defineProperty({}, 'name', { get() { throw new Error('PRIVATE_GETTER'); } });
+  for (const native of [new Error('PRIVATE_MESSAGE'), { name: 'SecurityError' + String.fromCharCode(10) + 'PRIVATE_NAME', message: 'PRIVATE_MESSAGE' }, { name: 'PRIVATE_NAME'.repeat(10000), message: 'PRIVATE_MESSAGE' }, getterFailure]) {
+    const c = setup(); c.midi.navigator.requestMIDIAccess = () => { c.midi.calls.permissions++; return Promise.reject(native); };
+    await assert.rejects(c.updater.connect(), error => {
+      assert.equal(error.code, 'midi_permission_denied'); assert.ok(error.message.length < 256); assert.doesNotMatch(error.message, /PRIVATE/);
+      assert.equal([...error.message].some(character => character.codePointAt(0) < 32), false); return true;
+    });
+    assert.equal(c.midi.calls.permissions, 1); assert.equal(c.midi.calls.opens, 0); assert.equal(c.midi.calls.sends.length, 0);
+  }
+});

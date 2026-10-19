@@ -9,6 +9,27 @@ export { STOCK, StockError } from './protocol.mjs';
 
 const LOCK = 'fm1-forge-stock-v15-device';
 const clone = value => JSON.parse(JSON.stringify(value));
+// Native rejection names are public diagnostics; arbitrary exception messages
+// can contain private host paths or unbounded text and are never displayed.
+const MIDI_ACCESS_REJECTIONS = Object.freeze({
+  SecurityError: 'The host security policy rejected MIDI/SysEx access.',
+  NotAllowedError: 'The host did not grant MIDI/SysEx access.',
+  NotSupportedError: 'The host does not support the requested MIDI/SysEx access.',
+  InvalidStateError: 'The host document or MIDI service is not ready.',
+  AbortError: 'The host canceled the MIDI/SysEx access request.',
+  OperationError: 'The host could not initialize MIDI/SysEx access.',
+  UnknownError: 'The host could not initialize MIDI/SysEx access.',
+  NotFoundError: 'The host MIDI service was unavailable before device selection.',
+  InvalidAccessError: 'The host rejected the requested MIDI/SysEx access mode.',
+});
+function midiAccessRejectionMessage(error) {
+  let name;
+  try {
+    const candidate = error?.name;
+    if (typeof candidate === 'string' && candidate.length <= 32 && Object.hasOwn(MIDI_ACCESS_REJECTIONS, candidate)) name = candidate;
+  } catch { /* Native diagnostic getters cannot change the failure handling. */ }
+  return 'MIDI/SysEx access request failed' + (name ? ' (' + name + '). ' + MIDI_ACCESS_REJECTIONS[name] : '. The host rejected the request without a recognized public error code.');
+}
 export function createBrowserStockUpdater({ navigator = globalThis.navigator, indexedDB = globalThis.indexedDB, crypto = globalThis.crypto,
   locks = navigator?.locks, location = globalThis.location, secureContext = globalThis.isSecureContext, clock = realClock, timing = DEFAULT_TIMING, onEvent = () => {}, onState = () => {}, beforeWrite = async () => {} } = {}) {
   let access = null, backend = null, database = null, selectedPair = null, identity = null, connected = false, updating = false;
@@ -94,7 +115,9 @@ export function createBrowserStockUpdater({ navigator = globalThis.navigator, in
         ownsAttempt = true;
         if (navigator.userActivation?.isActive !== true) throw new StockError('user_gesture_required', 'A current user gesture is required for MIDI permission.');
         // Request within the explicit Connect action before any asynchronous storage work.
-        const permission = navigator.requestMIDIAccess({ sysex: true }).catch(() => { throw new StockError('midi_permission_denied', 'MIDI SysEx permission was denied or unavailable.'); });
+        let permission;
+        try { permission = navigator.requestMIDIAccess({ sysex: true }).catch(error => { throw new StockError('midi_permission_denied', midiAccessRejectionMessage(error)); }); }
+        catch (error) { throw new StockError('midi_permission_denied', midiAccessRejectionMessage(error)); }
         const [granted] = await Promise.all([permission, getDatabase()]);
         if (!granted?.sysexEnabled) throw new StockError('sysex_denied', 'MIDI SysEx permission was not granted.');
         if (backend) await backend.close();
