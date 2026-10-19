@@ -1,10 +1,12 @@
-# FM-1 Forge Windows connection preview
+# FM-1 Forge Windows
 
-Version **3.4.0-alpha.3**, locally installed and verified through the native Codex panel on 2026-10-19 (JST). The current chat exposes its local MCP tools, and the inspected Windows panel shows the connected stock V15 identity without a browser MIDI/SysEx permission request. Earlier alpha.2 package and physical-test receipts are preserved below as historical evidence. This edition targets **Windows x64 only**. It is a local plugin preview, separate from the existing private, hosted FM-1 Forge plugin and Site. Preparing or installing this preview does not upgrade, publish, delete or migrate the hosted plugin or its cloud data.
+Version **3.4.0-alpha.4** adds a reviewed stock V15 USB-MIDI SysEx write path to the self-contained Windows x64 plugin. The source implementation and offline checks are recorded in [the stock writer guide](../docs/WINDOWS_STOCK_WRITER_20261019.md); physical update acceptance for this edition is still pending. The preceding alpha.3 connection/configuration package was locally installed and verified through Codex's native panel on 2026-10-19. Earlier receipts below retain their original versions.
+
+This edition is separate from the existing hosted FM-1 Forge plugin and Site. Preparing or installing it does not replace the hosted plugin or migrate its cloud data.
 
 The intended experience is to install the plugin, open its native Codex panel and connect FM-1. Its Node.js runtime and native MIDI dependency ship inside the package. The user does not install Node.js or Python, start a helper application, run a server, configure a localhost port, or edit MCP configuration.
 
-This preview implements the Windows **connection and configuration** portion of that experience. It does not yet satisfy the complete cross-platform firmware factory requirement.
+This preview implements Windows **connection, configuration and reviewed stock V15 installation**. It does not yet satisfy the complete cross-platform firmware factory requirement.
 
 ## Features in this edition
 
@@ -15,12 +17,13 @@ This preview implements the Windows **connection and configuration** portion of 
 | Connection refresh | Checks the explicitly connected pair. Missing devices clear the connection; a transient identity timeout retains the last verified identity only while the named pair remains present and reports a diagnostic error. |
 | Native panel | The local MCP server supplies the Forge interface and its graphical USB, HAL, user-module and tweak configuration. |
 | Settings and drafts | Appearance settings and up to 24 validated configuration drafts are saved locally. Draft resources can be referenced through the plugin. |
-| Firmware installation | Unavailable. `installationAvailable` remains `false`, including when firmware advertises an installation capability. |
+| Stock V15 installation | Select the exact official `.fwsc`, review its hash and the connected stock MIDI identity, then explicitly confirm Install. A durable journal retains the original attempt through OTA re-enumeration, progress and uncertain outcomes. Physical update acceptance is pending. |
+| Custom firmware installation | Unavailable. Device `installationAvailable` remains `false`, including when common firmware advertises an installation capability. Stock support is separately scoped by `stockUpdateAvailable`. |
 | USB serial and UBOOT | Not implemented by this Windows preview. No serial commands, loader entry, device reset or mass-storage writes are exposed. |
 | Compiler/toolchain distribution | Not included. Asking Codex to build a project still requires a separately qualified development environment or future build service. |
 | macOS, Linux and Windows ARM | Not supported or qualified by this package. Native dependency prebuilds for other systems do not establish product support. |
 
-The exposed device tools contain no arbitrary MIDI/SysEx command API, firmware upload API, upgrade trigger or automatic retry/resume. Stock V15 SysEx installation and custom firmware installation must be integrated and qualified separately before being advertised in this edition.
+Connection tools still expose no raw MIDI/SysEx API. The app-only stock writer accepts bounded chunks of the pinned official V15 package, validates them again in the native server, and starts only after an unexpired package/device review is explicitly confirmed. It never accepts a caller-selected file path or state directory. Uncertain attempts block new writes; recovery requires the original saved attempt and an explicitly connected, freshly identified OTA loader. No update automatically retries or resumes. Custom firmware installation remains unavailable.
 
 ## Install and open the preview
 
@@ -55,7 +58,8 @@ After installation, open a **new Codex chat** and open **FM-1 Forge Windows** th
 1. Connect the intended FM-1 and select **Connect stock MIDI** for original V15, or **Connect firmware MIDI** for compatible common-update firmware.
 2. The panel asks the local MCP tool to open the exact MIDI pair and verify its identity. Browser MIDI/SysEx permission is not used for this route.
 3. Configure modules, save a local draft, or send the project brief to Codex. Saving or requesting a build does not install firmware.
-4. Use **Disconnect** to release the native MIDI handles. A lost connection requires an explicit new Connect action; the plugin never substitutes another MIDI pair.
+4. For an authorized stock restore, select the official V15 `.fwsc` in **Stock firmware · V15 SysEx update**, choose **Review stock update**, verify the package/device details, and explicitly confirm **Install stock firmware**. This changes firmware; connection alone does not.
+5. Use **Disconnect** to release the native MIDI handles. A lost connection requires an explicit new Connect action; the plugin never substitutes another MIDI pair.
 
 Close other software holding the FM-1 MIDI ports if Windows cannot open them. Multiple indistinguishable FM-1 devices are rejected; connect only the intended unit for this preview. An absent serial device on stock V15 is expected: use stock MIDI for that firmware.
 
@@ -65,7 +69,7 @@ The generated `mcp.json` and `.mcp.json` declare a stdio MCP server. Codex launc
 
 The native component is part of that Codex-managed MCP process. It is not a separately installed Windows service or an independently started background helper. It uses WinMM for MIDI access. A bounded, hidden invocation of the built-in Windows PowerShell executable obtains passive device-interface metadata from the packaged `server/windows-midi-inventory.ps1`; it does not open MIDI ports or send device commands. No administrator prompt is required by the MIDI connection code.
 
-Settings and drafts live in the host-provided `PLUGIN_DATA` directory. When that variable is absent, the Windows preview uses `%LOCALAPPDATA%\FM1Forge\Windows`. The metadata file is `forge-store.json`; it contains settings and validated configuration drafts, not firmware images, device dumps or credentials. The installed package remains an input, not a writable state directory. Cloud drafts are not automatically imported or modified.
+Settings, drafts and original stock-update recovery records live in the host-provided `PLUGIN_DATA` directory. When that variable is absent, the Windows preview uses `%LOCALAPPDATA%\FM1Forge\Windows`. The metadata file is `forge-store.json`; it contains settings and validated configuration drafts. The stock updater separately persists the selected, validated official package and its attempt evidence for explicit recovery; it does not store device dumps or credentials. The installed package remains an input, not a writable state directory. Cloud drafts are not automatically imported or modified.
 
 The device service serializes connect, status and disconnect operations. Failed connections and fatal transport errors close native handles. Shutdown rejects pending connection evidence, closes the active pair and prevents a late native open from becoming a new connection. The official stdio transport closes the server when Codex closes stdin; the server's close handler also closes the device service. SIGINT and SIGTERM use the same graceful shutdown route. Windows releasing a terminated process is the final fallback, not evidence that a graceful close was tested.
 
@@ -88,6 +92,19 @@ node desktop/scripts/build-windows.mjs --out <absolute-new-tmp-directory> --node
 The builder uses already installed, pinned development dependencies; it does not install packages. It bundles the server, stages the panel and plugin manifests, copies the Windows runtime and native closure, and retains redistribution notices. `BUILD-MANIFEST.json` records source/runtime/dependency hashes and packaged files. Its native addon smoke check loads the dependency without enumerating or opening a device.
 
 Run the desktop tests from this repository's `desktop/` directory with `node --test test/*.test.mjs`, using a shell that expands the test paths as needed. Device-service tests inject fake transports, so passing tests do not imply a physical FM-1 connection. Keep four results distinct in a release record: source/tests, self-contained package checks, actual Codex installation/panel lifecycle, and physical device identity/status acceptance.
+
+## Alpha.4 offline package and installation
+
+The new writer source passed **604 tests**: 80 desktop, 478 Site and 46 stock
+SysEx, with no failures/skips. TypeScript, panel and production builds passed.
+The packaged server passed modern and legacy MCP checks with an empty `PATH`;
+all 127 installed alpha.4 files matched the package. See the
+[writer receipt](../docs/evidence/windows-alpha4-offline-20261019.json).
+
+Open a **new Codex chat** to activate installed alpha.4; the existing chat retained
+its earlier alpha.3 server when checked. The alpha.4 native view and a physical
+stock write are not yet accepted. All records below describe the earlier
+connection-only releases and remain historical evidence.
 
 ## Verification recorded on 2026-10-19 (JST)
 

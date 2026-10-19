@@ -29,7 +29,7 @@
   },
   "keywords": [],
   "homepage": "https://fm1-app-library.keitark.chatgpt.site/",
-  "repository": "https://github.com/Keitark/fm1-marketplace-plugin",
+  "repository": "https://github.com/Keitark/fm-1-forge",
   "skills": "./skills",
   "mcpServers": "./.mcp.json"
 }

@@ -1,3 +1,7 @@
+import path from 'node:path';
+import os from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { createDeviceOwner } from './device-owner.mjs';
 import { createNativeMidiBackend } from './native-midi.mjs';
 import { identityQuery as stockIdentityQuery, parseIdentity as parseStockIdentity, StockError } from '../../tools/jieli-wl82/stock-sysex/protocol.mjs';
 import { canonicalName } from '../../tools/jieli-wl82/stock-sysex/selection.mjs';
@@ -30,13 +34,16 @@ function selectedPair(inventory) {
 }
 
 function safeError(caught) {
-  const allowed = new Set(['identity_timeout', 'capability_timeout', 'wrong_model', 'invalid_identity', 'invalid_frame', 'unsupported_capabilities', 'device_error', 'invalid_capabilities', 'send_failed', 'disconnected', 'midi_inventory_unavailable', 'endpoint_unavailable', 'ambiguous_device', 'midi_runtime_unavailable', 'service_closed']);
+  const allowed = new Set(['identity_timeout', 'capability_timeout', 'wrong_model', 'invalid_identity', 'invalid_frame', 'unsupported_capabilities', 'device_error', 'invalid_capabilities', 'send_failed', 'disconnected', 'midi_inventory_unavailable', 'endpoint_unavailable', 'ambiguous_device', 'midi_runtime_unavailable', 'service_closed', 'device_busy']);
   const code = allowed.has(caught?.code) ? caught.code : 'native_connection_failed';
   const message = code.endsWith('_timeout') ? 'FM-1 did not answer its read-only identity check.' : code === 'service_closed' ? 'The native FM-1 service is closed.' : code === 'wrong_model' ? 'The selected MIDI firmware does not match this connection mode.' : code === 'disconnected' ? 'FM-1 was disconnected.' : 'The native FM-1 connection could not be verified.';
   return { code, message };
 }
 
-export function createDeviceService({ backendFactory = createNativeMidiBackend, clock = realClock } = {}) {
+export function createDeviceService({ backendFactory = createNativeMidiBackend, clock = realClock, directory = process.env.PLUGIN_DATA ?? path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'), 'FM1Forge', 'Windows'), ownerFactory = createDeviceOwner } = {}) {
+  const owner = ownerFactory({ directory });
+  let generation = 0, writer = null, endpointReview = null;
+  const requireIdle = () => { if (writer) throw error('device_busy', 'A reviewed stock update owns the FM-1 connection.'); };
   let queue = Promise.resolve(), shutdown = false, epoch = 0, backend = null, link = null, pair = null;
   let state = { connected: false, transport: null, identity: null, loader: false, installationAvailable: false, lastError: null };
   const snapshot = () => ({ ...state, lastError: state.lastError && { ...state.lastError }, supportedTransports: [...TRANSPORTS] });
@@ -46,7 +53,7 @@ export function createDeviceService({ backendFactory = createNativeMidiBackend, 
     queue = result.catch(() => {}); return result;
   };
   const closeLink = async () => { const closing = link; link = null; if (closing) await closing.close(); };
-  const clear = failure => { pair = null; backend = null; state = { connected: false, transport: null, identity: null, loader: false, installationAvailable: false, lastError: failure ?? null }; };
+  const clear = failure => { generation++; endpointReview = null; pair = null; backend = null; state = { connected: false, transport: null, identity: null, loader: false, installationAvailable: false, lastError: failure ?? null }; };
   const send = async (packet, expected) => { current(expected); if (await link.send(packet) === false) throw error('send_failed', 'MIDI query delivery failed.'); current(expected); };
   const receive = async (parse, command, expected, timeoutCode) => {
     const deadline = clock.now() + 1500;
@@ -70,7 +77,7 @@ export function createDeviceService({ backendFactory = createNativeMidiBackend, 
     await send(transport === 'stock-midi' ? stockIdentityQuery() : firmwareIdentityQuery(), expected);
     if (transport === 'stock-midi') {
       const found = await receive(parseStockIdentity, 0x11, expected, 'identity_timeout');
-      if (!['FM-1_015', 'ota-FM-1_015'].includes(found.text)) throw error('wrong_model', 'Only stock FM-1 V15 is supported by this connection mode.');
+      if (!found.loader && found.text !== 'FM-1_015') throw error('wrong_model', 'Only stock FM-1 V15 is supported by this connection mode.');
       return { identity: found.text, loader: found.loader };
     }
     const found = await receive(parseFirmwareIdentity, 0x11, expected, 'identity_timeout');
@@ -83,9 +90,11 @@ export function createDeviceService({ backendFactory = createNativeMidiBackend, 
   };
   const connected = async expected => { const result = await link.isConnected(); current(expected); return result; };
   const connect = input => serialized(async expected => {
+    requireIdle();
     if (!input || Object.keys(input).length !== 1 || !TRANSPORTS.includes(input.transport)) throw error('unsupported_transport', 'Choose stock MIDI or firmware MIDI. Native serial support is not available in this version.');
     await closeLink(); current(expected); clear();
     try {
+      await owner.acquire(); current(expected);
       backend = await backendFactory(); current(expected);
       pair = selectedPair(await backend.enumerate()); current(expected);
       const opened = await backend.open(pair);
@@ -97,16 +106,16 @@ export function createDeviceService({ backendFactory = createNativeMidiBackend, 
       current(expected); state = { connected: true, transport: input.transport, ...evidence, installationAvailable: false, lastError: null };
       return snapshot();
     } catch (caught) {
-      try { await closeLink(); } finally { clear(safeError(caught)); }
+      try { await closeLink(); } finally { clear(safeError(caught)); await owner.release(); }
       current(expected); throw Object.assign(error(state.lastError.code, state.lastError.message), { status: snapshot() });
     }
   });
   const getStatus = ({ refresh = true } = {}) => serialized(async expected => {
-    if (!state.connected || !refresh) return snapshot();
+    if (writer || !state.connected || !refresh) return snapshot();
     try {
-      if (!await connected(expected)) { await closeLink(); current(expected); clear({ code: 'disconnected', message: 'FM-1 was disconnected.' }); return snapshot(); }
+      if (!await connected(expected)) { await closeLink(); current(expected); clear({ code: 'disconnected', message: 'FM-1 was disconnected.' }); await owner.release(); return snapshot(); }
       const evidence = await identify(state.transport, expected);
-      if (!await connected(expected)) { await closeLink(); current(expected); clear({ code: 'disconnected', message: 'FM-1 was disconnected.' }); return snapshot(); }
+      if (!await connected(expected)) { await closeLink(); current(expected); clear({ code: 'disconnected', message: 'FM-1 was disconnected.' }); await owner.release(); return snapshot(); }
       current(expected); Object.assign(state, evidence, { lastError: null }); return snapshot();
     } catch (caught) {
       current(expected);
@@ -115,14 +124,69 @@ export function createDeviceService({ backendFactory = createNativeMidiBackend, 
           if (await connected(expected)) { state.lastError = safeError(caught); return snapshot(); }
         } catch { /* A failed physical check cannot retain connected evidence. */ }
       }
-      try { await closeLink(); } finally { clear(safeError(caught)); }
+      try { await closeLink(); } finally { clear(safeError(caught)); await owner.release(); }
       current(expected); return snapshot();
     }
   });
-  const disconnect = () => serialized(async expected => { try { await closeLink(); } finally { clear(); } current(expected); return snapshot(); });
+  const disconnect = () => serialized(async expected => { requireIdle(); try { await closeLink(); } finally { clear(); await owner.release(); } current(expected); return snapshot(); });
+  const reviewStockEndpoint = ({ loader = false } = {}) => serialized(async expected => {
+    requireIdle();
+    if (!state.connected || state.transport !== 'stock-midi' || state.loader !== loader) throw error(loader ? 'resume_requires_loader' : 'stock_connection_required', loader ? 'Connect the stock OTA MIDI loader before reviewing recovery.' : 'Connect and identify stock V15 MIDI before reviewing installation.');
+    if (!await connected(expected)) throw error('device_changed', 'The reviewed FM-1 connection changed.');
+    const evidence = await identify('stock-midi', expected);
+    if (evidence.identity !== state.identity || evidence.loader !== loader || !await connected(expected)) throw error('device_changed', 'The reviewed FM-1 connection changed.');
+    const selected = selectedPair(await backend.enumerate()); current(expected);
+    if (selected.inputName !== pair.inputName || selected.outputName !== pair.outputName) throw error('device_changed', 'The reviewed FM-1 endpoints changed.');
+    endpointReview = { token: randomUUID(), generation, input_name: pair.inputName, output_name: pair.outputName, identity: evidence.identity, loader, expectedStockPair: { ...pair } };
+    return JSON.parse(JSON.stringify(endpointReview));
+  });
+  const acquireStockWriter = reviewed => serialized(async expected => {
+    requireIdle();
+    if (!reviewed || !endpointReview || reviewed.token !== endpointReview.token || endpointReview.generation !== generation || !state.connected || state.transport !== 'stock-midi' || state.identity !== endpointReview.identity) throw error('device_changed', 'Reconnect and review the intended stock FM-1 again.');
+    if (!await connected(expected)) throw error('device_changed', 'The reviewed FM-1 was disconnected.');
+    const evidence = await identify('stock-midi', expected);
+    if (evidence.identity !== endpointReview.identity || evidence.loader !== endpointReview.loader || !await connected(expected)) throw error('device_changed', 'The reviewed FM-1 identity changed.');
+    const selected = selectedPair(await backend.enumerate()); current(expected);
+    if (selected.inputName !== pair.inputName || selected.outputName !== pair.outputName) throw error('device_changed', 'The reviewed FM-1 endpoints changed.');
+    const ownedBackend = backend, links = new Set(), openings = new Set(); let released = false, releasePromise = null;
+    const session = { backend: {
+      async enumerate(...args) { if (released || shutdown) throw error('service_closed', 'The stock writer is closed.'); return ownedBackend.enumerate(...args); },
+      async open(selectedPair) {
+        if (released || shutdown) throw error('service_closed', 'The stock writer is closed.');
+        const opening = (async () => {
+          const opened = await ownedBackend.open(selectedPair);
+          if (released || shutdown) {
+            try { await opened.close(); } catch { throw error('close_failed', 'The late native MIDI handle could not be closed.'); }
+            throw error('service_closed', 'The stock writer is closed.');
+          }
+          links.add(opened);
+          return { ...opened, async close() { await opened.close(); links.delete(opened); } };
+        })();
+        openings.add(opening);
+        try { return await opening; } finally { openings.delete(opening); }
+      },
+    }, release() {
+      if (releasePromise) return releasePromise;
+      released = true;
+      releasePromise = (async () => {
+        // All callers await the same cleanup, including concurrent shutdown.
+        const late = await Promise.allSettled([...openings]);
+        if (late.some(result => result.status === 'rejected' && result.reason?.code === 'close_failed')) throw error('close_failed', 'A late native MIDI handle could not be closed.');
+        const results = await Promise.allSettled([...links].map(opened => opened.close()));
+        if (results.some(result => result.status === 'rejected')) throw error('close_failed', 'The native writer could not release all MIDI handles.');
+        links.clear();
+        if (writer === session) { await owner.release(); writer = null; clear(); }
+      })();
+      return releasePromise;
+    } };
+    await closeLink(); current(expected); writer = session; endpointReview = null;
+    return session;
+  });
   const close = async () => {
     if (!shutdown) { shutdown = true; epoch++; }
-    try { await closeLink(); await queue; } finally { clear(); }
+    try { await writer?.release(); await closeLink(); await queue; } finally { if (!writer) { clear(); await owner.release(); } }
   };
-  return Object.freeze({ connect, getStatus, disconnect, close });
+  const api = { connect, getStatus, disconnect, close };
+  Object.defineProperties(api, { reviewStockEndpoint: { value: reviewStockEndpoint }, acquireStockWriter: { value: acquireStockWriter } });
+  return Object.freeze(api);
 }

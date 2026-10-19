@@ -87,6 +87,7 @@ export async function runUpdate(config, { image: packageImage, backend, journal,
     const pair = selectPair(await backend.enumerate(), config.expectedStockPair, resume ? 'loader' : undefined);
     if (!pair) throw new StockError('endpoint_unavailable', 'The reviewed FM-1 MIDI pair is unavailable.');
     let identity = await handshake(pair);
+    if (config.expectedInitialIdentity !== undefined && identity.text !== config.expectedInitialIdentity) throw new StockError('device_changed', 'The FM-1 identity changed after the reviewed connection.');
     if (resume && !identity.loader) throw new StockError('resume_requires_loader', 'Explicit resume is only supported in a freshly identified FM-1 OTA loader.');
     if (!resume && identity.loader) throw new StockError('recovery_required', 'An FM-1 already in OTA mode requires explicit resume of its unresolved attempt.');
     if (!resume) {

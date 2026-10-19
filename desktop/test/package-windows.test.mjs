@@ -57,16 +57,19 @@ test('staged edition retains identity, prompt, author and unrelated settings', (
   assert.equal(original.version, '3.3.0');
 });
 
-test('portable and compatibility metadata describe only the Windows connection/configuration preview', () => {
+test('portable and compatibility metadata accurately scope reviewed stock writes and unsupported routes', () => {
   const presentation = { displayName: 'FM-1 Forge', defaultPrompt: 'Preserve this exact prompt.', logo: './assets/logo.png', longDescription: 'Use browser MIDI and USB serial for stock firmware updates', shortDescription: 'Firmware updater' };
   for (const legacy of [false, true]) {
     const original = { name: 'fm1-app-library', version: '3.3.0', description: 'Browser firmware updates', author: { name: 'Publisher' }, ...(legacy ? { interface: presentation } : { extensions: { 'com.openai': { interface: presentation } } }) };
     const staged = stageManifest(original, legacy);
     const actual = legacy ? staged.interface : staged.extensions['com.openai'].interface;
     assert.match(staged.description, /Native Windows MIDI/);
-    assert.match(staged.description, /Firmware writes and USB serial are unavailable/);
-    assert.match(actual.longDescription, /Firmware writes, raw MIDI commands, USB serial, bootloader operations and compiler setup are not included/);
-    assert.equal(actual.shortDescription, 'Windows MIDI and local drafts');
+    assert.match(staged.description, /reviewed stock V15 updates/);
+    assert.match(staged.description, /Custom firmware installation and USB serial remain unavailable/);
+    assert.match(actual.longDescription, /explicitly confirm a stock SysEx update/);
+    assert.match(actual.longDescription, /Custom firmware installation, raw MIDI commands, USB serial, UBOOT writes and compiler setup remain unavailable/);
+    assert.match(actual.longDescription, /Physical stock update acceptance is pending/);
+    assert.equal(actual.shortDescription, 'Windows MIDI and stock updates');
     assert.ok(actual.shortDescription.length <= 30);
     assert.equal(actual.defaultPrompt, presentation.defaultPrompt);
     assert.equal(actual.logo, presentation.logo);

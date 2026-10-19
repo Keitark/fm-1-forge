@@ -104,3 +104,20 @@ test('vendor timing defaults preserve required two and three second holds', () =
   assert.equal(DEFAULT_TIMING.start, 2000); assert.equal(DEFAULT_TIMING.terminal, 3000);
   assert.equal(DEFAULT_TIMING.loader, 30000); assert.equal(DEFAULT_TIMING.reboot, 40000);
 });
+
+
+test('optional reviewed identity binding rejects a changed normal or OTA identity before upgrade', async () => {
+  for (const settings of [{ initialIdentity: 'FM-1_014' }, { resume: true, loaderIdentity: 'ota-FM-1_008' }]) {
+    const mock = mockUpdater(settings);
+    mock.config.expectedInitialIdentity = settings.resume ? 'ota-FM-1_009' : 'FM-1_015';
+    await assert.rejects(runUpdate(mock.config, mock.options), error => error.code === 'device_changed' && !error.destructive_started);
+    assert.equal(mock.sent.some(packet => equalBytes(packet, upgradeCommand())), false);
+    assert.equal(mock.transitions.some(step => step.phase === 'entering_check' || step.phase === 'entering_write'), false);
+  }
+  const accepted = mockUpdater({ initialIdentity: 'FM-1_015' });
+  accepted.config.expectedInitialIdentity = 'FM-1_015';
+  assert.equal((await runUpdate(accepted.config, accepted.options)).state, 'succeeded');
+  const resume = mockUpdater({ resume: true });
+  resume.config.expectedInitialIdentity = 'ota-FM-1_009';
+  assert.equal((await runUpdate(resume.config, resume.options)).state, 'succeeded');
+});

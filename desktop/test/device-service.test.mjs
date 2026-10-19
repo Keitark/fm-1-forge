@@ -25,7 +25,7 @@ function fixture({ name = 'FM-1 Midi', packets = [identity('FM-1_015')], invento
     async close() { if (closing) return; closing = true; calls.push('close'); if (readGate) readGate.resolve(null); },
   };
   const clock = { now: () => time, sleep: async milliseconds => { time += milliseconds; } };
-  const service = createDeviceService({ backendFactory: async () => { calls.push('factory'); if (factoryDelay) await factoryDelay.promise; return backend; }, clock });
+  const service = createDeviceService({ backendFactory: async () => { calls.push('factory'); if (factoryDelay) await factoryDelay.promise; return backend; }, clock, ownerFactory: () => ({ acquire: async () => {}, release: async () => {} }) });
   return { service, calls, sent, reads, setPresent: value => { present = value; }, setSendError: value => { sendError = value; }, setReadGate: gate => { readGate = gate; }, link };
 }
 
@@ -156,4 +156,65 @@ test('returned status snapshots cannot mutate internal device evidence', async (
   const f = fixture(), result = await f.service.connect({ transport: 'stock-midi' });
   result.identity = 'mutated'; result.supportedTransports.push('raw-sysex');
   const fresh = await f.service.getStatus({ refresh: false }); assert.equal(fresh.identity, 'FM-1_015'); assert.deepEqual(fresh.supportedTransports, ['stock-midi', 'firmware-midi']); await f.service.close();
+});
+
+
+test('review requires an explicit stock connection and fresh identity; common install remains off', async () => {
+  const f = fixture();
+  await assert.rejects(f.service.reviewStockEndpoint(), { code: 'stock_connection_required' });
+  await f.service.connect({ transport: 'stock-midi' }); f.reads.push(identity('FM-1_015'));
+  const reviewed = await f.service.reviewStockEndpoint();
+  assert.equal(reviewed.input_name, 'FM-1 Midi'); assert.equal(reviewed.identity, 'FM-1_015');
+  assert.match(reviewed.token, /^[a-f0-9-]{36}$/); assert.equal((await f.service.getStatus({ refresh: false })).installationAvailable, false);
+  await assert.rejects(f.service.reviewStockEndpoint({ loader: true }), { code: 'resume_requires_loader' });
+  await f.service.close();
+});
+
+test('a reconnect invalidates a previously reviewed connection generation before writer handoff', async () => {
+  const f = fixture(); await f.service.connect({ transport: 'stock-midi' }); f.reads.push(identity('FM-1_015'));
+  const reviewed = await f.service.reviewStockEndpoint();
+  f.reads.push(identity('FM-1_015')); await f.service.connect({ transport: 'stock-midi' });
+  await assert.rejects(f.service.acquireStockWriter(reviewed), { code: 'device_changed' });
+  await f.service.close();
+});
+
+test('writer closes the read-only link and blocks competing actions while status stays passive', async () => {
+  const f = fixture(); await f.service.connect({ transport: 'stock-midi' }); f.reads.push(identity('FM-1_015'));
+  const reviewed = await f.service.reviewStockEndpoint(); f.reads.push(identity('FM-1_015'));
+  const owned = await f.service.acquireStockWriter(reviewed), calls = f.calls.length;
+  assert.equal(f.calls.filter(call => call === 'close').length, 1);
+  assert.equal((await f.service.getStatus()).identity, 'FM-1_015'); assert.equal(f.calls.length, calls);
+  await assert.rejects(f.service.connect({ transport: 'stock-midi' }), { code: 'device_busy' });
+  await assert.rejects(f.service.disconnect(), { code: 'device_busy' });
+  await owned.release(); assert.equal((await f.service.getStatus()).connected, false);
+  await assert.rejects(owned.backend.enumerate(), { code: 'service_closed' }); await f.service.close();
+});
+
+test('writer handoff rejects a physically missing device before opening a writer', async () => {
+  const f = fixture(); await f.service.connect({ transport: 'stock-midi' }); f.reads.push(identity('FM-1_015'));
+  const reviewed = await f.service.reviewStockEndpoint(); f.setPresent(false);
+  await assert.rejects(f.service.acquireStockWriter(reviewed), { code: 'device_changed' }); await f.service.close();
+});
+
+
+test('an independently versioned stock OTA loader can be connected and reviewed for recovery', async () => {
+  const f = fixture({ name: 'ota-FM-1', packets: [identity('ota-FM-1_009'), identity('ota-FM-1_009'), identity('ota-FM-1_009')] });
+  assert.equal((await f.service.connect({ transport: 'stock-midi' })).identity, 'ota-FM-1_009');
+  const review = await f.service.reviewStockEndpoint({ loader: true }); assert.equal(review.identity, 'ota-FM-1_009');
+  const writer = await f.service.acquireStockWriter(review); await writer.release(); await f.service.close();
+});
+
+test('writer release waits for late opens and coalesces every concurrent cleanup caller', async () => {
+  const gate = deferred(), lateClose = deferred(); let opens = 0, leasesReleased = 0, lateClosed = false;
+  const backend = { async enumerate() { return { inputs: ['FM-1 Midi'], outputs: ['FM-1 Midi'] }; }, async open() {
+    opens++; if (opens > 1) { await gate.promise; return { async close() { await lateClose.promise; lateClosed = true; } }; }
+    return { async drain() {}, async send() { return true; }, async read() { return identity('FM-1_015'); }, async isConnected() { return true; }, async close() {} };
+  } };
+  const service = createDeviceService({ backendFactory: async () => backend, clock: { now: () => 0, sleep: async () => {} }, ownerFactory: () => ({ async acquire() {}, async release() { leasesReleased++; } }) });
+  await service.connect({ transport: 'stock-midi' }); const reviewed = await service.reviewStockEndpoint(), writer = await service.acquireStockWriter(reviewed);
+  const pendingOpen = writer.backend.open(reviewed.expectedStockPair); const checked = assert.rejects(pendingOpen, { code: 'service_closed' });
+  while (opens < 2) await new Promise(resolve => setImmediate(resolve));
+  const first = writer.release(), second = writer.release(); assert.equal(first, second);
+  gate.resolve(); await new Promise(resolve => setImmediate(resolve)); assert.equal(leasesReleased, 0);
+  lateClose.resolve(); await checked; await Promise.all([first, second]); assert.equal(lateClosed, true); assert.equal(leasesReleased, 1); await service.close();
 });

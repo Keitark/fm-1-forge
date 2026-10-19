@@ -47,3 +47,27 @@ jobs:
         run: npx --no-install tsc --noEmit
       - name: Build Site
         run: npm run build --prefix site
+
+
+  desktop:
+    name: Windows native MIDI and stock writer contracts
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.22.2'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install build and contract dependencies
+        run: npm ci --prefix site
+      - name: Offline native plugin contracts
+        shell: pwsh
+        run: |
+          $desktopTests = Get-ChildItem desktop/test -Filter '*.test.mjs' | Select-Object -ExpandProperty FullName
+          node --test $desktopTests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $stockTests = Get-ChildItem tools/jieli-wl82/stock-sysex/test -Filter '*.test.mjs' | Select-Object -ExpandProperty FullName
+          node --test $stockTests
+          exit $LASTEXITCODE

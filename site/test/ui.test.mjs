@@ -1092,10 +1092,12 @@ test('Windows native panel mounts its fixed MCP transport without browser permis
   const p=await panel({html:WINDOWS_UI_HTML,embedded:true,preserveDirectMode:true,backendOverride:async(name,args)=>{
     if(name==='connect_fm1_device'){assert.equal(args.transport,'stock-midi');connected=true;return status();}
     if(name==='get_fm1_device_status')return status();
+    if(name==='get_fm1_stock_update_status')return {supported:true,writing:false,attempt:null,review:null};
     if(name==='disconnect_fm1_device'){connected=false;return status();}
     assert.fail('Unexpected desktop tool '+name);
   }});
   try{
+    await until(()=>p.requests.includes('get_fm1_stock_update_status')&&!p.node('direct-connect-midi').disabled);
     assert.equal(typeof p.window.FM1DesktopDevicesUI?.mount,'function');
     assert.equal(p.node('surface-label').textContent,'FM-1 Forge Windows plugin');
     assert.equal(p.node('device-heading').textContent,'FM-1 disconnected');
@@ -1103,8 +1105,8 @@ test('Windows native panel mounts its fixed MCP transport without browser permis
     assert.equal(p.node('direct-connect-serial').disabled,true);
     assert.equal(p.node('direct-connect-midi').disabled,false);
     assert.equal(p.node('direct-connect-common').disabled,false);
-    assert.deepEqual(p.requests,[]);
-    p.node('direct-connect-midi').onclick({isTrusted:false});await tick();assert.deepEqual(p.requests,[]);
+    assert.deepEqual(p.requests,['get_fm1_stock_update_status']);
+    p.node('direct-connect-midi').onclick({isTrusted:false});await tick();assert.deepEqual(p.requests,['get_fm1_stock_update_status']);
     p.node('direct-connect-midi').onclick({isTrusted:true});
     await until(()=>p.node('device-heading').textContent.includes('FM-1_015'));
     assert.equal(p.node('connection-label').textContent,'Device connected');

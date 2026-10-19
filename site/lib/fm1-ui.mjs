@@ -72,10 +72,10 @@ ${libraryHtml}
   function tell(message){el('message').textContent=message||'';}
   function hostContext(context){if(context.theme)document.body.dataset.hostTheme=context.theme;const safe=context.safeAreaInsets;for(const side of ['top','bottom','left','right'])if(Number.isFinite(safe?.[side])&&safe[side]>=0&&safe[side]<=1000)document.body.style?.setProperty?.('--fm1-safe-'+side,safe[side]+'px');extensionUI?.context();}
   async function call(name,args={},signal=lifecycle.signal){
-    if(disposed||signal.aborted)throw new Error('This panel request was cancelled.');
+    if(disposed||signal?.aborted)throw new Error('This panel request was cancelled.');
     if(directMode&&['get_fm1_status','get_fm1_input_snapshot','list_fm1_apps','open_fm1_local_import','plan_fm1_app','get_fm1_job','get_fm1_request','prepare_fm1_switch','confirm_fm1_switch','prepare_fm1_official_update','confirm_fm1_official_update','prepare_fm1_stock_update','confirm_fm1_stock_update','create_fm1_project'].includes(name))throw new Error('This panel uses direct browser device access. Local helper actions are disabled.');
     let answer;
-    if(embedded){if(!hostReady||!hostCapabilities.serverTools)throw new Error('This panel host has not enabled library tools.');answer=await nativeHost.call(name,args,signal);}
+    if(embedded){if(!hostReady||!hostCapabilities.serverTools)throw new Error('This panel host has not enabled library tools.');answer=await nativeHost.call(name,args,signal??undefined);}
     else{const response=await fetch('/api/fm1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,arguments:args}),signal});answer=await response.json();if(!response.ok)throw new Error(answer.error||'Request failed.');}
     if(answer.isError)throw new Error(answer.structuredContent?.error||answer.content?.[0]?.text||'Request failed.');
     const data=answer.structuredContent||{};
@@ -273,13 +273,14 @@ ${libraryHtml}
     el('direct-hardware-report').textContent=JSON.stringify({platform:'win32',transport:'plugin-stdio',browserDevicePermissions:false,installationAvailable:false});
   }
   if(directMode){
-    if(desktopMode&&window.FM1DesktopDevicesUI?.mount)directDevices=window.FM1DesktopDevicesUI.mount({el,call,signal:lifecycle.signal,supportedTransports:['stock-midi','firmware-midi']});
-    else if(!desktopMode&&window.FM1BrowserDevicesUI?.mount)directDevices=window.FM1BrowserDevicesUI.mount({el,signal:lifecycle.signal});
+    if(desktopMode){/* The desktop controls mount after the native tool bridge is ready. */}
+    else if(window.FM1BrowserDevicesUI?.mount)directDevices=window.FM1BrowserDevicesUI.mount({el,signal:lifecycle.signal});
     else{el('direct-connect-serial').disabled=true;el('direct-connect-midi').disabled=true;el('direct-device-note').textContent='Direct device controls are unavailable in this cached panel. Open the current Forge resource.';}
   }
   async function start(){
     if(embedded){let pendingFile=null;nativeHost=new window.FM1PluginHost({onToolInput:input=>{fileEntrypoint=true;pendingFile=input;if(hostReady)clickAction(()=>extensionUI.fileInput(input));},onToolResult:answer=>{const output=answer.structuredContent;if(output?.file&&output.mode==='project_file'){fileEntrypoint=true;pendingFile={file:output.file};if(hostReady)clickAction(()=>extensionUI.fileInput(pendingFile));}if(output?.profiles){initialPayload=true;state={...output,_inventory_received_at:Date.now(),_input_received_at:Date.now()};render();}if(output?.action)try{if(extensionUI.formResult(output)){if(!initialPayload)formEntrypoint=true;initialPayload=true;if(output.forge&&typeof output.forge==='object')state={...state,forge:{...state.forge,...output.forge}};render();}}catch(error){tell(error.message);}},onTeardown:dispose,onContext:hostContext});const response=await nativeHost.connect();hostCapabilities=response.capabilities;hostReady=true;hostContext(response.context);if(pendingFile)await extensionUI.fileInput(pendingFile);await new Promise(resolve=>setTimeout(resolve,1000));if(!initialPayload&&!fileEntrypoint&&hostCapabilities.serverTools)await snapshot();}
     else{try{await snapshot();}finally{await registerSiteTools();}}
+    if(desktopMode&&directMode&&window.FM1DesktopDevicesUI?.mount){directDevices=window.FM1DesktopDevicesUI.mount({el,call,signal:lifecycle.signal,supportedTransports:['stock-midi','firmware-midi'],stockUpdateAvailable:true});await directDevices.ready;}
     if(!directMode&&!fileEntrypoint&&!formEntrypoint){
       const active=state.inventory?.engine?.active,stockWork=state.recent_requests?.find(item=>item.operation==='stock_sysex_update'&&(item.id===active||item.data?.id===active));
       if(!selectedWork&&/^[a-f0-9]{32}$/.test(active||'')&&stockWork)clickAction(()=>inspectJob(active,'stock'));
@@ -291,4 +292,4 @@ ${libraryHtml}
 </script></body></html>`;
 
 // The desktop edition keeps the same UI while routing device actions to its local MCP server.
-export const WINDOWS_UI_HTML=UI_HTML.replace('const desktopMode=false;', 'const desktopMode=true;');
+export const WINDOWS_UI_HTML=UI_HTML.replace('const desktopMode=false;', 'const desktopMode=true;').replace('The file stays in this panel.', 'The selected package stays on this computer and is sent to the bundled plugin for validation.');

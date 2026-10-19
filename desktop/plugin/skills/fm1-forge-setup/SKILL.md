@@ -12,3 +12,9 @@ description: Open and verify the bundled Windows FM-1 Forge plugin without a sep
 5. Let the user configure USB, HAL, user modules and tweaks, then save a project or ask Codex to build. A saved draft is not a flashed firmware image.
 
 Settings, projects and recovery records belong in `PLUGIN_DATA`, never the installed package. Do not edit installed cache files to repair a source package. Do not flash, reset, enter a bootloader, send arbitrary SysEx, or change an active firmware project merely to verify installation.
+
+
+For a separately authorized stock update, use the native panel's official V15
+file selector and review/install controls. Preserve its original attempt and
+recovery evidence across refreshes. Do not use a source install, package check
+or automatic status refresh as approval for a firmware write.

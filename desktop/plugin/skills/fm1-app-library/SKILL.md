@@ -14,3 +14,14 @@ Prefer the panel's desktop transport for MIDI inventory and reviewed device work
 Inventory and connection status do not authorize programming. Review the exact package, destination, transfer method and expected result before an update. Preserve existing recovery gates and never infer a successful hardware write from packaging, tool discovery or a UI response. Keep firmware bytes and local paths local; do not copy credentials or device dumps into a release.
 
 Keep graphical module drafts and local library entries intact when refreshing the view. Distinguish source/build verification, native transport availability, and physical FM-1 acceptance.
+
+
+The Windows stock writer is scoped to the exact unmodified official V15 `.fwsc`.
+Its upload, review, recovery and install tools are app-only. Have the user select
+the package and explicitly confirm the reviewed device/hash in the panel. Never
+infer confirmation from a connection or a build request. An uncertain attempt
+must stay blocked until explicit recovery of that identical original attempt in
+a freshly identified OTA loader. Stock support does not enable common/custom
+firmware installation, arbitrary SysEx or UBOOT writes. A successful stock result
+requires transfer completion and exact V15 reboot identity; full flash readback
+remains unverified.

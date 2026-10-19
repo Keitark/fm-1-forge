@@ -24,7 +24,7 @@ before(async()=>{
 });
 after(async()=>{if(bundleRoot){assert.ok(path.basename(bundleRoot).startsWith('fm1-server-contract-bundle-'));assert.equal(path.dirname(bundleRoot),os.tmpdir());await fs.rm(bundleRoot,{recursive:true,force:true});}});
 
-async function fixture(t){
+async function fixture(t,{updates=true}={}){
   const base=await fs.mkdtemp(path.join(os.tmpdir(),'fm1-server-contract-data-')),original=await fs.realpath(base),directory=path.join(base,'metadata'),store=createProjectStore({directory}),calls=[];let current=idle(),closed=0;
   const deviceService={
     async connect(args){calls.push({method:'connect',args});current={...idle(),connected:true,transport:args.transport,identity:args.transport==='stock-midi'?'FM-1_015':'FM1_FORGE_001'};return {...current};},
@@ -32,11 +32,23 @@ async function fixture(t){
     async disconnect(){calls.push({method:'disconnect'});current=idle();return {...current};},
     async close(){calls.push({method:'close'});closed++;current=idle();},
   };
-  const server=await serverModule.createDesktopServer({deviceService,uiHtml:panel,store});
+  const updateCalls=[];
+  const attempt={job_id:'c'.repeat(32),state:'active',phase:'checking',progress:0,transfer_finished:false,boot_identity_verified:false,readback_verified:false,recovery_required:false};
+  const review={review_id:'b'.repeat(32),job_id:'c'.repeat(32),operation:'install',product:'FM-1_015',sha256:'d'.repeat(64),raw_bytes:699956,logical_bytes:699936,input_name:'FM-1',output_name:'FM-1',identity:'FM-1_015',expires_at:new Date(Date.now()+120000).toISOString()};
+  const stockUpdateService=updates?{
+    async status(){updateCalls.push({method:'status'});return {supported:true,writing:false,attempt:null,review:null};},
+    async beginUpload(args){updateCalls.push({method:'beginUpload',args});return {upload_id:'a'.repeat(32),max_chunk_bytes:65536};},
+    async appendUpload(args){updateCalls.push({method:'appendUpload',args});return {upload_id:args.upload_id,received_bytes:3};},
+    async review(args){updateCalls.push({method:'review',args});return {review};},
+    async reviewResume(args){updateCalls.push({method:'reviewResume',args});return {review:{...review,operation:'resume'}};},
+    async start(args){updateCalls.push({method:'start',args});return {writing:true,attempt,review:null};},
+    async close(){updateCalls.push({method:'close'});},
+  }:undefined;
+  const server=await serverModule.createDesktopServer({deviceService,stockUpdateService,uiHtml:panel,store});
   const revision='2025-11-25',client=new Client({name:'FM-1 desktop contract test',version:'1'},{capabilities:{},supportedProtocolVersions:[revision],versionNegotiation:{mode:'legacy'}});
   t.after(async()=>{try{await server.close();await client.close();}finally{assert.equal(await fs.realpath(base),original);assert.ok(path.basename(base).startsWith('fm1-server-contract-data-'));await fs.rm(base,{recursive:true,force:true});}});
   const [clientTransport,serverTransport]=InMemoryTransport.createLinkedPair();await server.connect(serverTransport);await client.connect(clientTransport);
-  return {server,client,store,calls,directory,deviceService,get closeCount(){return closed;},tool:async(name,args={})=>client.callTool({name,arguments:args})};
+  return {server,client,store,calls,updateCalls,stockUpdateService,directory,deviceService,get closeCount(){return closed;},tool:async(name,args={})=>client.callTool({name,arguments:args})};
 }
 async function refused(f,name,args){
   let response,failure;try{response=await f.tool(name,args);}catch(error){failure=error;}
@@ -46,14 +58,14 @@ async function refused(f,name,args){
 test('official SDK discovery, panel open and resource read are passive over the packaged legacy stdio protocol',async t=>{
     const f=await fixture(t);assert.deepEqual(f.calls,[]);
     const answer=await f.tool('open_fm1_library'),data=answer.structuredContent;
-    assert.deepEqual(data.desktop,{platform:'win32',protocolVersion:1,supportedTransports:transports,installationAvailable:false});assert.equal(data.forge.gate.can_start_project,false);assert.deepEqual(data.forge.projects,[]);
+    assert.deepEqual(data.desktop,{platform:'win32',protocolVersion:2,supportedTransports:transports,installationAvailable:false,stockUpdateAvailable:true});assert.equal(data.forge.gate.can_start_project,false);assert.deepEqual(data.forge.projects,[]);
     const capabilities=f.client.getServerCapabilities();assert.equal(capabilities.extensions['openai/settings'].readTool,'settings.read');
     const resource=await f.client.readResource({uri:serverModule.RESOURCE_URI});assert.equal(resource.contents[0].mimeType,'text/html;profile=mcp-app');assert.match(resource.contents[0].text,/const desktopMode=true/);assert.deepEqual(f.calls,[]);
 });
 
-test('tool discovery exposes only the fixed connection and configuration surface with no flashing or raw MIDI',async t=>{
+test('tool discovery separates app-only reviewed stock writes from connection tools and forbids raw MIDI',async t=>{
   const f=await fixture(t),listed=await f.client.listTools(),names=listed.tools.map(tool=>tool.name).sort();
-  assert.deepEqual(names,['configure_fm1_project','connect_fm1_device','disconnect_fm1_device','get_fm1_device_status','get_fm1_project','list_fm1_projects','open_fm1_library','open_fm1_project','save_fm1_project','search_mentions','settings.read','settings.update'].sort());
+  assert.deepEqual(names,['begin_fm1_stock_upload','append_fm1_stock_upload','review_fm1_stock_update','review_fm1_stock_recovery','start_fm1_stock_update','get_fm1_stock_update_status','configure_fm1_project','connect_fm1_device','disconnect_fm1_device','get_fm1_device_status','get_fm1_project','list_fm1_projects','open_fm1_library','open_fm1_project','save_fm1_project','search_mentions','settings.read','settings.update'].sort());
   for(const name of ['flash_fm1','send_sysex','send_midi','enter_uboot','reset_fm1','install_firmware'])await refused(f,name,{});
   const connection=listed.tools.find(tool=>tool.name==='connect_fm1_device');assert.deepEqual(connection.inputSchema.properties.transport.enum,transports);assert.equal(connection.annotations.destructiveHint,false);
   assert.deepEqual(listed.tools.find(tool=>tool.name==='open_fm1_project')._meta['openai/ui'].entrypoints,[{type:'file',extensions:['.fm1-forge.json']}]);
@@ -110,4 +122,34 @@ test('protocol shutdown completes even when native device cleanup reports an err
   const f=await fixture(t);let closeCalls=0,protocolClosed=false;
   f.deviceService.close=async()=>{closeCalls++;throw new Error('Synthetic native close failure');};f.client.onclose=()=>{protocolClosed=true;};
   await f.server.close().catch(()=>{});assert.equal(protocolClosed,true);await f.server.close().catch(()=>{});assert.equal(closeCalls,1);
+});
+
+
+test('stock writer tools are app-only, destructive install is explicit, and status is passive',async t=>{
+  const f=await fixture(t),listed=await f.client.listTools();
+  for(const name of ['begin_fm1_stock_upload','append_fm1_stock_upload','review_fm1_stock_update','review_fm1_stock_recovery','start_fm1_stock_update']){
+    const tool=listed.tools.find(tool=>tool.name===name);assert.deepEqual(tool._meta.ui.visibility,['app']);assert.equal(tool.annotations.readOnlyHint,false);
+    assert.equal(tool.annotations.destructiveHint,name==='start_fm1_stock_update');
+  }
+  assert.equal(listed.tools.find(tool=>tool.name==='get_fm1_stock_update_status').annotations.readOnlyHint,true);
+  assert.deepEqual(f.updateCalls,[]);await f.tool('get_fm1_stock_update_status');assert.deepEqual(f.updateCalls,[{method:'status'}]);assert.deepEqual(f.calls,[]);
+  const invalid=[['begin_fm1_stock_upload',{raw_bytes:1}],['begin_fm1_stock_upload',{raw_bytes:699956,path:'C:/private'}],['append_fm1_stock_upload',{upload_id:'a'.repeat(32),offset:-1,data_base64:'AAAA'}],['append_fm1_stock_upload',{upload_id:'a'.repeat(32),offset:0,data_base64:'A'.repeat(87388)}],['review_fm1_stock_update',{upload_id:'../private'}],['review_fm1_stock_recovery',{job_id:'a'.repeat(32),reset:true}],['start_fm1_stock_update',{review_id:'b'.repeat(32)}],['start_fm1_stock_update',{review_id:'b'.repeat(32),confirmed:false}],['start_fm1_stock_update',{review_id:'b'.repeat(32),confirmed:true,package:'unreviewed'}]];
+  for(const [name,args] of invalid)await refused(f,name,args);
+  assert.equal(f.updateCalls.length,1);assert.deepEqual(f.calls,[]);
+});
+
+test('fixed upload review and confirmed start dispatch only to the native stock service',async t=>{
+  const f=await fixture(t),upload=await f.tool('begin_fm1_stock_upload',{raw_bytes:699956});assert.equal(upload.structuredContent.max_chunk_bytes,65536);
+  await f.tool('append_fm1_stock_upload',{upload_id:'a'.repeat(32),offset:0,data_base64:'AAAA'});
+  const reviewed=await f.tool('review_fm1_stock_update',{upload_id:'a'.repeat(32)});assert.equal(reviewed.structuredContent.review.review_id,'b'.repeat(32));
+  const started=await f.tool('start_fm1_stock_update',{review_id:'b'.repeat(32),confirmed:true});assert.equal(started.structuredContent.writing,true);assert.equal(started.structuredContent.attempt.readback_verified,false);
+  await f.tool('review_fm1_stock_recovery',{job_id:'c'.repeat(32)});
+  assert.deepEqual(f.updateCalls.map(call=>call.method),['beginUpload','appendUpload','review','start','reviewResume']);assert.deepEqual(f.calls,[]);
+});
+
+test('missing native writer capability fails closed and shutdown still closes MIDI if writer cleanup fails',async t=>{
+  const absent=await fixture(t,{updates:false}),opened=await absent.tool('open_fm1_library');assert.equal(opened.structuredContent.desktop.stockUpdateAvailable,false);
+  assert.deepEqual((await absent.tool('get_fm1_stock_update_status')).structuredContent,{supported:false,writing:false,attempt:null,review:null});
+  await refused(absent,'begin_fm1_stock_upload',{raw_bytes:699956});assert.deepEqual(absent.calls,[]);
+  const f=await fixture(t);f.stockUpdateService.close=async()=>{throw new Error('Synthetic writer cleanup failure');};await f.server.close().catch(()=>{});assert.equal(f.closeCount,1);
 });
