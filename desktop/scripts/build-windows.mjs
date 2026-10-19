@@ -6,7 +6,7 @@ import { copyFile, lstat, mkdir, readFile, readdir, realpath, writeFile } from '
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const PACKAGE_VERSION = '3.4.0-alpha.4';
+export const PACKAGE_VERSION = '3.4.0-alpha.6';
 export const WINDOWS_MCP_SERVER_NAME = 'fm1-forge-windows';
 export const NODE_VERSION = 'v22.22.2';
 export const NODE_LICENSE_SHA256 = 'c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4';
@@ -47,12 +47,12 @@ export function stageManifest(source, legacy = false) {
   const staged = structuredClone(source);
   if (staged.name !== 'fm1-app-library') throw new Error('Unexpected source plugin identity');
   staged.version = PACKAGE_VERSION;
-  staged.description = 'Native Windows MIDI, reviewed stock V15 updates and local firmware-project configuration. Custom firmware installation and USB serial remain unavailable.';
+  staged.description = 'Native Windows MIDI, reviewed stock and custom FWSC SysEx updates, and local firmware-project configuration. USB serial and UBOOT writes remain unavailable.';
   const presentation = legacy ? staged.interface : staged.extensions?.['com.openai']?.interface;
   if (!presentation || typeof presentation !== 'object') throw new Error('Missing source plugin interface');
   presentation.displayName = 'FM-1 Forge Windows';
-  presentation.shortDescription = 'Windows MIDI and stock updates';
-  presentation.longDescription = 'A self-contained Windows x64 preview with a bundled runtime and native MIDI component. Connect FM-1 through native MIDI, review the exact official V15 package and target device, then explicitly confirm a stock SysEx update. Durable original-attempt recovery prevents automatic retries after an uncertain transfer. Configure and save firmware-project drafts and settings locally. Codex starts the packaged server; no separately started helper is needed. Custom firmware installation, raw MIDI commands, USB serial, UBOOT writes and compiler setup remain unavailable. Physical stock update acceptance is pending.';
+  presentation.shortDescription = 'Windows MIDI and FWSC updates';
+  presentation.longDescription = 'A self-contained Windows x64 preview with a bundled runtime and native MIDI component. Connect FM-1 through native MIDI, review the official V15 package or a validated custom FWSC with its target build, then explicitly confirm the SysEx update. Durable original-attempt recovery prevents automatic retries after an uncertain transfer. Configure and save firmware-project drafts and settings locally. Codex starts the packaged server; no separately started helper is needed. Custom FWSC starts from stock V15 and verifies the exact Forge identity and build after reboot; subsequent common-firmware self-updates remain disabled. Raw MIDI commands, USB serial, UBOOT writes and compiler setup remain unavailable. Physical update acceptance is pending.';
   return staged;
 }
 

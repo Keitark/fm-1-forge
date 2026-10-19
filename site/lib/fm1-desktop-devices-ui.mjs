@@ -1,3 +1,5 @@
+import {mountDesktopCustomUi} from './fm1-desktop-custom-ui.mjs';
+
 /** Foreground controls for the bundled Windows MCP server.
  * Mounting reads a saved writer receipt only; connections and writes require a
  * trusted action. The native server owns transfers across panel lifetimes.
@@ -45,21 +47,23 @@ function base64(bytes){
   return result;
 }
 
-export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChange=()=>{},supportedTransports=[],stockUpdateAvailable=false,pollIntervalMs=3000}={}){
+export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChange=()=>{},supportedTransports=[],stockUpdateAvailable=false,customUpdateAvailable=false,pollIntervalMs=3000}={}){
   if(typeof el!=='function'||typeof call!=='function')throw new TypeError('Desktop device controls require the panel elements and fixed MCP tool caller.');
   if(!Number.isInteger(pollIntervalMs)||pollIntervalMs<1000||pollIntervalMs>60000)throw new RangeError('Desktop status polling must be 1000–60000 milliseconds.');
-  const stockCapability=stockUpdateAvailable===true;
+  const stockCapability=stockUpdateAvailable===true,customCapability=customUpdateAvailable===true;
   let available=transports(supportedTransports),current={connected:false,transport:null,identity:null,profile:null,loader:false,installationAvailable:false,lastError:null},closed=false,busy=false,checking=false,epoch=0,timer=null,pollPaused=false,notice='';
-  let writerLoaded=!stockCapability,writerKnown=!stockCapability,writerSupported=false,writing=false,starting=false,attempt=null,review=null,operationStatus=null,selected=null,metadata=null,fileEpoch=0,selecting=false;
+  let writerLoaded=!stockCapability,writerKnown=!stockCapability,writerSupported=false,writing=false,starting=false,attempt=null,review=null,operationStatus=null,selected=null,metadata=null,fileEpoch=0,selecting=false,custom=null;
   const put=(id,text)=>{const node=el(id);if(node&&node.textContent!==text)node.textContent=text;};
   const clearTimer=()=>{if(timer!==null){if(typeof runtime.clearTimeout==='function')runtime.clearTimeout(timer);else globalThis.clearTimeout(timer);timer=null;}};
   const deviceKey=()=>JSON.stringify([current.connected,current.transport,current.identity,current.profile,current.loader]);
   const stockConnected=()=>current.connected&&current.transport==='stock-midi';
   const unresolved=()=>attempt&&(attempt.recovery_required||['prepared','active','unknown'].includes(attempt.state));
-  const writerBlocked=()=>stockCapability&&(!writerLoaded||!writerKnown||writing||starting);
+  const writerBlocked=()=>stockCapability&&(!writerLoaded||!writerKnown||writing||starting)||custom?.blocksDevice();
+  const anyWriting=()=>writing||starting||custom?.isWriting();
   const canUseStock=()=>stockCapability&&writerKnown&&writerSupported;
-  const validReview=()=>review&&Date.parse(review.expires_at)>Date.now()&&review.deviceKey===deviceKey()&&review.fileEpoch===fileEpoch&&stockConnected()&&(review.operation==='resume'?current.loader:!current.loader);
+  const validReview=()=>review&&!custom?.hasUnresolved()&&Date.parse(review.expires_at)>Date.now()&&review.deviceKey===deviceKey()&&review.fileEpoch===fileEpoch&&stockConnected()&&(review.operation==='resume'?current.loader:!current.loader);
   function clearReview(){review=null;try{el('direct-stock-dialog')?.close?.();}catch{}}
+  function clearAllReviews(){clearReview();custom?.clearReview();}
   const label=()=>current.connected?'FM-1 via '+LABELS[current.transport]+' · '+(current.profile||current.identity):'FM-1 disconnected';
   const summary=()=>current.connected?(canUseStock()&&current.transport==='stock-midi'?(current.loader?'OTA loader identity confirmed. Review the original transfer recovery.':'Stock firmware identity confirmed. Review the official V15 package to update.'):(current.loader?'OTA loader identity confirmed. Native firmware installation is unavailable.':'Firmware identity confirmed through the desktop plugin. Device installation remains unavailable.')):'Choose a supported connection. The desktop plugin checks the selected FM-1 identity.';
   function paint(){
@@ -82,12 +86,12 @@ export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChang
     if(stockCapability){
       const blocked=busy||writerBlocked()||selecting;
       const file=el('direct-stock-file');if(file)file.disabled=blocked||!canUseStock();
-      const stageButton=el('direct-stock-review');if(stageButton)stageButton.disabled=blocked||!canUseStock()||!selected||!stockConnected()||current.loader||!!unresolved();
-      const recover=el('direct-stock-recovery');if(recover){recover.hidden=!unresolved();recover.disabled=blocked||!canUseStock()||!stockConnected()||!current.loader;}
+      const stageButton=el('direct-stock-review');if(stageButton)stageButton.disabled=blocked||!canUseStock()||custom?.hasUnresolved()||!selected||!stockConnected()||current.loader||!!unresolved();
+      const recover=el('direct-stock-recovery');if(recover){recover.hidden=!unresolved();recover.disabled=blocked||!canUseStock()||custom?.hasUnresolved()||!stockConnected()||!current.loader;}
       const confirm=el('direct-review-confirm');if(confirm)confirm.disabled=blocked||!canUseStock()||!validReview();
       put('direct-package-summary',selecting?'Reading the selected package…':metadata?metadata.product+' · '+metadata.raw_bytes+' bytes\nSHA256 '+metadata.sha256:selected?'Selected '+selected.name+' · '+selected.bytes.length+' bytes. Review uploads this package to the bundled local plugin for validation.':'Select the official V15 .fwsc package. Review sends it only to the bundled local plugin.');
       put('direct-stock-note',!writerLoaded||!writerKnown?'Native updater status is unavailable. Use Refresh before selecting or starting an update.':!writerSupported?'This desktop server does not expose the stock updater.':writing||starting?'The native plugin owns this transfer. Keep USB connected. Closing the panel does not cancel the job.':unresolved()?(stockConnected()&&current.loader?'Review recovery to continue only the original saved transfer.':'The original transfer is unresolved. Connect stock MIDI to the original FM-1 in OTA mode, then review recovery.'):current.loader?'A new update cannot start in OTA mode. Use the original saved transfer recovery.':metadata?'Official V15 package validated by the local plugin. Confirm the reviewed device and package before writing.':'Connect stock MIDI, select the official V15 package, then review it.');
-      put('direct-common-note','Custom firmware installation remains unavailable. The native writer supports only the reviewed official V15 package.');
+      put('direct-common-note',customCapability?'The common-MIDI ARM updater remains unavailable. Use Custom firmware · stock SysEx for a reviewed custom FWSC package.':'Custom firmware installation remains unavailable. The native writer supports only the reviewed official V15 package.');
       const transfer=el('direct-transfer');if(transfer)transfer.hidden=!attempt;
       if(attempt){
         put('direct-transfer-status',operationStatus==='succeeded'?'Transfer finished · reboot identity verified · full flash readback not performed':operationStatus==='running'?'Stock transfer in progress':operationStatus==='unknown'||unresolved()?'Original transfer requires attention. Review its status and recovery; do not start another update.':'Stock transfer stopped before completion.');
@@ -95,27 +99,33 @@ export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChang
         put('direct-transfer-phase',[attempt.phase,Number.isFinite(attempt.progress)?Math.round(attempt.progress*100)+'% served':null,attempt.error_code?'Code: '+attempt.error_code:null].filter(Boolean).join(' · '));
       }
     }
-    onChange({connected:current.connected,transport:current.transport,profile:current.profile||current.identity,checking,writing:writing||starting,label:label(),installationAvailable:false});
+    custom?.paint();
+    onChange({connected:current.connected,transport:current.transport,profile:current.profile||current.identity,checking,writing:!!anyWriting(),label:label(),installationAvailable:false});
   }
   function schedule(){
     clearTimer();if(closed||busy||pollPaused||runtime.document?.hidden)return;
-    if(!current.connected&&!(stockCapability&&writing))return;
-    const check=()=>{timer=null;void (stockCapability&&writing?refreshWriter():refresh()).catch(()=>{});};
+    if(!current.connected&&!anyWriting())return;
+    const check=()=>{timer=null;void (anyWriting()?refreshWriter():refresh()).catch(()=>{});};
     timer=typeof runtime.setTimeout==='function'?runtime.setTimeout(check,pollIntervalMs):globalThis.setTimeout(check,pollIntervalMs);
   }
   function applyWriter(reply,{expectedJob,start=false}={}){
     if(!reply||typeof reply!=='object'||Array.isArray(reply)||!start&&typeof reply.supported!=='boolean'||typeof reply.writing!=='boolean'||!Object.hasOwn(reply,'attempt')||!Object.hasOwn(reply,'review'))throw new Error('The native stock updater status is invalid. Refresh the original job status.');
     const next=checkedAttempt(reply.attempt),remoteReview=reply.review===null?null:checkedReview(reply.review);
-    const original=expectedJob||(unresolved()?attempt.job_id:null);
+    const original=expectedJob||(writing||starting||unresolved()?attempt?.job_id:null);
     if(original&&next?.job_id!==original)throw new Error('The native updater did not return the original transfer. Refresh its saved status.');
-    if(reply.writing&&(!next||next.state!=='active'))throw new Error('The native updater returned inconsistent transfer activity.');
+    // The async engine may not have committed active when start() returns.
+    const pendingStart=next?.state==='prepared'&&next.phase==='prepared';
+    // Durable terminal evidence precedes async session/journal release. The
+    // writer still owns the job until its writing flag clears.
+    const pendingCleanup=next&&['succeeded','failed','unknown'].includes(next.state);
+    if(reply.writing&&(!next||next.state!=='active'&&!pendingStart&&!pendingCleanup))throw new Error('The native updater returned inconsistent transfer activity.');
     if(start&&remoteReview!==null)throw new Error('The native updater did not consume the reviewed transfer.');
     writerLoaded=true;writerKnown=true;writerSupported=start?writerSupported:reply.supported;
     writing=reply.writing;attempt=next;
     if(attempt&&(attempt.state==='succeeded'&&(!attempt.transfer_finished||!attempt.boot_identity_verified||attempt.recovery_required)||attempt.state==='active'&&!writing)){
       attempt={...attempt,state:'unknown',recovery_required:true,error_code:'completion_unverified'};notice='Transfer completion proof is incomplete. Inspect the original native transfer.';
     }
-    operationStatus=attempt?(attempt.state==='active'?'running':attempt.state):null;
+    operationStatus=attempt?(attempt.state==='active'||writing&&(pendingStart||attempt.state==='succeeded')?'running':attempt.state):null;
     if(review&&remoteReview?.review_id!==review.review_id)clearReview();
   }
   async function work(fn,{check=false,writer=false}={}){
@@ -128,12 +138,18 @@ export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChang
   function connect(transport,event){
     if(!trusted(event)||closed||busy||writerBlocked())return;
     if(!available.includes(transport)){notice='This desktop build does not support '+LABELS[transport]+'.';paint();return;}
-    clearReview();return work(async alive=>{const reply=await call('connect_fm1_device',{transport},signal);if(!alive())return;const next=snapshot(reply,transport),nextAvailable=next.supportedTransports??available;if(next.connected&&!nextAvailable.includes(next.transport))throw new Error('The desktop server reported a connection through an unavailable transport.');available=nextAvailable;current=next;notice=next.lastError||'';return {...current,supportedTransports:[...available]};},{check:true});
+    clearAllReviews();return work(async alive=>{const reply=await call('connect_fm1_device',{transport},signal);if(!alive())return;const next=snapshot(reply,transport),nextAvailable=next.supportedTransports??available;if(next.connected&&!nextAvailable.includes(next.transport))throw new Error('The desktop server reported a connection through an unavailable transport.');available=nextAvailable;current=next;notice=next.lastError||'';return {...current,supportedTransports:[...available]};},{check:true});
   }
   const connectSerial=event=>connect('serial',event),connectMidi=event=>connect('stock-midi',event),connectCommon=event=>connect('firmware-midi',event);
-  function refreshWriter(){if(!stockCapability)return Promise.resolve();return work(async alive=>{const reply=await call('get_fm1_stock_update_status',{},signal);if(alive())applyWriter(reply);},{check:true,writer:true});}
-  function refresh(){return work(async alive=>{if(stockCapability){const reply=await call('get_fm1_stock_update_status',{},signal);if(!alive())return;applyWriter(reply);if(writing||starting)return;}const reply=await call('get_fm1_device_status',{},signal);if(!alive())return;const next=snapshot(reply),nextAvailable=next.supportedTransports??available;if(next.connected&&!nextAvailable.includes(next.transport))throw new Error('The desktop server reported a connection through an unavailable transport.');if(deviceKey()!==JSON.stringify([next.connected,next.transport,next.identity,next.profile,next.loader]))clearReview();available=nextAvailable;current=next;notice=next.lastError||'';return {...current,supportedTransports:[...available]};},{check:true,writer:stockCapability});}
-  function disconnect(event){if(!trusted(event)||closed||busy||writerBlocked()||!current.connected)return;clearReview();return work(async alive=>{const reply=await call('disconnect_fm1_device',{},signal);if(!alive())return;current=snapshot(reply);notice=current.lastError||'';});}
+  async function loadWriters(alive){
+    let failure;
+    if(stockCapability){try{const reply=await call('get_fm1_stock_update_status',{},signal);if(!alive())return;applyWriter(reply);}catch(error){writerKnown=false;failure=error;}}
+    if(customCapability&&alive()){try{await custom.loadStatus(alive);}catch(error){failure??=error;}}
+    if(failure)throw failure;
+  }
+  function refreshWriter(){if(!stockCapability&&!customCapability)return Promise.resolve();return work(loadWriters,{check:true,writer:true});}
+  function refresh(){return work(async alive=>{if(stockCapability||customCapability){await loadWriters(alive);if(!alive()||anyWriting())return;}const reply=await call('get_fm1_device_status',{},signal);if(!alive())return;const next=snapshot(reply),nextAvailable=next.supportedTransports??available;if(next.connected&&!nextAvailable.includes(next.transport))throw new Error('The desktop server reported a connection through an unavailable transport.');if(deviceKey()!==JSON.stringify([next.connected,next.transport,next.identity,next.profile,next.loader]))clearAllReviews();available=nextAvailable;current=next;notice=next.lastError||'';return {...current,supportedTransports:[...available]};},{check:true,writer:stockCapability||customCapability});}
+  function disconnect(event){if(!trusted(event)||closed||busy||writerBlocked()||!current.connected)return;clearAllReviews();return work(async alive=>{const reply=await call('disconnect_fm1_device',{},signal);if(!alive())return;current=snapshot(reply);notice=current.lastError||'';});}
   async function selectPackage(file,event){
     if(!trusted(event)||closed||busy||writerBlocked()||!canUseStock())return;
     const ticket=++fileEpoch;clearReview();selected=null;metadata=null;selecting=true;notice='';paint();
@@ -154,9 +170,9 @@ export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChang
     el('direct-stock-dialog')?.showModal?.();return {...next};
   }
   function stage(event,{resume=false}={}){
-    if(!trusted(event)||closed||busy||writerBlocked()||selecting||!canUseStock()||!stockConnected())return;
+    if(!trusted(event)||closed||busy||writerBlocked()||custom?.hasUnresolved()||selecting||!canUseStock()||!stockConnected())return;
     if(resume?(!unresolved()||!current.loader):(!selected||current.loader||unresolved()))return;
-    const key=deviceKey(),fileTicket=fileEpoch,packageBytes=selected?.bytes,jobId=attempt?.job_id;clearReview();
+    const key=deviceKey(),fileTicket=fileEpoch,packageBytes=selected?.bytes,jobId=attempt?.job_id;clearAllReviews();
     return work(async alive=>{
       let reply;
       if(resume)reply=await call('review_fm1_stock_recovery',{job_id:jobId},signal);
@@ -174,9 +190,9 @@ export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChang
     });
   }
   function confirm(event){
-    if(!trusted(event)||closed||busy||writerBlocked()||!canUseStock()||!review)return;
+    if(!trusted(event)||closed||busy||writerBlocked()||custom?.hasUnresolved()||!canUseStock()||!review)return;
     if(!validReview()){clearReview();notice='The selected device, package or review expired. Review it again.';paint();return;}
-    const selectedReview=review;clearReview();starting=true;operationStatus='running';
+    const selectedReview=review;clearAllReviews();starting=true;operationStatus='running';
     attempt={job_id:selectedReview.job_id,state:'prepared',phase:'Starting reviewed transfer',progress:null,transfer_finished:false,boot_identity_verified:false,readback_verified:false,recovery_required:false};
     return work(async alive=>{
       try{
@@ -189,7 +205,7 @@ export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChang
   }
   function cancel(){if(closed)return;clearReview();paint();}
   function visibility(){if(runtime.document?.hidden){clearTimer();paint();}else{paint();schedule();}}
-  function dispose(){if(closed)return;closed=true;++epoch;++fileEpoch;clearReview();clearTimer();runtime.document?.removeEventListener?.('visibilitychange',visibility);runtime.removeEventListener?.('pagehide',dispose);signal?.removeEventListener?.('abort',dispose);el('direct-stock-dialog')?.removeEventListener?.('cancel',cancel);}
+  function dispose(){if(closed)return;closed=true;++epoch;++fileEpoch;clearReview();custom?.dispose();clearTimer();runtime.document?.removeEventListener?.('visibilitychange',visibility);runtime.removeEventListener?.('pagehide',dispose);signal?.removeEventListener?.('abort',dispose);el('direct-stock-dialog')?.removeEventListener?.('cancel',cancel);}
   for(const transport of TRANSPORTS){const node=el(BUTTONS[transport]);if(node)node.onclick=event=>{void Promise.resolve(connect(transport,event)).catch(()=>{});};}
   const disconnectButton=el('direct-disconnect');if(disconnectButton)disconnectButton.onclick=event=>{void Promise.resolve(disconnect(event)).catch(()=>{});};
   for(const id of UPDATE_CONTROLS){const node=el(id);if(node){node.onclick=()=>{};node.onchange=()=>{};}}
@@ -202,9 +218,10 @@ export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChang
     const cancelButton=el('direct-review-cancel');if(cancelButton)cancelButton.onclick=cancel;
     el('direct-stock-dialog')?.addEventListener?.('cancel',cancel);
   }
+  custom=mountDesktopCustomUi({el,call,signal,enabled:customCapability,context:()=>({connected:current.connected,transport:current.transport,identity:current.identity,loader:current.loader,deviceKey:deviceKey(),busy,stockWriting:writing||starting,stockUnresolved:!!unresolved(),stockReady:!stockCapability||writerLoaded&&writerKnown}),runExclusive:work,clearOtherReview:clearReview,onChange:()=>{if(custom?.isWriting())clearReview();paint();schedule();}});
   runtime.document?.addEventListener?.('visibilitychange',visibility);runtime.addEventListener?.('pagehide',dispose,{once:true});signal?.addEventListener?.('abort',dispose,{once:true});
   paint();if(signal?.aborted)dispose();
-  const ready=stockCapability&&!closed?refreshWriter().catch(()=>{}):Promise.resolve();
-  return {paint,refresh,refreshWriter,connectSerial,connectMidi,connectCommon,disconnect,selectPackage,stage,confirm,cancel,dispose,ready,state:()=>({connected:current.connected,transport:current.transport,identity:current.identity,profile:current.profile,loader:current.loader,installationAvailable:false,stockUpdateAvailable:canUseStock(),supportedTransports:[...available],label:label(),busy,checking,writing:writing||starting,operationStatus,attempt:attempt?{...attempt}:null,review:review?{...review}:null})};
+  const ready=(stockCapability||customCapability)&&!closed?refreshWriter().catch(()=>{}):Promise.resolve();
+  return {paint,refresh,refreshWriter,connectSerial,connectMidi,connectCommon,disconnect,selectPackage,stage,confirm,cancel,dispose,ready,custom,state:()=>({connected:current.connected,transport:current.transport,identity:current.identity,profile:current.profile,loader:current.loader,installationAvailable:false,stockUpdateAvailable:canUseStock(),supportedTransports:[...available],label:label(),busy,checking,writing:!!anyWriting(),operationStatus,attempt:attempt?{...attempt}:null,review:review?{...review}:null,custom:custom?.state()??null})};
 }
 if(typeof window!=='undefined')window.FM1DesktopDevicesUI={mount:mountDesktopDevicesUi};

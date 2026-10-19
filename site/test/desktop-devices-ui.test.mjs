@@ -142,6 +142,27 @@ test('trusted confirmation consumes one review and start has no panel abort sign
   assert.equal(f.controller.state().operationStatus,'succeeded');assert.equal(f.controller.state().writing,false);assert.match(f.el('direct-transfer-status').textContent,/reboot identity verified/);assert.match(f.el('direct-transfer-status').textContent,/readback not performed/);f.controller.dispose();
 });
 
+test('real stock prepared start receipt stays running through active polling until transfer and boot proof',async()=>{
+  const prepared=receipt('prepared',{phase:'prepared',progress:null});
+  const f=stockFixture({handler:(name,args,backend)=>{if(name==='start_fm1_stock_update'){backend.status=stockStatus({writing:true,attempt:prepared});return {writing:true,attempt:prepared,review:null};}}});
+  await f.select();await f.controller.stage(user);await f.controller.confirm(user);assert.equal(f.controller.state().attempt.state,'prepared');assert.equal(f.controller.state().operationStatus,'running');assert.equal(f.controller.state().writing,true);assert.match(f.el('direct-transfer-status').textContent,/in progress/);assert.doesNotMatch(f.el('direct-device-note').textContent,/invalid|unavailable|incomplete/);
+  const before=f.calls.length;await f.poll();assert.deepEqual(f.calls.slice(before).map(row=>row.name),['get_fm1_stock_update_status']);assert.equal(f.controller.state().operationStatus,'running');
+  f.backend.status=stockStatus({writing:true,attempt:receipt('active',{progress:0.5})});await f.poll();assert.equal(f.controller.state().attempt.state,'active');assert.equal(f.el('direct-transfer-progress').value,0.5);
+  f.backend.status=stockStatus({attempt:receipt('succeeded',{phase:'done',progress:1,transfer_finished:true,boot_identity_verified:true})});await f.poll();assert.equal(f.controller.state().operationStatus,'succeeded');assert.equal(f.controller.state().writing,false);assert.match(f.el('direct-transfer-status').textContent,/reboot identity verified/);assert.equal(f.calls.filter(row=>row.name==='start_fm1_stock_update').length,1);f.controller.dispose();
+  const invalid=stockFixture({status:stockStatus({writing:true,attempt:receipt('prepared',{phase:'unexpected'})})});await invalid.controller.ready;assert.equal(invalid.controller.state().stockUpdateAvailable,false);assert.equal(invalid.el('direct-review-confirm').disabled,true);invalid.controller.dispose();
+});
+
+test('stock terminal receipt during slow native cleanup retains locks and polling until writer release',async()=>{
+  for(const terminal of ['succeeded','failed','unknown']){
+    const proof=terminal==='succeeded'?{transfer_finished:true,boot_identity_verified:true}:{},pending=receipt(terminal,{...proof,phase:'cleanup pending',progress:terminal==='succeeded'?1:0.5});
+    const f=stockFixture({status:stockStatus({writing:true,attempt:pending})});await f.controller.ready;
+    assert.equal(f.controller.state().writing,true);assert.equal(f.controller.state().stockUpdateAvailable,true);assert.equal(f.controller.state().operationStatus,terminal==='succeeded'?'running':terminal);assert.equal(f.el('direct-connect-midi').disabled,true);assert.equal(f.el('direct-stock-review').disabled,true);assert.equal(f.el('direct-review-confirm').disabled,true);assert.doesNotMatch(f.el('direct-transfer-status').textContent,/Transfer finished/);
+    const before=f.calls.length;await f.poll();assert.deepEqual(f.calls.slice(before).map(row=>row.name),['get_fm1_stock_update_status']);assert.equal(f.timers.size,1);
+    f.backend.status=stockStatus({attempt:pending});await f.poll();assert.equal(f.controller.state().writing,false);assert.equal(f.controller.state().operationStatus,terminal);assert.equal(f.timers.size,0);if(terminal==='succeeded')assert.match(f.el('direct-transfer-status').textContent,/reboot identity verified/);else assert.doesNotMatch(f.el('direct-transfer-status').textContent,/Transfer finished/);f.controller.dispose();
+  }
+  const invalid=stockFixture({status:stockStatus({writing:true,attempt:receipt('succeeded',{phase:'cleanup pending',transfer_finished:true,boot_identity_verified:false})})});await invalid.controller.ready;assert.equal(invalid.controller.state().operationStatus,'unknown');assert.equal(invalid.controller.state().writing,true);assert.doesNotMatch(invalid.el('direct-transfer-status').textContent,/Transfer finished/);assert.equal(invalid.timers.size,1);invalid.controller.dispose();
+});
+
 test('cancel, file replacement, changed device identity and expired reviews cannot replay a confirmation',async t=>{
   const f=stockFixture();await f.select();await f.controller.stage(user);f.controller.cancel();await f.controller.confirm(user);assert.equal(f.el('direct-stock-dialog').open,false);
   await f.controller.stage(user);await f.controller.selectPackage(fileFor(new Uint8Array(packageBytes)),user);assert.equal(f.controller.state().review,null);await f.controller.confirm(user);

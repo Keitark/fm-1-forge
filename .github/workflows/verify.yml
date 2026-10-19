@@ -50,7 +50,7 @@ jobs:
 
 
   desktop:
-    name: Windows native MIDI and stock writer contracts
+    name: Windows native MIDI and FWSC writer contracts
     runs-on: windows-latest
     timeout-minutes: 20
     steps:

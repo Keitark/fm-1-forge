@@ -9,12 +9,13 @@ Firmware and HAL sources live separately in
 
 ## Windows desktop preview
 
-**FM-1 Forge Windows 3.4.0-alpha.4** packages its own runtime and native MIDI
+**FM-1 Forge Windows 3.4.0-alpha.6** packages its own runtime and native MIDI
 component. Its Codex panel and stock V15 identity/status connection were verified
-on 2026-10-19 without browser MIDI permission. The Windows source now adds a reviewed stock V15
-SysEx writer with explicit confirmation and durable original-attempt recovery;
-physical update acceptance is pending. Common custom-firmware installation,
-compiler distribution and macOS/Linux qualification remain pending.
+on 2026-10-19 without browser MIDI permission. The Windows edition supports reviewed stock V15 restoration and a separate
+V15-to-custom FWSC SysEx path with exact Forge build verification. Both require
+explicit confirmation and retain original-attempt recovery records. Physical
+update acceptance is pending. Subsequent common-firmware self-updates, compiler
+distribution and macOS/Linux qualification remain pending.
 See [the Windows package guide](desktop/README.md) and
 [native panel evidence](docs/WINDOWS_MCP_ROUTING_20261019.md).
 

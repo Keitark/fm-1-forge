@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { STOCK, StockError } from '../../tools/jieli-wl82/stock-sysex/protocol.mjs';
 import { absolutePath, checkPath, inspectPackage, atomicJson, readJson } from '../../tools/jieli-wl82/stock-sysex/files.mjs';
 import { AttemptJournal, requestIdentity } from '../../tools/jieli-wl82/stock-sysex/journal.mjs';
+import { assertOtherFamilyResolved } from '../../tools/jieli-wl82/stock-sysex/custom-journal.mjs';
 import { runUpdate } from '../../tools/jieli-wl82/stock-sysex/updater.mjs';
 
 export const RAW_PACKAGE_BYTES = STOCK.rawBytes;
@@ -56,7 +57,7 @@ export async function createStockUpdateService({ directory, deviceService, packa
   const serial = action => { const result = queue.then(() => { ensureOpen(); return action(); }); queue = result.catch(() => {}); return result; };
   const requireIdle = () => { if (writing) throw fail('update_busy', 'A stock firmware transfer is already running.'); };
   const loadRecord = async () => { stored = validateRecord(await readJson(journalPath, true)); return stored; };
-  const requireResolved = async () => { if (blocked(await loadRecord())) throw fail('recovery_required', 'The original unresolved stock attempt requires explicit loader recovery.'); };
+  const requireResolved = async () => { await assertOtherFamilyResolved(directory, 'stock'); if (blocked(await loadRecord())) throw fail('recovery_required', 'The original unresolved stock attempt requires explicit loader recovery.'); };
   const checkImage = approved => {
     if (!metadataValid(approved?.metadata) || !(approved.image instanceof Uint8Array) || approved.image.length !== STOCK.logicalBytes) throw fail('invalid_package', 'Only the pinned, unmodified official V15 package is supported.');
     return approved;
@@ -110,7 +111,7 @@ export async function createStockUpdateService({ directory, deviceService, packa
     } finally { completed.bytes.fill(0); }
   });
   const reviewResume = input => serial(async () => {
-    requireIdle();
+    requireIdle(); await assertOtherFamilyResolved(directory, 'stock');
     if (!exact(input, ['job_id']) || !ID.test(input.job_id ?? '')) throw fail('resume_rejected', 'Choose the original unresolved stock job.');
     const record = await loadRecord();
     if (!blocked(record) || record.jobId !== input.job_id) throw fail('resume_rejected', 'Only the identical unresolved stock attempt can resume.');
@@ -123,15 +124,15 @@ export async function createStockUpdateService({ directory, deviceService, packa
     return { review: clone(fields) };
   });
   const start = input => serial(async () => {
-    requireIdle();
+    requireIdle(); await assertOtherFamilyResolved(directory, 'stock');
     if (!exact(input, ['review_id', 'confirmed']) || input.confirmed !== true || !currentReview || input.review_id !== currentReview.fields.review_id) throw fail('review_required', 'Explicitly confirm the current stock package and endpoint review.');
     if (now() >= Date.parse(currentReview.fields.expires_at)) { currentReview = null; throw fail('review_expired', 'Review the stock package and connection again.'); }
     const approved = currentReview; currentReview = null;
     const image = Uint8Array.from((await approvedSnapshot()).image);
     const journal = await journalFactory(journalRoot, requestIdentity(approved.request), { resume: approved.request.operation === 'resume' });
     let session;
-    try { session = await deviceService.acquireStockWriter(approved.endpoint); }
-    catch (caught) { await journal.close(); throw caught; }
+    try { session = await deviceService.acquireStockWriter(approved.endpoint); await assertOtherFamilyResolved(directory, 'stock'); }
+    catch (caught) { try { await session?.release(); } finally { await journal.close(); } throw caught; }
     writing = true;
     attempt = publicAttempt(journal.record); let stopped = false, journalQueue = Promise.resolve(), journalClosePromise = null;
     const closeJournal = () => journalClosePromise ??= journal.close();

@@ -1,12 +1,14 @@
 # FM-1 Forge Windows
 
-Version **3.4.0-alpha.4** adds a reviewed stock V15 USB-MIDI SysEx write path to the self-contained Windows x64 plugin. The source implementation and offline checks are recorded in [the stock writer guide](../docs/WINDOWS_STOCK_WRITER_20261019.md); physical update acceptance for this edition is still pending. The preceding alpha.3 connection/configuration package was locally installed and verified through Codex's native panel on 2026-10-19. Earlier receipts below retain their original versions.
+Version **3.4.0-alpha.6** adds a separate stock V15-to-custom `.fwsc` SysEx path. It validates the generated package and matching manifest, preserves the pinned public V15 layout offline, and verifies `FM1_FORGE_001` plus the exact embedded MIDI build after reboot. The common self-update capability in the running custom firmware stays disabled. See [the custom FWSC guide](../docs/CUSTOM_FWSC_20261020.md).
+
+The preceding alpha.4 stock writer and alpha.3 connection results remain recorded below. Native alpha.6 physical update acceptance is pending.
 
 This edition is separate from the existing hosted FM-1 Forge plugin and Site. Preparing or installing it does not replace the hosted plugin or migrate its cloud data.
 
 The intended experience is to install the plugin, open its native Codex panel and connect FM-1. Its Node.js runtime and native MIDI dependency ship inside the package. The user does not install Node.js or Python, start a helper application, run a server, configure a localhost port, or edit MCP configuration.
 
-This preview implements Windows **connection, configuration and reviewed stock V15 installation**. It does not yet satisfy the complete cross-platform firmware factory requirement.
+This preview implements Windows **connection, configuration, stock V15 restoration and reviewed custom FWSC installation**. It does not yet satisfy the complete cross-platform firmware factory requirement.
 
 ## Features in this edition
 
@@ -18,7 +20,7 @@ This preview implements Windows **connection, configuration and reviewed stock V
 | Native panel | The local MCP server supplies the Forge interface and its graphical USB, HAL, user-module and tweak configuration. |
 | Settings and drafts | Appearance settings and up to 24 validated configuration drafts are saved locally. Draft resources can be referenced through the plugin. |
 | Stock V15 installation | Select the exact official `.fwsc`, review its hash and the connected stock MIDI identity, then explicitly confirm Install. A durable journal retains the original attempt through OTA re-enumeration, progress and uncertain outcomes. Physical update acceptance is pending. |
-| Custom firmware installation | Unavailable. Device `installationAvailable` remains `false`, including when common firmware advertises an installation capability. Stock support is separately scoped by `stockUpdateAvailable`. |
+| Custom FWSC installation | Starts from explicitly connected stock V15, validates the generated FWSC and manifest, requires review/confirmation, and verifies the exact Forge MIDI build after reboot. Subsequent common-firmware self-updates remain disabled. |
 | USB serial and UBOOT | Not implemented by this Windows preview. No serial commands, loader entry, device reset or mass-storage writes are exposed. |
 | Compiler/toolchain distribution | Not included. Asking Codex to build a project still requires a separately qualified development environment or future build service. |
 | macOS, Linux and Windows ARM | Not supported or qualified by this package. Native dependency prebuilds for other systems do not establish product support. |

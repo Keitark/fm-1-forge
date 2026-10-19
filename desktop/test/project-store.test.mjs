@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
+import promises from 'node:fs/promises';
+import {syncBuiltinESMExports} from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import {execFile} from 'node:child_process';
@@ -48,8 +50,87 @@ test('parallel independent processes preserve partial settings and cannot lose o
 
 test('simultaneous readers and writers share committed snapshots without partial JSON',async t=>{
   const f=await fixture(t),other=createProjectStore({directory:f.directory});await f.store.saveProject({config:config()});
-  await Promise.all(Array.from({length:10},(_,index)=>index%2?other.updateSettings({pattern:index%3?'solid':'dots'}):f.store.listProjects().then(items=>{assert.equal(items.length,1);assert.equal(items[0].config.usb.uacCapture,true);})));
+  const settled=await Promise.allSettled(Array.from({length:10},(_,index)=>index%2?other.updateSettings({pattern:index%3?'solid':'dots'}):f.store.listProjects().then(items=>{assert.equal(items.length,1);assert.equal(items[0].config.usb.uacCapture,true);})));
+  for(const result of settled)if(result.status==='rejected')throw result.reason;
   assert.ok(['solid','dots'].includes((await f.store.readSettings()).pattern));
+});
+
+for(const replacement of [false,true])test('a contended lock resolving to a retired path retries '+(replacement?'a regular-file handoff':'a completed release'),async t=>{
+  const f=await fixture(t);await f.store.updateSettings({palette:'fm1-mint'});await fs.writeFile(f.lock,'peer owner');
+  const peer=await fs.open(f.lock,'r'),realpath=promises.realpath;let handoffs=0;
+  t.mock.method(promises,'realpath',async(filename,...args)=>{
+    if(filename===f.lock&&handoffs<(replacement?2:1)){
+      handoffs++;await fs.unlink(f.lock);
+      if(replacement&&handoffs===1)await fs.writeFile(f.lock,'next peer owner');
+      return path.join(path.parse(f.lock).root,'$Extend','$Deleted','retired-peer-lock');
+    }
+    return realpath(filename,...args);
+  });
+  syncBuiltinESMExports();
+  try{
+    await f.store.updateSettings({pattern:'dots'});assert.equal(handoffs,replacement?2:1);
+    assert.deepEqual(await f.store.readSettings(),{...defaultSettings,palette:'fm1-mint',pattern:'dots'});
+    assert.deepEqual(await fs.readdir(f.directory),['forge-store.json']);
+  }finally{t.mock.restoreAll();syncBuiltinESMExports();await peer.close();}
+});
+
+test('a contended retired lock cannot hide a linked replacement',async t=>{
+  const f=await fixture(t);await f.store.updateSettings({palette:'fm1-mint'});const before=await fs.readFile(f.file),target=path.join(f.base,'peer-lock');
+  await fs.writeFile(target,'preserve linked peer');await fs.writeFile(f.lock,'first peer');const peer=await fs.open(f.lock,'r'),realpath=promises.realpath;let replaced=false;
+  t.mock.method(promises,'realpath',async(filename,...args)=>{
+    if(filename===f.lock&&!replaced){replaced=true;await fs.unlink(f.lock);await fs.link(target,f.lock);return path.join(path.parse(f.lock).root,'$Extend','$Deleted','retired-peer-lock');}
+    return realpath(filename,...args);
+  });
+  syncBuiltinESMExports();
+  try{
+    await assert.rejects(f.store.updateSettings({pattern:'dots'}),{code:'unsafe_storage_path'});assert.equal(replaced,true);
+    assert.equal(await fs.readFile(f.lock,'utf8'),'preserve linked peer');assert.equal((await fs.stat(target)).nlink,2);assert.deepEqual(await fs.readFile(f.file),before);
+  }finally{t.mock.restoreAll();syncBuiltinESMExports();await peer.close();}
+});
+
+test('an owned lock resolving to a retired path still fails closed',async t=>{
+  const f=await fixture(t);await f.store.updateSettings({palette:'fm1-mint'});const before=await fs.readFile(f.file),realpath=promises.realpath;
+  t.mock.method(promises,'realpath',async(filename,...args)=>filename===f.lock?path.join(path.parse(f.lock).root,'$Extend','$Deleted','retired-owner-lock'):realpath(filename,...args));
+  syncBuiltinESMExports();
+  try{
+    await assert.rejects(f.store.updateSettings({pattern:'dots'}),{code:'unsafe_storage_path'});
+    assert.equal((await fs.stat(f.lock)).isFile(),true);assert.deepEqual(await fs.readFile(f.file),before);
+  }finally{t.mock.restoreAll();syncBuiltinESMExports();}
+});
+
+test('observed peer handoffs renew the inactivity deadline while a metadata queue progresses',async t=>{
+  const f=await fixture(t);await f.store.updateSettings({palette:'fm1-mint'});await fs.writeFile(f.lock,'first peer');
+  const handles=[await fs.open(f.lock,'r')],realpath=promises.realpath;let now=Date.now(),observations=0;
+  t.mock.method(Date,'now',()=>now);
+  t.mock.method(promises,'realpath',async(filename,...args)=>{
+    if(filename===f.lock&&observations<3){
+      observations++;now+=1000;
+      if(observations===1){await fs.unlink(f.lock);await fs.writeFile(f.lock,'next peer');handles.push(await fs.open(f.lock,'r'));}
+      if(observations===3){await fs.unlink(f.lock);return path.join(path.parse(f.lock).root,'$Extend','$Deleted','retired-peer-lock');}
+    }
+    return realpath(filename,...args);
+  });
+  syncBuiltinESMExports();
+  try{
+    await f.store.updateSettings({pattern:'dots'});assert.equal(observations,3);
+    assert.deepEqual(await f.store.readSettings(),{...defaultSettings,palette:'fm1-mint',pattern:'dots'});
+    assert.deepEqual(await fs.readdir(f.directory),['forge-store.json']);
+  }finally{t.mock.restoreAll();syncBuiltinESMExports();for(const handle of handles)await handle.close();}
+});
+
+test('continuous peer handoffs still reach an absolute wait bound without stealing a lock',async t=>{
+  const f=await fixture(t);await f.store.updateSettings({palette:'fm1-mint'});const before=await fs.readFile(f.file);await fs.writeFile(f.lock,'first peer');
+  const handles=[await fs.open(f.lock,'r')],realpath=promises.realpath;let now=Date.now(),observations=0;
+  t.mock.method(Date,'now',()=>now);
+  t.mock.method(promises,'realpath',async(filename,...args)=>{
+    if(filename===f.lock){observations++;now+=1000;await fs.unlink(f.lock);await fs.writeFile(f.lock,'peer '+observations);handles.push(await fs.open(f.lock,'r'));}
+    return realpath(filename,...args);
+  });
+  syncBuiltinESMExports();
+  try{
+    await assert.rejects(f.store.updateSettings({pattern:'dots'}),{code:'storage_busy'});assert.equal(observations,10);
+    assert.equal(await fs.readFile(f.lock,'utf8'),'peer 10');assert.deepEqual(await fs.readFile(f.file),before);
+  }finally{t.mock.restoreAll();syncBuiltinESMExports();for(const handle of handles)await handle.close();}
 });
 
 test('strict settings and arguments reject paths, unknown properties and malformed selections before saving',async t=>{

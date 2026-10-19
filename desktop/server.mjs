@@ -10,33 +10,36 @@ import { pathToFileURL } from 'node:url';
 import { createDeviceService } from './lib/device-service.mjs';
 import { createProjectStore } from './lib/project-store.mjs';
 import { createStockUpdateService, RAW_PACKAGE_BYTES, MAX_CHUNK_BYTES } from './lib/stock-update-service.mjs';
+import { createCustomUpdateService } from './lib/custom-update-service.mjs';
+import { MAX_CUSTOM_FWSC_BYTES } from '../tools/jieli-wl82/stock-sysex/custom-package.mjs';
 import { PROFILES } from '../site/lib/fm1-contract.mjs';
 import { ICONS } from '../site/lib/fm1-icon.mjs';
 import { PRESETS, PATTERNS } from '../site/lib/fm1-appearance.mjs';
 import { normalizeProjectConfig } from '../site/lib/fm1-forge-project.mjs';
 
-export const RESOURCE_URI='ui://fm1/forge-windows-v2.html';
-export const VERSION='3.4.0-alpha.4';
+export const RESOURCE_URI='ui://fm1/forge-windows-v3.html';
+export const VERSION='3.4.0-alpha.6';
 const supportedTransports=['stock-midi','firmware-midi'];
-const gate={diagnostics_verified:false,can_start_project:false,message:'Configure and build a project with Codex. Review stock V15 installation separately in the Windows MIDI controls. Custom project installation remains unavailable.'};
+const gate={diagnostics_verified:false,can_start_project:false,message:'Configure and build a project with Codex, then review the generated custom FWSC and exact target build in the Windows panel. A build request does not authorize installation.'};
 const result=data=>({content:[{type:'text',text:JSON.stringify(data)}],structuredContent:data});
 const empty=z.object({}).strict();
 const projectId=z.string().regex(/^[a-f0-9]{32}$/);
 const settingShape={palette:z.enum(PRESETS.map(p=>p.id)),pattern:z.enum(PATTERNS.map(p=>p.id)),entry_method:z.enum(['auto','serial','already_uboot']),default_module:z.enum(['diagnostics','user']),default_usb_audio:z.boolean()};
 const inputConfig=z.unknown();
 
-export async function createDesktopServer({deviceService,stockUpdateService,uiHtml,dataDirectory,store}={}){
+export async function createDesktopServer({deviceService,stockUpdateService,customUpdateService,uiHtml,dataDirectory,store}={}){
   if(typeof uiHtml!=='string'||!uiHtml.includes('const desktopMode=true;'))throw new Error('The packaged Windows panel resource is missing.');
   store??=await createProjectStore({directory:dataDirectory});
   deviceService??=createDeviceService({directory:dataDirectory});
   stockUpdateService??=dataDirectory?await createStockUpdateService({directory:dataDirectory,deviceService}):null;
-  const server=new McpServer({name:'FM-1 Forge Windows',version:VERSION,icons:ICONS},{jsonSchemaValidator:new CfWorkerJsonSchemaValidator(),instructions:'This Windows desktop plugin contains its own runtime and native MIDI component. Open the Forge panel, then explicitly connect stock MIDI for stock V15 or firmware MIDI for the common custom identity. No browser MIDI permission or separately started helper is required. Connection tools only send bounded identity/capability queries. Stock V15 installation is a separate destructive operation exposed only to the app: select the exact official package, review the verified device and hash, then explicitly confirm Install in the panel. Preserve original unresolved attempts; never automatically retry an uncertain transfer. Common custom-firmware installation remains disabled. Raw MIDI, USB serial, UBOOT writes and compiler setup are not exposed. Keep project configuration and user files local, preserve existing cloud data, and report identity checks separately from physical hardware acceptance.'});
+  customUpdateService??=dataDirectory?await createCustomUpdateService({directory:dataDirectory,deviceService}):null;
+  const server=new McpServer({name:'FM-1 Forge Windows',version:VERSION,icons:ICONS},{jsonSchemaValidator:new CfWorkerJsonSchemaValidator(),instructions:'This Windows desktop plugin contains its own runtime and native MIDI component. Open the Forge panel, then explicitly connect stock MIDI for stock V15 or firmware MIDI for the common custom identity. No browser MIDI permission or separately started helper is required. Connection tools only send bounded identity/capability queries. Stock V15 restoration and V15-to-custom FWSC installation are separate destructive operations exposed only to the app: select the exact official package or a validated custom FWSC with its build manifest, review the verified device, hashes and target build, then explicitly confirm Install in the panel. Preserve original unresolved attempts; never automatically retry an uncertain transfer. The common firmware ARM/update capability remains disabled; custom FWSC installation starts from stock V15 and verifies the exact Forge identity/build after reboot. Raw MIDI, USB serial, UBOOT writes and compiler setup are not exposed. Keep project configuration and user files local, preserve existing cloud data, and report identity checks separately from physical hardware acceptance.'});
   const extensions=new OpenAIExtensions(server);
   const register=(name,description,inputSchema,handler,{readOnly=true,ui=false,appOnly=false,destructive=false}={})=>server.registerTool(name,{title:name==='open_fm1_library'?'FM-1 Forge Windows':description.split('.')[0],description,inputSchema,annotations:{readOnlyHint:readOnly,destructiveHint:destructive,openWorldHint:false},icons:ICONS,...(ui||appOnly?{_meta:{ui:{resourceUri:RESOURCE_URI,...(appOnly?{visibility:['app']}:{})},...(ui?{'openai/ui':OpenAIUiToolMetadataSchema.parse({...(name==='open_fm1_project'?{entrypoints:[{type:'file',extensions:['.fm1-forge.json']}]}:{}),preferredModelDisplayMode:'fullscreen'})}:{})}}:{})},async args=>{
     try{return result(await handler(args));}
     catch(error){const message=typeof error?.code==='string'?error.message:'The local Forge request could not be completed.';return {isError:true,content:[{type:'text',text:message}],structuredContent:{error:message,...(typeof error?.code==='string'?{code:error.code}:{})}};}
   });
-  const snapshot=async()=>({desktop:{platform:'win32',protocolVersion:2,supportedTransports,installationAvailable:false,stockUpdateAvailable:stockUpdateService!==null},profiles:PROFILES,relay:{connected:false,allow_switch:false},catalog:{apps:[],sets:[]},forge:{settings:await store.readSettings(),projects:await store.listProjects(),gate},recent_requests:[]});
+  const snapshot=async()=>({desktop:{platform:'win32',protocolVersion:2,supportedTransports,installationAvailable:false,stockUpdateAvailable:stockUpdateService!==null,customUpdateAvailable:customUpdateService!==null},profiles:PROFILES,relay:{connected:false,allow_switch:false},catalog:{apps:[],sets:[]},forge:{settings:await store.readSettings(),projects:await store.listProjects(),gate},recent_requests:[]});
   register('open_fm1_library','Open the Windows Forge panel. Does not open a device or send MIDI.',empty,snapshot,{ui:true});
   register('get_fm1_device_status','Check a previously connected FM-1 using read-only identity queries. Never connects automatically.',empty,()=>deviceService.getStatus());
   register('connect_fm1_device','Connect exactly one FM-1 MIDI pair and confirm its identity. Sends only fixed read-only identity/capability queries.',z.object({transport:z.enum(supportedTransports)}).strict(),args=>deviceService.connect(args));
@@ -49,6 +52,14 @@ export async function createDesktopServer({deviceService,stockUpdateService,uiHt
   register('review_fm1_stock_update','Validate the exact official package and freshly connected stock device for human review. Does not install firmware.',z.object({upload_id:updateId}).strict(),args=>updateService().review(args),{readOnly:false,appOnly:true});
   register('review_fm1_stock_recovery','Review the identical unresolved stock attempt with a freshly connected OTA loader. Does not resume automatically.',z.object({job_id:updateId}).strict(),args=>updateService().reviewResume(args),{readOnly:false,appOnly:true});
   register('start_fm1_stock_update','Install only the reviewed official V15 package after explicit confirmation in the panel. Destructive: may enter OTA and replace firmware. Never accepts custom images or raw MIDI.',z.object({review_id:updateId,confirmed:z.literal(true)}).strict(),args=>updateService().start(args),{readOnly:false,appOnly:true,destructive:true});
+  const customService=()=>{if(!customUpdateService)throw Object.assign(new Error('The native custom FWSC updater is unavailable.'),{code:'custom_update_unavailable'});return customUpdateService;};
+  register('get_fm1_custom_update_status','Read the original custom FWSC transfer progress and recovery evidence. Does not query MIDI or start an update.',empty,()=>customUpdateService?customUpdateService.status():({supported:false,writing:false,attempt:null,review:null}));
+  register('begin_fm1_custom_upload','Stage a bounded custom FWSC and its reviewed build manifest. Does not contact a device.',z.object({raw_bytes:z.number().int().min(1024).max(MAX_CUSTOM_FWSC_BYTES),manifest:z.record(z.string(),z.unknown())}).strict(),args=>customService().beginUpload(args),{readOnly:false,appOnly:true});
+  register('append_fm1_custom_upload','Append a bounded sequential custom FWSC chunk. Does not contact a device.',z.object({upload_id:updateId,offset:z.number().int().min(0).max(MAX_CUSTOM_FWSC_BYTES),data_base64:z.string().min(4).max(Math.ceil(MAX_CHUNK_BYTES/3)*4).regex(/^[A-Za-z0-9+/]+={0,2}$/)}).strict(),args=>customService().appendUpload(args),{readOnly:false,appOnly:true});
+  register('review_fm1_custom_update','Validate a custom FWSC, target build and freshly connected stock V15 device for human review. Does not install firmware.',z.object({upload_id:updateId}).strict(),args=>customService().review(args),{readOnly:false,appOnly:true});
+  register('review_fm1_custom_recovery','Review the identical unresolved custom FWSC attempt using its original package and pinned OTA loader. Does not resume automatically.',z.object({job_id:updateId}).strict(),args=>customService().reviewResume(args),{readOnly:false,appOnly:true});
+  register('start_fm1_custom_update','Install only the reviewed custom FWSC after explicit confirmation in the panel. Destructive: enters stock OTA and replaces application firmware. Requires the validated package, target build and original recovery record.',z.object({review_id:updateId,confirmed:z.literal(true)}).strict(),args=>customService().start(args),{readOnly:false,appOnly:true,destructive:true});
+
 
   register('list_fm1_projects','List locally saved configuration drafts.',empty,async()=>({projects:await store.listProjects(),gate}));
   register('get_fm1_project','Read one locally saved Forge configuration draft.',z.object({project_id:projectId}).strict(),async args=>({project:await store.getProject(args.project_id),gate}));
@@ -69,7 +80,7 @@ export async function createDesktopServer({deviceService,stockUpdateService,uiHt
   });
   server.registerResource('FM-1 Forge Windows',RESOURCE_URI,{mimeType:'text/html;profile=mcp-app'},async()=>({contents:[{uri:RESOURCE_URI,mimeType:'text/html;profile=mcp-app',text:uiHtml,_meta:{ui:{prefersBorder:true,csp:{connectDomains:[],resourceDomains:[]}},'openai/ui':OpenAIUiResourceMetadataSchema.parse({availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'fullscreen'})}}]}));
   const close=server.close.bind(server);let stopped=false;
-  server.close=async()=>{if(stopped)return;stopped=true;try{try{await stockUpdateService?.close();}finally{await deviceService.close();}}finally{await close();}};
+  server.close=async()=>{if(stopped)return;stopped=true;try{try{try{await customUpdateService?.close();}finally{await stockUpdateService?.close();}}finally{await deviceService.close();}}finally{await close();}};
   return server;
 }
 

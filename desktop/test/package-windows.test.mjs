@@ -64,12 +64,12 @@ test('portable and compatibility metadata accurately scope reviewed stock writes
     const staged = stageManifest(original, legacy);
     const actual = legacy ? staged.interface : staged.extensions['com.openai'].interface;
     assert.match(staged.description, /Native Windows MIDI/);
-    assert.match(staged.description, /reviewed stock V15 updates/);
-    assert.match(staged.description, /Custom firmware installation and USB serial remain unavailable/);
-    assert.match(actual.longDescription, /explicitly confirm a stock SysEx update/);
-    assert.match(actual.longDescription, /Custom firmware installation, raw MIDI commands, USB serial, UBOOT writes and compiler setup remain unavailable/);
-    assert.match(actual.longDescription, /Physical stock update acceptance is pending/);
-    assert.equal(actual.shortDescription, 'Windows MIDI and stock updates');
+    assert.match(staged.description, /reviewed stock and custom FWSC SysEx updates/);
+    assert.match(staged.description, /USB serial and UBOOT writes remain unavailable/);
+    assert.match(actual.longDescription, /explicitly confirm the SysEx update/);
+    assert.match(actual.longDescription, /Raw MIDI commands, USB serial, UBOOT writes and compiler setup remain unavailable/);
+    assert.match(actual.longDescription, /Physical update acceptance is pending/);
+    assert.equal(actual.shortDescription, 'Windows MIDI and FWSC updates');
     assert.ok(actual.shortDescription.length <= 30);
     assert.equal(actual.defaultPrompt, presentation.defaultPrompt);
     assert.equal(actual.logo, presentation.logo);

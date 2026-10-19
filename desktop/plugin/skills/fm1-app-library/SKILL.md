@@ -25,3 +25,13 @@ a freshly identified OTA loader. Stock support does not enable common/custom
 firmware installation, arbitrary SysEx or UBOOT writes. A successful stock result
 requires transfer completion and exact V15 reboot identity; full flash readback
 remains unverified.
+
+
+The separate custom FWSC route starts from stock V15. Use only a generated
+`firmware.fwsc` and matching `firmware.json`; review both file digests and the
+embedded target MIDI build before the user's explicit Install confirmation.
+The final result must prove observed `FM1_FORGE_001` plus exact FMC1 build/family,
+not stock V15 identity. This leaves common-firmware ARM/self-updates disabled.
+Preserve shared stock/custom uncertainty guards and original-attempt recovery.
+Offline public-template layout preservation is not a live unit baseline check
+or full flash readback; distinguish these from physical acceptance.

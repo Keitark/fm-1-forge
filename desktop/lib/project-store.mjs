@@ -6,7 +6,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {normalizeProjectConfig,projectConfig} from '../../site/lib/fm1-forge-project.mjs';
 import {PRESETS,PATTERNS} from '../../site/lib/fm1-appearance.mjs';
 
-const FILE='forge-store.json',LOCK='.forge-store.lock',MAX_BYTES=131072,MAX_PROJECTS=24,LOCK_TIMEOUT_MS=1500;
+const FILE='forge-store.json',LOCK='.forge-store.lock',MAX_BYTES=131072,MAX_PROJECTS=24,LOCK_TIMEOUT_MS=1500,MAX_LOCK_WAIT_MS=10000;
 const ID=/^[a-f0-9]{32}$/;
 const DEFAULTS=Object.freeze({palette:'forge-black',pattern:'solid',entry_method:'auto',default_module:'diagnostics',default_usb_audio:true});
 const SETTINGS=Object.keys(DEFAULTS);
@@ -58,10 +58,21 @@ export function createProjectStore({directory}={}){
       if(stat.isSymbolicLink()||!stat.isDirectory()||!samePath(await fs.realpath(cursor),cursor))throw unsafe();
     }
   }
-  async function checkedFile(filename,{optional=false}={}){
+  async function checkedFile(filename,{optional=false,contendedLock=false}={}){
     let stat;
     try{stat=await fs.lstat(filename,{bigint:true});}catch(error){if(optional&&error.code==='ENOENT')return null;throw error;}
-    if(stat.isSymbolicLink()||!stat.isFile()||stat.nlink!==1n||!samePath(await fs.realpath(filename),filename))throw unsafe();
+    if(stat.isSymbolicLink()||!stat.isFile()||stat.nlink!==1n)throw unsafe();
+    if(!samePath(await fs.realpath(filename),filename)){
+      if(contendedLock){
+        // Windows can resolve an unlinked peer lock to its NTFS tombstone.
+        // Only a waiter may retry a proven release or regular-file handoff;
+        // ownership checks must still reject every redirected path.
+        let current;
+        try{current=await fs.lstat(filename,{bigint:true});}catch(error){if(error.code==='ENOENT')return null;throw error;}
+        if(!sameFile(stat,current)&&current.isFile()&&!current.isSymbolicLink()&&current.nlink===1n)return null;
+      }
+      throw unsafe();
+    }
     return stat;
   }
   async function read(){
@@ -81,16 +92,19 @@ export function createProjectStore({directory}={}){
     if(!sameFile(opened,current))throw unsafe();
   }
   async function exclusive(operation){
-    await checkedRoot();const deadline=Date.now()+LOCK_TIMEOUT_MS;let handle;
+    await checkedRoot();const started=Date.now(),limit=started+MAX_LOCK_WAIT_MS;let deadline=started+LOCK_TIMEOUT_MS,handle,waitingFor;
+    const progressed=current=>{if(!current||!waitingFor||!sameFile(waitingFor,current))deadline=Date.now()+LOCK_TIMEOUT_MS;waitingFor=current;};
     while(!handle){
-      if(Date.now()>=deadline)throw new StoreError('storage_busy','Another Forge settings operation owns local storage. Try again after it finishes.');
+      if(Date.now()>=deadline||Date.now()>=limit)throw new StoreError('storage_busy','Another Forge settings operation owns local storage. Try again after it finishes.');
       try{handle=await fs.open(lockPath,'wx',0o600);}
       catch(error){
         if(error.code!=='EEXIST')throw error;
         await checkedRoot(false);
         // The owner may release between CreateNew reporting EEXIST and this
         // inspection. A disappeared lock is a normal handoff, never a lease.
-        try{await checkedFile(lockPath);}catch(checkError){if(checkError.code==='ENOENT')continue;throw checkError;}
+        // Active owners can hand the lock to a queue for longer than one lease.
+        // Renew only on observed progress, retaining an absolute waiting bound.
+        try{const current=await checkedFile(lockPath,{contendedLock:true});progressed(current);if(!current)continue;}catch(checkError){if(checkError.code==='ENOENT'){progressed(null);continue;}throw checkError;}
         await delay(20);
       }
     }

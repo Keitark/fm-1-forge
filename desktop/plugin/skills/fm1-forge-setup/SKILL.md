@@ -18,3 +18,10 @@ For a separately authorized stock update, use the native panel's official V15
 file selector and review/install controls. Preserve its original attempt and
 recovery evidence across refreshes. Do not use a source install, package check
 or automatic status refresh as approval for a firmware write.
+
+
+For custom firmware, build with firmware MIDI enabled, export the audited build
+using `tools/jieli-wl82/stock-sysex/package-custom.mjs`, and let the user choose
+its `.fwsc` plus matching manifest in the separate custom FWSC panel section.
+A build/export request does not authorize a physical write. Do not substitute
+this package into the pinned stock V15 restoration selector.
