@@ -117,7 +117,7 @@ class BackendTests(unittest.TestCase):
 
     def test_stock_local_config_rejects_changed_package_size_digest_or_runtime_without_launch(self):
         adapter, config, node, package, worker = self.stock_adapter()
-        with patch.object(backend.subprocess, 'Popen', side_effect=AssertionError('No native process')):
+        with patch.object(backend.sys, 'platform', 'win32'), patch.object(backend.subprocess, 'Popen', side_effect=AssertionError('No native process')):
             with self.assertRaisesRegex(ValueError, 'SHA256'):
                 adapter._stock_local_config()
             with patch.object(backend, 'digest', return_value=backend.STOCK_SHA256):

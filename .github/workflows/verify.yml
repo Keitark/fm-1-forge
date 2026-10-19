@@ -62,6 +62,13 @@ jobs:
           cache-dependency-path: site/package-lock.json
       - name: Install build and contract dependencies
         run: npm ci --prefix site
+      - name: Use canonical native test storage paths
+        shell: pwsh
+        run: |
+          $canonicalTemp = node --input-type=module -e 'import { realpathSync } from "node:fs"; console.log(realpathSync(process.env.RUNNER_TEMP));'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "TEMP=$canonicalTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$canonicalTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Offline native plugin contracts
         shell: pwsh
         run: |
