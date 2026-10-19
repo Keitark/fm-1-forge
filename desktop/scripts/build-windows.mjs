@@ -6,7 +6,7 @@ import { copyFile, lstat, mkdir, readFile, readdir, realpath, writeFile } from '
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const PACKAGE_VERSION = '3.4.0-alpha.6';
+export const PACKAGE_VERSION = '3.4.0-alpha.7';
 export const WINDOWS_MCP_SERVER_NAME = 'fm1-forge-windows';
 export const NODE_VERSION = 'v22.22.2';
 export const NODE_LICENSE_SHA256 = 'c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4';

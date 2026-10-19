@@ -6,6 +6,7 @@ import { moduleGraphHtml, moduleGraphCss } from './fm1-module-graph.mjs';
 import { libraryHtml, libraryCss } from './fm1-library-ui.mjs';
 import { directDevicesHtml, directDevicesCss } from './fm1-browser-devices-ui.mjs';
 import { customFwscHtml } from './fm1-desktop-custom-ui.mjs';
+import { commonDevicesHtml, commonDialogHtml } from './fm1-browser-common-ui.mjs';
 export const UI_HTML = String.raw`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FM-1 Forge</title><meta name="description" content="Install diagnostics, test your FM-1 and build your own firmware with Codex."><link rel="icon" href="${ICON_DATA_URI}">
 <style>
@@ -90,7 +91,7 @@ ${libraryHtml}
     if(directMode){
       el('new-forge-project').disabled=false;el('forge-ask').disabled=false;
       el('install-diagnostics').disabled=true;el('official-update').disabled=true;el('stock-update').disabled=true;
-      el('diagnostics-status').textContent='Create a firmware project here. Install custom firmware separately through the manual UBOOT workflow.';
+      el('diagnostics-status').textContent=desktopMode?'Create a firmware project here. Install its generated FWSC through Custom firmware update · SysEx above.':'Create a firmware project here. Install custom firmware separately through the manual UBOOT workflow.';
       el('library-add').disabled=directLibraryBusy||!directLibrary;el('library-add').hidden=false;el('direct-library-add-folder').disabled=directLibraryBusy||!directLibrary;
       el('library-status').textContent=directLibraryNotice||'Import exported package JSON files into this panel’s browser storage. Custom transfers use manual UBOOT recovery.';
       if(!connectionOnly){const selectedSet=directSets.find(set=>set.id===el('library-set').value),sets=selectedSet?[selectedSet]:directSets;
@@ -293,4 +294,4 @@ ${libraryHtml}
 </script></body></html>`;
 
 // The desktop edition keeps the same UI while routing device actions to its local MCP server.
-export const WINDOWS_UI_HTML=UI_HTML.replace('const desktopMode=false;', 'const desktopMode=true;').replace('The file stays in this panel.', 'The selected package stays on this computer and is sent to the bundled plugin for validation.').replace('Custom firmware installation uses a separate manual UBOOT workflow. Stock firmware uses the local file review in Connect FM-1.', 'Install a generated custom FWSC from stock V15 using the custom firmware section above. Use the stock section to restore the official V15 package.').replace('<!-- FM1_DESKTOP_CUSTOM -->',customFwscHtml);
+export const WINDOWS_UI_HTML=UI_HTML.replace(commonDevicesHtml,'').replace(commonDialogHtml,'').replace('Stock firmware · V15 SysEx update','Restore stock V15').replace('const desktopMode=false;', 'const desktopMode=true;').replace('The file stays in this panel.', 'The selected package stays on this computer and is sent to the bundled plugin for validation.').replace('Custom firmware installation uses a separate manual UBOOT workflow. Stock firmware uses the local file review in Connect FM-1.', 'Install a generated custom FWSC from stock V15 using the custom firmware section above. Use the stock section to restore the official V15 package.').replace('<!-- FM1_DESKTOP_CUSTOM -->',customFwscHtml);

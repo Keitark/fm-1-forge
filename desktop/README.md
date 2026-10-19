@@ -1,8 +1,8 @@
 # FM-1 Forge Windows
 
-Version **3.4.0-alpha.6** adds a separate stock V15-to-custom `.fwsc` SysEx path. It validates the generated package and matching manifest, preserves the pinned public V15 layout offline, and verifies `FM1_FORGE_001` plus the exact embedded MIDI build after reboot. The common self-update capability in the running custom firmware stays disabled. See [the custom FWSC guide](../docs/CUSTOM_FWSC_20261020.md).
+Version **3.4.0-alpha.7** keeps one custom firmware SysEx section, separates stock V15 restore, and keeps file selectors usable through routine connection checks. The alpha.6 edition added a separate stock V15-to-custom `.fwsc` SysEx path. It validates the generated package and matching manifest, preserves the pinned public V15 layout offline, and verifies `FM1_FORGE_001` plus the exact embedded MIDI build after reboot. The common self-update capability in the running custom firmware stays disabled. See [the custom FWSC guide](../docs/CUSTOM_FWSC_20261020.md).
 
-The preceding alpha.4 stock writer and alpha.3 connection results remain recorded below. Native alpha.6 physical update acceptance is pending.
+The preceding alpha.4 stock writer and alpha.3 connection results remain recorded below. Native alpha.7 panel and physical update acceptance are pending.
 
 This edition is separate from the existing hosted FM-1 Forge plugin and Site. Preparing or installing it does not replace the hosted plugin or migrate its cloud data.
 

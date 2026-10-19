@@ -42,14 +42,14 @@ function fixture({stockUpdateAvailable=true,customUpdateAvailable=true,stock=sta
 }
 
 test('custom FWSC has separate controls and remains disabled without explicit native capability',async()=>{
-  assert.match(customFwscHtml,/Custom firmware · stock SysEx/);assert.match(customFwscHtml,/desktop-custom-manifest/);assert.doesNotMatch(customFwscHtml,/direct-common-(?:confirm|file|review)/);
+  assert.match(customFwscHtml,/Custom firmware update · SysEx/);assert.match(customFwscHtml,/desktop-custom-manifest/);assert.doesNotMatch(customFwscHtml,/direct-common-(?:confirm|file|review)/);
   const f=fixture({stockUpdateAvailable:false,customUpdateAvailable:false});await f.controller.ready;assert.equal(f.calls.length,0);assert.equal(f.el('desktop-custom').hidden,true);assert.equal(f.el('desktop-custom-file').disabled,true);
   await f.controller.custom.selectManifest(manifestFile(manifest()),user);await f.controller.custom.selectPackage(packageFile(new Uint8Array(rawBytes)),user);await f.controller.custom.stage(user);assert.equal(f.calls.length,0);f.controller.dispose();
 });
 
 test('native panel opens with only both passive writer status reads and never auto-connects or retries',async()=>{
   const f=fixture();await f.controller.ready;assert.deepEqual(f.calls,[{name:'get_fm1_stock_update_status',args:{}},{name:'get_fm1_custom_update_status',args:{}}]);assert.equal(f.controller.state().connected,false);assert.equal(f.timers.size,0);
-  assert.equal(f.el('desktop-custom-review').disabled,true);assert.equal(f.el('desktop-custom-manifest').disabled,false);assert.equal(f.el('direct-common-confirm').disabled,true);f.controller.dispose();
+  assert.equal(f.el('desktop-custom-review').disabled,true);assert.equal(f.el('desktop-custom-manifest').disabled,true);assert.equal(f.el('direct-common-confirm').disabled,true);f.controller.dispose();
 });
 
 test('trusted custom file and manifest selection snapshots bytes, uploads bounded chunks and binds a complete plain-text review',async()=>{
@@ -61,6 +61,31 @@ test('trusted custom file and manifest selection snapshots bytes, uploads bounde
   assert.equal(f.el('desktop-custom-dialog').open,true);assert.equal(f.el('desktop-custom-confirm').disabled,false);const text=f.el('desktop-custom-review-text').textContent;
   for(const expected of ['FM-1 <b>diagnostics</b>',String(rawBytes),'623136',hash('a'),hash('b'),hash('c'),hash('d'),'FM1_FORGE_001','FM-1_015','FM-1 MIDI input','FM-1 MIDI output',opaque('6'),'2099-10-19','fixed V15 layout checked offline','Live full-flash baseline: unavailable','full flash readback is not performed','Custom hardware qualification: pending'])assert.ok(text.includes(expected),expected);
   assert.equal(Object.hasOwn(f.el('desktop-custom-review-text'),'innerHTML'),false);assert.equal(f.calls.some(row=>row.name==='start_fm1_custom_update'||row.name==='begin_fm1_stock_upload'),false);f.controller.dispose();
+});
+
+test('all file-change handlers remain usable during each deferred routine status check and retain choices after disconnect',async()=>{
+  let defer=false,releaseStock,releaseCustom,releaseDevice;
+  const f=fixture({handler:name=>{if(!defer)return;if(name==='get_fm1_stock_update_status')return new Promise(resolve=>{releaseStock=resolve;});if(name==='get_fm1_custom_update_status')return new Promise(resolve=>{releaseCustom=resolve;});if(name==='get_fm1_device_status')return new Promise(resolve=>{releaseDevice=resolve;});}});await f.pair();await f.controller.selectPackage(packageFile(new Uint8Array(699956)),user);
+  const heading=f.el('device-heading').textContent,customSummary=f.el('desktop-custom-summary').textContent,stockSummary=f.el('direct-package-summary').textContent;
+  const checkPending=()=>{for(const key of ['desktop-custom-file','desktop-custom-manifest','direct-stock-file'])assert.equal(f.el(key).disabled,false,key);for(const key of ['desktop-custom-review','desktop-custom-confirm','direct-stock-review','direct-review-confirm'])assert.equal(f.el(key).disabled,true,key);assert.equal(f.el('device-heading').textContent,heading);assert.doesNotMatch(f.el('direct-device-note').textContent,/unavailable/);assert.doesNotMatch(f.el('desktop-custom-note').textContent,/unavailable/);};
+  defer=true;const pending=f.controller.refresh();checkPending();assert.equal(f.el('desktop-custom-summary').textContent,customSummary);assert.equal(f.el('direct-package-summary').textContent,stockSummary);
+  releaseStock(f.backend.stock);await tick();checkPending();releaseCustom(f.backend.custom);await tick();checkPending();assert.equal(typeof releaseDevice,'function');
+  f.el('desktop-custom-manifest').files=[manifestFile(manifest())];f.el('desktop-custom-manifest').onchange(user);await tick();
+  f.el('desktop-custom-file').files=[{...packageFile(new Uint8Array(rawBytes).fill(9)),name:'Chosen custom during poll.fwsc'}];f.el('desktop-custom-file').onchange(user);await tick();
+  f.el('direct-stock-file').files=[{...packageFile(new Uint8Array(699956)),name:'Chosen stock during poll.fwsc'}];f.el('direct-stock-file').onchange(user);await tick();checkPending();assert.match(f.el('desktop-custom-summary').textContent,/Chosen custom during poll/);assert.match(f.el('desktop-custom-summary').textContent,new RegExp(hash('c')));assert.match(f.el('direct-package-summary').textContent,/Chosen stock during poll/);
+  releaseDevice(device());await pending;assert.equal(f.el('desktop-custom-review').disabled,false);assert.equal(f.el('direct-stock-review').disabled,false);assert.match(f.el('desktop-custom-summary').textContent,/Chosen custom during poll/);assert.match(f.el('direct-package-summary').textContent,/Chosen stock during poll/);
+  const chosenCustom=f.el('desktop-custom-summary').textContent,chosenStock=f.el('direct-package-summary').textContent;defer=false;f.backend.device=device({connected:false,identity:null,transport:null});await f.controller.refresh();
+  for(const key of ['desktop-custom-file','desktop-custom-manifest','direct-stock-file','desktop-custom-review','desktop-custom-confirm','direct-stock-review','direct-review-confirm'])assert.equal(f.el(key).disabled,true,key);assert.equal(f.el('desktop-custom-summary').textContent,chosenCustom);assert.equal(f.el('direct-package-summary').textContent,chosenStock);assert.equal(f.el('device-heading').textContent,'FM-1 disconnected');assert.equal(f.calls.some(row=>row.name==='begin_fm1_custom_upload'||row.name==='begin_fm1_stock_upload'||row.name==='start_fm1_custom_update'||row.name==='start_fm1_stock_update'),false);f.controller.dispose();
+});
+
+test('interactive reconnect and active transfer still lock file selectors and ignore file-change handlers',async()=>{
+  let defer=false,release;const f=fixture({handler:name=>name==='connect_fm1_device'&&defer?new Promise(resolve=>{release=resolve;}):undefined});await f.pair();await f.controller.selectPackage(packageFile(new Uint8Array(699956)),user);
+  const selectedCustom=f.el('desktop-custom-summary').textContent,selectedStock=f.el('direct-package-summary').textContent;defer=true;const reconnect=f.controller.connectMidi(user);
+  for(const key of ['desktop-custom-file','desktop-custom-manifest','direct-stock-file'])assert.equal(f.el(key).disabled,true,key);assert.equal(f.controller.state().routineChecking,false);
+  f.el('desktop-custom-file').files=[{...packageFile(new Uint8Array(rawBytes)),name:'Blocked custom.fwsc'}];f.el('desktop-custom-file').onchange(user);f.el('direct-stock-file').files=[{...packageFile(new Uint8Array(699956)),name:'Blocked stock.fwsc'}];f.el('direct-stock-file').onchange(user);await tick();assert.equal(f.el('desktop-custom-summary').textContent,selectedCustom);assert.equal(f.el('direct-package-summary').textContent,selectedStock);release(device());await reconnect;
+  await f.controller.custom.stage(user);await f.controller.custom.confirm(user);const activeCustom=f.el('desktop-custom-summary').textContent,activeStock=f.el('direct-package-summary').textContent;
+  for(const key of ['desktop-custom-file','desktop-custom-manifest','direct-stock-file','desktop-custom-review','desktop-custom-confirm','direct-stock-review','direct-review-confirm'])assert.equal(f.el(key).disabled,true,key);
+  f.el('desktop-custom-manifest').files=[manifestFile(manifest({target_build_sha256:hash('a')}))];f.el('desktop-custom-manifest').onchange(user);f.el('desktop-custom-file').onchange(user);f.el('direct-stock-file').onchange(user);await tick();assert.equal(f.el('desktop-custom-summary').textContent,activeCustom);assert.equal(f.el('direct-package-summary').textContent,activeStock);assert.equal(f.calls.filter(row=>row.name==='start_fm1_custom_update').length,1);f.controller.dispose();
 });
 
 test('custom confirm is trusted, one-shot and independent of panel abort; either writer blocks all device operations',async()=>{
@@ -135,11 +160,11 @@ test('custom reviews expire or invalidate on selected files, connection changes 
 
 test('custom file and manifest bounds reject invalid selections before upload and never read browser devices',async()=>{
   const invalidFiles=[{name:'wrong.bin',size:rawBytes,arrayBuffer:async()=>new ArrayBuffer(rawBytes)},{name:'huge.fwsc',size:2*1024*1024+1,arrayBuffer:()=>assert.fail('Oversized files must not be read')}];
-  for(const file of invalidFiles){const f=fixture();await f.controller.ready;await assert.rejects(f.controller.custom.selectPackage(file,user));assert.equal(f.calls.length,2);f.controller.dispose();}
+  for(const file of invalidFiles){const f=fixture();await f.controller.ready;await f.controller.connectMidi(user);await assert.rejects(f.controller.custom.selectPackage(file,user));assert.equal(f.calls.length,3);f.controller.dispose();}
   for(const file of [{name:'huge.json',size:8193,arrayBuffer:()=>assert.fail('Oversized manifests must not be read')},manifestFile({schemaVersion:1}),manifestFile(manifest({expected_boot_identity:'FM-1_015'})),manifestFile(manifest({hardware_qualified:true}))]){
-    const f=fixture();await f.controller.ready;await assert.rejects(f.controller.custom.selectManifest(file,user));assert.equal(f.calls.length,2);f.controller.dispose();
+    const f=fixture();await f.controller.ready;await f.controller.connectMidi(user);await assert.rejects(f.controller.custom.selectManifest(file,user));assert.equal(f.calls.length,3);f.controller.dispose();
   }
-  const mismatch=fixture();await mismatch.controller.ready;await mismatch.controller.custom.selectManifest(manifestFile(manifest()),user);await assert.rejects(mismatch.controller.custom.selectPackage(packageFile(new Uint8Array(rawBytes-1)),user),/does not match/);assert.equal(mismatch.el('desktop-custom-review').disabled,true);mismatch.controller.dispose();
+  const mismatch=fixture();await mismatch.controller.ready;await mismatch.controller.connectMidi(user);await mismatch.controller.custom.selectManifest(manifestFile(manifest()),user);await assert.rejects(mismatch.controller.custom.selectPackage(packageFile(new Uint8Array(rawBytes-1)),user),/does not match/);assert.equal(mismatch.el('desktop-custom-review').disabled,true);mismatch.controller.dispose();
 });
 
 test('custom upload acknowledgement and manifest/hash bindings fail closed without retry or confirmation',async()=>{

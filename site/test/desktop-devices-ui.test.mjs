@@ -108,7 +108,7 @@ function stockFixture(options={}){
 test('stock capability is explicit and ready reads saved status without device I/O or enabling custom installation',async()=>{
   const f=stockFixture();await f.controller.ready;
   assert.deepEqual(f.calls,[{name:'get_fm1_stock_update_status',args:{}}]);assert.equal(f.timers.size,0);
-  assert.equal(f.controller.state().stockUpdateAvailable,true);assert.equal(f.controller.state().installationAvailable,false);assert.equal(f.el('direct-stock-file').disabled,false);
+  assert.equal(f.controller.state().stockUpdateAvailable,true);assert.equal(f.controller.state().installationAvailable,false);assert.equal(f.el('direct-stock-file').disabled,true);
   for(const id of ['direct-common-review','direct-common-confirm','install-diagnostics','stock-update'])assert.equal(f.el(id).disabled,true,id);
   assert.equal(f.el('direct-stock-review').disabled,true);assert.match(f.el('direct-package-summary').textContent,/bundled local plugin/);f.controller.dispose();
 });
@@ -126,6 +126,15 @@ test('official selection snapshots bytes and review uploads fixed bounded chunks
   assert.equal(f.el('direct-stock-dialog').open,true);assert.equal(f.el('direct-review-confirm').disabled,false);
   const detail=f.el('direct-review-text').textContent;for(const expected of ['FM-1 <b>V15</b>',String(packageBytes),'589824','3'.repeat(64),'FM-1_015','FM-1 MIDI input','FM-1 MIDI output','2'.repeat(32),'2099-10-19'])assert.ok(detail.includes(expected),expected);
   assert.equal(Object.hasOwn(f.el('direct-review-text'),'innerHTML'),false);assert.equal(f.calls.some(row=>row.name==='start_fm1_stock_update'),false);f.controller.dispose();
+});
+
+test('stock file chooser stays usable through routine polling and only confirmed disconnect disables it',async()=>{
+  let release;const f=stockFixture({handler:name=>name==='get_fm1_device_status'?new Promise(resolve=>{release=resolve;}):undefined});await f.select();
+  const heading=f.el('device-heading').textContent,summary=f.el('direct-package-summary').textContent,pending=f.controller.refresh();await tick();assert.equal(typeof release,'function');
+  assert.equal(f.controller.state().routineChecking,true);assert.equal(f.el('direct-stock-file').disabled,false);assert.equal(f.el('device-heading').textContent,heading);assert.equal(f.el('direct-package-summary').textContent,summary);assert.equal(f.el('direct-stock-review').disabled,true);assert.equal(f.el('direct-review-confirm').disabled,true);assert.doesNotMatch(f.el('direct-device-note').textContent,/unavailable/);
+  f.el('direct-stock-file').files=[{...fileFor(new Uint8Array(packageBytes)),name:'Chosen during poll.fwsc'}];f.el('direct-stock-file').onchange(user);await tick();assert.match(f.el('direct-package-summary').textContent,/Chosen during poll/);
+  release(connected('stock-midi'));await pending;assert.equal(f.el('direct-stock-file').disabled,false);assert.match(f.el('direct-package-summary').textContent,/Chosen during poll/);assert.equal(f.controller.state().routineChecking,false);assert.equal(f.calls.some(row=>row.name==='begin_fm1_stock_upload'||row.name==='start_fm1_stock_update'),false);
+  const selected=f.el('direct-package-summary').textContent,disconnectedPoll=f.controller.refresh();await tick();assert.equal(f.el('direct-stock-file').disabled,false);release(disconnected());await disconnectedPoll;assert.equal(f.el('direct-stock-file').disabled,true);assert.equal(f.el('direct-stock-review').disabled,true);assert.equal(f.el('direct-review-confirm').disabled,true);assert.equal(f.el('direct-package-summary').textContent,selected);assert.equal(f.el('device-heading').textContent,'FM-1 disconnected');f.controller.dispose();
 });
 
 test('trusted confirmation consumes one review and start has no panel abort signal; writer polling keeps stable identity',async()=>{

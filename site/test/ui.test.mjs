@@ -1087,6 +1087,12 @@ test('version 3 drafts keep firmware MIDI disabled while new projects enable it'
 
 
 test('Windows native panel mounts its fixed MCP transport without browser permission or automatic connection',async()=>{
+  const markup=WINDOWS_UI_HTML.split('<script>')[0];
+  assert.doesNotMatch(markup,/id="direct-common(?:-|")/);
+  assert.match(UI_HTML.split('<script>')[0],/id="direct-common"/);
+  assert.match(markup,/<summary>Restore stock V15<\/summary>/);
+  assert.match(markup,/<h2>Custom firmware update · SysEx<\/h2>/);
+  assert.match(markup,/id="direct-connect-common"/);
   let connected=false;
   const status=()=>({connected,transport:connected?'stock-midi':null,identity:connected?'FM-1_015':null,loader:false,installationAvailable:false,supportedTransports:['stock-midi','firmware-midi'],lastError:null});
   const p=await panel({html:WINDOWS_UI_HTML,embedded:true,preserveDirectMode:true,backendOverride:async(name,args)=>{
@@ -1111,7 +1117,7 @@ test('Windows native panel mounts its fixed MCP transport without browser permis
     await until(()=>p.node('device-heading').textContent.includes('FM-1_015'));
     assert.equal(p.node('connection-label').textContent,'Device connected');
     assert.equal(p.node('direct-stock-review').disabled,true);
-    assert.equal(p.node('direct-common-review').disabled,true);
+    assert.match(p.node('diagnostics-status').textContent,/generated FWSC through Custom firmware update · SysEx/);
     await p.advancePoll(3000);
     assert.ok(p.requests.includes('get_fm1_device_status'));
     assert.ok(!p.node('device-heading').history.some(label=>/checking/i.test(label)));
