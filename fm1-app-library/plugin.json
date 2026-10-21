@@ -1,0 +1,34 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "author": {
+    "name": "Keitarou Kondou"
+  },
+  "description": "Native Windows and macOS MIDI, reviewed stock and custom FWSC SysEx updates, and local firmware-project configuration. USB serial and UBOOT writes remain unavailable.",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "brandColor": "#000000",
+        "brandColorDark": "#a3efcc",
+        "capabilities": [
+          "Interactive"
+        ],
+        "category": "Productivity",
+        "composerIcon": "./assets/fm1-tab-light-128.png",
+        "composerIconDark": "./assets/fm1-tab-dark-128.png",
+        "defaultPrompt": "Open FM-1 Forge and connect FM-1 directly in the native panel.",
+        "developerName": "Keitarou Kondou",
+        "displayName": "FM-1 Forge",
+        "logo": "./assets/fm1-tab-light-128.png",
+        "logoDark": "./assets/fm1-tab-dark-128.png",
+        "longDescription": "One self-contained plugin for Windows x64 and macOS Apple Silicon or Intel. Codex starts the matching bundled runtime and native MIDI component automatically, without a separate runtime installation or helper service. Review the exact stock V15 package or validated custom FWSC and explicitly confirm each SysEx update. Preserve durable recovery evidence after an uncertain transfer. Common-firmware self-updates, USB serial and UBOOT writes remain unavailable. Physical update acceptance is pending.",
+        "shortDescription": "Native MIDI and FWSC updates"
+      },
+      "onboardingSkill": "./skills/fm1-forge-setup/SKILL.md",
+      "requires_local_executor": true
+    }
+  },
+  "homepage": "https://fm1-app-library.keitark.chatgpt.site/",
+  "name": "fm1-app-library",
+  "repository": "https://github.com/Keitark/fm-1-forge",
+  "version": "3.4.0-alpha.9"
+}

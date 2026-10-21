@@ -1,0 +1,1154 @@
+{
+  "format": "fm1-forge-macos-package-v1",
+  "version": "3.4.0-alpha.9",
+  "platform": "darwin",
+  "arch": "x64",
+  "runtime": {
+    "version": "v22.22.2",
+    "platform": "darwin",
+    "arch": "x64",
+    "sha256": "c2e43022d8903698377cc7ae8bb71db2d227990d089cad2237f60a0f60756ff8",
+    "licenseSha256": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
+    "distributionReference": "https://nodejs.org/dist/v22.22.2/",
+    "licenseReference": "https://github.com/nodejs/node/blob/v22.22.2/LICENSE"
+  },
+  "nativeLoadCheck": {
+    "loaded": true,
+    "version": "v22.22.2",
+    "platform": "darwin",
+    "arch": "x64",
+    "napi": "10",
+    "enumeratedPorts": false,
+    "openedDevice": false
+  },
+  "dependencies": [
+    {
+      "name": "fm1-common-updater",
+      "version": "source",
+      "license": "Apache-2.0",
+      "files": [
+        "LICENSES/fm1-common-updater/LICENSE",
+        "LICENSES/fm1-common-updater/NOTICE"
+      ],
+      "sourceFiles": [
+        "site/lib/browser-common/LICENSE",
+        "site/lib/browser-common/NOTICE"
+      ]
+    },
+    {
+      "name": "@cfworker/json-schema",
+      "version": "4.1.1",
+      "license": "MIT",
+      "files": [
+        "LICENSES/@cfworker__json-schema@4.1.1/cfworker-json-schema-4.1.1-LICENSE.md"
+      ],
+      "upstreamLicenseSources": [
+        {
+          "source": "https://raw.githubusercontent.com/cfworker/cfworker/%40cfworker%2Fjson-schema%404.1.1/LICENSE.md",
+          "sha256": "376944252ab78ca6b41aee44ddea8894927ee67891e77e61eb9d59af63e35094"
+        }
+      ]
+    },
+    {
+      "name": "@modelcontextprotocol/core",
+      "version": "2.3.1",
+      "license": "Apache-2.0",
+      "files": [
+        "LICENSES/@modelcontextprotocol__core@2.3.1/LICENSE"
+      ]
+    },
+    {
+      "name": "@modelcontextprotocol/server",
+      "version": "2.3.1",
+      "license": "Apache-2.0",
+      "files": [
+        "LICENSES/@modelcontextprotocol__server@2.3.1/LICENSE"
+      ]
+    },
+    {
+      "name": "@openai/mcp-extensions",
+      "version": "0.2.0",
+      "license": "Apache-2.0",
+      "files": [
+        "LICENSES/@openai__mcp-extensions@0.2.0/LICENSE"
+      ]
+    },
+    {
+      "name": "zod",
+      "version": "4.2.0",
+      "license": "MIT",
+      "files": [
+        "LICENSES/zod@4.2.0/LICENSE"
+      ]
+    },
+    {
+      "name": "zod",
+      "version": "4.4.3",
+      "license": "MIT",
+      "files": [
+        "LICENSES/zod@4.4.3/LICENSE"
+      ]
+    },
+    {
+      "name": "@julusian/midi",
+      "version": "3.8.1",
+      "license": "MIT",
+      "files": [
+        "LICENSES/@julusian__midi@3.8.1/LICENSE"
+      ]
+    },
+    {
+      "name": "node-addon-api",
+      "version": "6.1.0",
+      "license": "MIT",
+      "files": [
+        "LICENSES/node-addon-api@6.1.0/LICENSE.md"
+      ]
+    },
+    {
+      "name": "pkg-prebuilds",
+      "version": "1.1.0",
+      "license": "MIT",
+      "files": [
+        "LICENSES/pkg-prebuilds@1.1.0/LICENSE"
+      ]
+    },
+    {
+      "name": "tslib",
+      "version": "2.8.1",
+      "license": "0BSD",
+      "files": [
+        "LICENSES/tslib@2.8.1/LICENSE.txt"
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "path": "desktop/lib/custom-update-service.mjs",
+      "sha256": "4d4f1106ffc3a7a629155f345e469548c811b65fc40171561374d948d199de5d"
+    },
+    {
+      "path": "desktop/lib/device-owner.mjs",
+      "sha256": "c21c0277bfbb40373d93a14008ab7411ba0795658df516d3aac1ecf09e8e1afb"
+    },
+    {
+      "path": "desktop/lib/device-service.mjs",
+      "sha256": "8b5861fd12add8f88858471cfe93b776f0e976365f3d79827d7ed9ff203637a4"
+    },
+    {
+      "path": "desktop/lib/native-midi.mjs",
+      "sha256": "41584281aa3e20f77af42f468749049ed15ccdaf1db9bd680a8f14db3fc7b8ea"
+    },
+    {
+      "path": "desktop/lib/platform.mjs",
+      "sha256": "b8bfa844009e6648050539e0c28ee7ec049bedaca24b64588fa1a77aec478bbe"
+    },
+    {
+      "path": "desktop/lib/project-store.mjs",
+      "sha256": "111877cd8715039ba1db107e350f8302b0739251c21fe7e02a52e4b7fc3a35c2"
+    },
+    {
+      "path": "desktop/lib/stock-update-service.mjs",
+      "sha256": "e1677e4eab65a0be7a1764691ffdb673cc13a5f7b893a062c393efd2c177d70a"
+    },
+    {
+      "path": "desktop/licenses/cfworker-json-schema-4.1.1-LICENSE.md",
+      "sha256": "376944252ab78ca6b41aee44ddea8894927ee67891e77e61eb9d59af63e35094"
+    },
+    {
+      "path": "desktop/package.json",
+      "sha256": "7b0ccbbe0e01084c190c3e53e1e9c5a432bd33c2f57fb728864ac99f72114942"
+    },
+    {
+      "path": "desktop/plugin-macos/skills/fm1-app-library/SKILL.md",
+      "sha256": "34089a88c19d5677617d09ebc604e66fdde4ae13f7e9be452b6984ed57cdf6fc"
+    },
+    {
+      "path": "desktop/plugin-macos/skills/fm1-forge-setup/SKILL.md",
+      "sha256": "b3aa3ac9df79db0a7678b5ab2c722bbe634c05f8d48f64d8acd29f24f3f4ab11"
+    },
+    {
+      "path": "desktop/scripts/build-macos.mjs",
+      "sha256": "a86731e5cd3f781820baf22a17e687e6f2546b3a31b62456ae084fd37fe44012"
+    },
+    {
+      "path": "desktop/scripts/build-native.mjs",
+      "sha256": "468b6ed424bfcea1ca1f6afe4854dd587507c937072320218ea6eb6334ab327e"
+    },
+    {
+      "path": "desktop/scripts/build-windows.mjs",
+      "sha256": "26d5b9dfa3f1d5b7cca3c8ac1b17d3bb0175f5dd4e0bca15b5320f440967f7f6"
+    },
+    {
+      "path": "desktop/server.mjs",
+      "sha256": "370e58735845a088b23b0d3b79dd9bd023fa11dcf23b8f8443e1e03f9af9db0a"
+    },
+    {
+      "path": "plugin/fm1-app-library/.codex-plugin/plugin.json",
+      "sha256": "93d475cb4e05c1671d932017bbd4db756414e7411586d36644d1be6dd43c5edd"
+    },
+    {
+      "path": "plugin/fm1-app-library/assets/fm1-tab-dark-128.png",
+      "sha256": "5d5248c7363bab2bb528e97a1f3e980e11b921705d55e78605f26eee2755dd19"
+    },
+    {
+      "path": "plugin/fm1-app-library/assets/fm1-tab-dark-32.png",
+      "sha256": "166db2cab2d86a3b5f57cb82c652d37dbd344b9fb2d83bb42db365df394c1f5c"
+    },
+    {
+      "path": "plugin/fm1-app-library/assets/fm1-tab-dark.svg",
+      "sha256": "17ceebbba31f4061e91a34799ff31d1a076f5ff7f6eda1070111767dc806e8e6"
+    },
+    {
+      "path": "plugin/fm1-app-library/assets/fm1-tab-light-128.png",
+      "sha256": "68b2c3b2c827185f0531fa3164f0a6f5442f6c3218d36a4cc36bb07c121f802a"
+    },
+    {
+      "path": "plugin/fm1-app-library/assets/fm1-tab-light-32.png",
+      "sha256": "c663d8044c9ab31621332b499482be918d3c5b989b1422ee729d5608115e0fa1"
+    },
+    {
+      "path": "plugin/fm1-app-library/assets/fm1-tab-light.svg",
+      "sha256": "b6cc6242afc8005ea4025bab3e7aea939c24ad24f669b82f85e55a77da26e404"
+    },
+    {
+      "path": "plugin/fm1-app-library/assets/fm1.svg",
+      "sha256": "2f2ea445c63d79fff1ae9cbfd3dd6dfda87f638e75bcb2d2c9034ad22f78c15a"
+    },
+    {
+      "path": "plugin/fm1-app-library/mcp.json",
+      "sha256": "0c65e55e200327a06ed66ea7f6948a2ab0e9a12cb37d366cb40d3def80cd5978"
+    },
+    {
+      "path": "plugin/fm1-app-library/plugin.json",
+      "sha256": "b61101bd9a37eb4ef5fa461c9150528ac99c44225a987fb2d8926f67d4086621"
+    },
+    {
+      "path": "plugin/fm1-app-library/skills/fm1-app-library/SKILL.md",
+      "sha256": "12811a71734e5ab11c50cc4f67f50da627fa62719fa9a0a51f3f30b196fa41b6"
+    },
+    {
+      "path": "plugin/fm1-app-library/skills/fm1-forge-setup/SKILL.md",
+      "sha256": "0ec1955daaf299a43b93627bf8843e73f33edc077332c770e78924620ea0c9e2"
+    },
+    {
+      "path": "site/lib/browser-common/LICENSE",
+      "sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6"
+    },
+    {
+      "path": "site/lib/browser-common/NOTICE",
+      "sha256": "2a2ee4181eaa94ad8bb85df5df5261142b02d55dce2f93ee9f9524095fa79cab"
+    },
+    {
+      "path": "site/lib/browser-common/index.mjs",
+      "sha256": "fbd0449251a8f63642a4aea0f3b4a28a44519af1fd251e7b2b8b477e0a698202"
+    },
+    {
+      "path": "site/lib/browser-common/journal.mjs",
+      "sha256": "858dc91e5ccfccd53b513abc4dc7d7a97e2cd5f04e4df20e492e824e6b617a5b"
+    },
+    {
+      "path": "site/lib/browser-common/package.mjs",
+      "sha256": "1f8f951524c740da7b1029276719ac1f0ac8f34c7ec64fcc81863f7b769d23f1"
+    },
+    {
+      "path": "site/lib/browser-common/protocol.mjs",
+      "sha256": "2214ed6301c9dc289f56c93381fe0baf7d7f3524fe33da6c7be28f7c68be0d64"
+    },
+    {
+      "path": "site/lib/browser-common/updater.mjs",
+      "sha256": "ac2a6a87f512c58f5aeb99ffe900e1d69c892f418bba165fe61e2485ca8c05d6"
+    },
+    {
+      "path": "site/lib/browser-common/web-midi.mjs",
+      "sha256": "84d60040c59b8e297d8d7c34166000df21d48b98a9973b7ab9b99f0ada244eed"
+    },
+    {
+      "path": "site/lib/browser-stock/index.mjs",
+      "sha256": "9f81b42807e408623e9c46470c6a293a51d57f9bdc11447306c946e38d516e5e"
+    },
+    {
+      "path": "site/lib/browser-stock/journal.mjs",
+      "sha256": "9c0630589c0f06aea71718679069618ca09d8397c27b4fefd88f8aa35a50b51d"
+    },
+    {
+      "path": "site/lib/browser-stock/origin.mjs",
+      "sha256": "1108c639a3c7fe1afebf3f054fc12e70a05fc996e4c95681773c7fc63deef734"
+    },
+    {
+      "path": "site/lib/browser-stock/package.mjs",
+      "sha256": "ee0a25df6c944a5ab6b22bac46430a7c34e05feaa87bc2c97349378c33a00641"
+    },
+    {
+      "path": "site/lib/browser-stock/protocol.mjs",
+      "sha256": "6df7e6139f35328eb780a53872b514eed9bf8fe5a33ac9483d5040bf252e5536"
+    },
+    {
+      "path": "site/lib/browser-stock/selection.mjs",
+      "sha256": "b02bbe19946ee1d49f89c8670edb8213a3138ffe881bbf554b2e71d728716b84"
+    },
+    {
+      "path": "site/lib/browser-stock/updater.mjs",
+      "sha256": "bf642928a4b1bd12ca6a2e7a1e541a226a1c7f3156474feb0b5eccc7e621e0ad"
+    },
+    {
+      "path": "site/lib/browser-stock/web-midi.mjs",
+      "sha256": "698e68dd4314be64ab9faaffad117eabbe5f889fb65870d7ab19a2416d90f367"
+    },
+    {
+      "path": "site/lib/fm1-app-sdk.generated.mjs",
+      "sha256": "e64823b5322fcfc6d190c12562c2d4c393ceda0503eb25674e751502c712bb2a"
+    },
+    {
+      "path": "site/lib/fm1-appearance.mjs",
+      "sha256": "42b444ff19a65352fdadd94553146eeec7405a3d6bc1540eed5119f41c88cd4c"
+    },
+    {
+      "path": "site/lib/fm1-browser-common-ui.mjs",
+      "sha256": "1163692418359a6afe19c4085ec127470a5c6d089dd733e5ae4fbfae34bab17c"
+    },
+    {
+      "path": "site/lib/fm1-browser-devices-ui.mjs",
+      "sha256": "080fa6a6d46f2b4a2b4147d27fa689e6f7a346dbb493ba3e89074649f37af333"
+    },
+    {
+      "path": "site/lib/fm1-browser-hardware.mjs",
+      "sha256": "57d3e79a419a7f381900a193d97d714ab15e358efbb0db6ac8124e55129f59cf"
+    },
+    {
+      "path": "site/lib/fm1-browser-serial.mjs",
+      "sha256": "d62bd5dac2eac9771943a2323e89d39dc3cd9104e62b21d6b40eb4b31d5dc760"
+    },
+    {
+      "path": "site/lib/fm1-contract.mjs",
+      "sha256": "6e20fd4e1adad00ffb5f0411d40732aaf88425cd7da53c646e31d1f327b0737c"
+    },
+    {
+      "path": "site/lib/fm1-desktop-custom-ui.mjs",
+      "sha256": "d8e6085b9899ad80388ca9ba43fd25cff309d9f3737d441ec20b492980302b2e"
+    },
+    {
+      "path": "site/lib/fm1-extension-ui.mjs",
+      "sha256": "81d378285ef6800a800c0307a25ad4c6822df4bff3cde454dc1b9cb3be31938a"
+    },
+    {
+      "path": "site/lib/fm1-forge-project.mjs",
+      "sha256": "9ff0a3e20f2bf4961e2a775dbf02bd2b5d526d0ea2769df0f462d52a4bf39224"
+    },
+    {
+      "path": "site/lib/fm1-icon.mjs",
+      "sha256": "5a1f0774fa9ae684e685f05b198b5f527ef74a099f2522918ae51b4fea0f2457"
+    },
+    {
+      "path": "site/lib/fm1-library-ui.mjs",
+      "sha256": "307b74c3b98cbaac861357936257cfae4916ec3bcdd5ed9c3e1879fb06549347"
+    },
+    {
+      "path": "site/lib/fm1-module-graph.mjs",
+      "sha256": "97576a6f4e961aac2baeea4a2f2678fd914226067b4f08f2f7a084b3516c951f"
+    },
+    {
+      "path": "site/lib/fm1-tab-icon.mjs",
+      "sha256": "5ce3d4d98405e842c4fc5df0e5f06e31ac4361ed3133093c594545a87004e293"
+    },
+    {
+      "path": "site/lib/fm1-ui.mjs",
+      "sha256": "13bc0bf73ae5e907d5232c660a6178faa28586f5a2a98ce8ef059ff78862da95"
+    },
+    {
+      "path": "tools/jieli-wl82/stock-sysex/custom-journal.mjs",
+      "sha256": "58a242fd1238edd0042e0527a6e5bdaf9eecddc582586e5f2187a6f0214d0d4f"
+    },
+    {
+      "path": "tools/jieli-wl82/stock-sysex/custom-package.mjs",
+      "sha256": "d0194bd64fea13b0480b22e762a5103d03222af551cc3ee79482e00136685f3d"
+    },
+    {
+      "path": "tools/jieli-wl82/stock-sysex/custom-updater.mjs",
+      "sha256": "9d9158641e573baad003457f9072d29270e2c47697d59f5a91c9ce8cac8ebd28"
+    },
+    {
+      "path": "tools/jieli-wl82/stock-sysex/files.mjs",
+      "sha256": "8b79d32034718f4b8b3c0f557a8e5f6ed657f75a30b9a19ccc93bbedf3daa61e"
+    },
+    {
+      "path": "tools/jieli-wl82/stock-sysex/journal.mjs",
+      "sha256": "9ea58708ac6318922fbe201fa7ef1a64afa26784030a2f5ca407d56e17be4010"
+    },
+    {
+      "path": "tools/jieli-wl82/stock-sysex/physical.mjs",
+      "sha256": "f5705872d2760820a2e9aa50251d2a279e66ac2e5e099c0c7e37f83f50a28247"
+    },
+    {
+      "path": "tools/jieli-wl82/stock-sysex/protocol.mjs",
+      "sha256": "6df7e6139f35328eb780a53872b514eed9bf8fe5a33ac9483d5040bf252e5536"
+    },
+    {
+      "path": "tools/jieli-wl82/stock-sysex/selection.mjs",
+      "sha256": "ea2102dfd5544acf5ad7936244faa49e886f30a775ea740e6f25e6719c672674"
+    },
+    {
+      "path": "tools/jieli-wl82/stock-sysex/updater.mjs",
+      "sha256": "615325aa15994890821e06c540fed51d1c2f8fbbfcd4d5c54fa4c212385b2172"
+    },
+    {
+      "path": "tools/jieli-wl82/stock-sysex/windows-metadata.mjs",
+      "sha256": "f241af2eb14bd32124475375616a7dd217538ebc683c1f5ade4320cf282eb571"
+    }
+  ],
+  "panelSha256": "8f466e0307d003ae144387d757bcf22046ea47de38d13e0a1d7243c2537e62fa",
+  "files": [
+    {
+      "path": ".codex-plugin/plugin.json",
+      "bytes": 1953,
+      "sha256": "ccc7eddb18ae658dd30a02d45e0fa17cfb4c69f6ca40e10d0324ae5d1a5682e9",
+      "mode": 420
+    },
+    {
+      "path": ".mcp.json",
+      "bytes": 295,
+      "sha256": "15995eab9ce03f79cff67b524342e8888039a3e43163237c75d137e3090458b5",
+      "mode": 420
+    },
+    {
+      "path": "assets/fm1-tab-dark-128.png",
+      "bytes": 1462,
+      "sha256": "5d5248c7363bab2bb528e97a1f3e980e11b921705d55e78605f26eee2755dd19",
+      "mode": 420
+    },
+    {
+      "path": "assets/fm1-tab-dark-32.png",
+      "bytes": 360,
+      "sha256": "166db2cab2d86a3b5f57cb82c652d37dbd344b9fb2d83bb42db365df394c1f5c",
+      "mode": 420
+    },
+    {
+      "path": "assets/fm1-tab-dark.svg",
+      "bytes": 818,
+      "sha256": "17ceebbba31f4061e91a34799ff31d1a076f5ff7f6eda1070111767dc806e8e6",
+      "mode": 420
+    },
+    {
+      "path": "assets/fm1-tab-light-128.png",
+      "bytes": 1514,
+      "sha256": "68b2c3b2c827185f0531fa3164f0a6f5442f6c3218d36a4cc36bb07c121f802a",
+      "mode": 420
+    },
+    {
+      "path": "assets/fm1-tab-light-32.png",
+      "bytes": 379,
+      "sha256": "c663d8044c9ab31621332b499482be918d3c5b989b1422ee729d5608115e0fa1",
+      "mode": 420
+    },
+    {
+      "path": "assets/fm1-tab-light.svg",
+      "bytes": 818,
+      "sha256": "b6cc6242afc8005ea4025bab3e7aea939c24ad24f669b82f85e55a77da26e404",
+      "mode": 420
+    },
+    {
+      "path": "assets/fm1.svg",
+      "bytes": 1330,
+      "sha256": "2f2ea445c63d79fff1ae9cbfd3dd6dfda87f638e75bcb2d2c9034ad22f78c15a",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/@cfworker__json-schema@4.1.1/cfworker-json-schema-4.1.1-LICENSE.md",
+      "bytes": 1070,
+      "sha256": "376944252ab78ca6b41aee44ddea8894927ee67891e77e61eb9d59af63e35094",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/@julusian__midi@3.8.1/LICENSE",
+      "bytes": 1104,
+      "sha256": "2122011cc0f7e99cf945906d3d63e978ad5454e75ca2fc8d30aaddd69b3a549b",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/@modelcontextprotocol__core@2.3.1/LICENSE",
+      "bytes": 12227,
+      "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/@modelcontextprotocol__server@2.3.1/LICENSE",
+      "bytes": 12227,
+      "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/@openai__mcp-extensions@0.2.0/LICENSE",
+      "bytes": 11558,
+      "sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/fm1-common-updater/LICENSE",
+      "bytes": 11558,
+      "sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/fm1-common-updater/NOTICE",
+      "bytes": 1064,
+      "sha256": "2a2ee4181eaa94ad8bb85df5df5261142b02d55dce2f93ee9f9524095fa79cab",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/node-addon-api@6.1.0/LICENSE.md",
+      "bytes": 1245,
+      "sha256": "4fcf69bbecb999ec8fa0ece62bc8934b7cdd45061ac1a8b1939a09be64cd4352",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/Node.js-LICENSE",
+      "bytes": 145485,
+      "sha256": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/pkg-prebuilds@1.1.0/LICENSE",
+      "bytes": 1070,
+      "sha256": "91bdff7e4074b2b0deb06636278bcff4f7df93800f8db327c16201cbca95a22f",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/tslib@2.8.1/LICENSE.txt",
+      "bytes": 655,
+      "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/zod@4.2.0/LICENSE",
+      "bytes": 1072,
+      "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8",
+      "mode": 420
+    },
+    {
+      "path": "LICENSES/zod@4.4.3/LICENSE",
+      "bytes": 1072,
+      "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8",
+      "mode": 420
+    },
+    {
+      "path": "mcp.json",
+      "bytes": 295,
+      "sha256": "15995eab9ce03f79cff67b524342e8888039a3e43163237c75d137e3090458b5",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/binding-options.js",
+      "bytes": 57,
+      "sha256": "b65da89c842502f5d77f981ae76c5df84237a86b895bae3f9a39f7cc67f43d8c",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/binding.gyp",
+      "bytes": 2040,
+      "sha256": "088f9891ca97230bab79a86fb3036e8f510ae5720543c5744bbc3cb46563b1ea",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/drums.d.ts",
+      "bytes": 1248,
+      "sha256": "91be7e546357a4787ed35ca776441fc141736b67026f043d5d97466e82644bdc",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/drums.d.ts.map",
+      "bytes": 182,
+      "sha256": "6c33b305f99458896d1f1fd953d12067db701c51b29b238fc7d535a1af2807c5",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/drums.js",
+      "bytes": 1186,
+      "sha256": "8d1832b945e971b621e3d997c0021c1aee950e5ecfcf714b9c9baac6ca8b4a84",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/drums.js.map",
+      "bytes": 1112,
+      "sha256": "fbe7d28811beb79c8fa91996020e555cf3f6c90f214ddf2b1e4c15dac7b2dc11",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/input.d.ts",
+      "bytes": 1243,
+      "sha256": "6dc1b2aa0fb5722517a045c6d93674f23d51263fb6afe7143fac1b48c842251c",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/input.d.ts.map",
+      "bytes": 1012,
+      "sha256": "d5880ef8369161eb45fde56b6676e816ecd3fbedc6e921b7106defd2d5df1592",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/input.js",
+      "bytes": 3196,
+      "sha256": "c5e754463548e14afe130b65859a16ae94723294eac4f4b8e8422a5d2ecc36b0",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/input.js.map",
+      "bytes": 3014,
+      "sha256": "b8a81f7793e0be85ed649c5e99b68a7a1a70badeb35e55e5903cd62019cb9ef7",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/instruments.d.ts",
+      "bytes": 3356,
+      "sha256": "8689385a31dff1602ce8c9b882d5834edeebf090c4ffbe9ef50a6c3970a2ae0e",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/instruments.d.ts.map",
+      "bytes": 275,
+      "sha256": "d2331181f01a90e25f96fdaefb2ac0e5d0e2f254c925e452a66b849caa530f84",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/instruments.js",
+      "bytes": 2979,
+      "sha256": "1ff9685c8ab08545fe1395a7d5eeae23ba5ec06957a41047c79cd57b36474138",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/instruments.js.map",
+      "bytes": 2827,
+      "sha256": "1685cc055035ede0746281ff8e73d299c65da07d630c00f9399533947b3abea7",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/lazy.d.ts",
+      "bytes": 13062,
+      "sha256": "9aaa73411ce4bba1e1475dcdd3bac89ff9959c3b7f111f541af3da32509b9599",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/lazy.d.ts.map",
+      "bytes": 948,
+      "sha256": "b4b91b56020fd8688d4c0cc55c4407664398244afa7f760b2269f33b884a5a7a",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/lazy.js",
+      "bytes": 1815,
+      "sha256": "d03e57ec471eca9094f4d66d25d97b7ef69d2660895c877ed0f4cf4bdb877acc",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/lazy.js.map",
+      "bytes": 539,
+      "sha256": "99d7dcfdf2d4c4e3ef86562e34f33bd6205729d7e78a2e942517d52fe87b36fd",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/message-parser.d.ts",
+      "bytes": 1261,
+      "sha256": "f9ddb77e6a773f770bed86c9882a10252994302432827c6d7146c6fd36ceefb7",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/message-parser.d.ts.map",
+      "bytes": 738,
+      "sha256": "b64ef392e5d07c887880888c4c804ecce6ea0dbbc62c6b403c475023d422dabd",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/message-parser.js",
+      "bytes": 4130,
+      "sha256": "9a3e6710896fbe02cda65edaa2db51c73dfb3ef2656c7159551d9ed7feefcd43",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/message-parser.js.map",
+      "bytes": 2361,
+      "sha256": "6a8210d243eb245c665fe83658738e612d9580d2bedfbd082b1bf8c2277c1585",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/messages.d.ts",
+      "bytes": 5495,
+      "sha256": "f433eefc2b1047d590baf229d0a4893905058439e36a65c8f69698c1141f8299",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/messages.d.ts.map",
+      "bytes": 324,
+      "sha256": "f8c1cdd87d580819d38c2a39c65b1da020d2d4efdcebd645bb5c2a87108cbb50",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/messages.js",
+      "bytes": 6441,
+      "sha256": "70e1428d4752771f0d1e1f157e71c1c1d8c775aac0b34919e3d3457e67a7b721",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/messages.js.map",
+      "bytes": 4307,
+      "sha256": "f1cb0ae7ca3b484850c8e895d906fdc63ae8ea9a210e4fa12bf05ae0c32d9531",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/midi.d.ts",
+      "bytes": 61,
+      "sha256": "ecfb1778f8066de72df75c2907b5e71be922258ab4227304daaf1b44aebe4317",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/midi.d.ts.map",
+      "bytes": 121,
+      "sha256": "659d55d92ec220255d2b303ddb847fd97e536e22a4472ac6ff10e5bb9e126f10",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/midi.js",
+      "bytes": 640,
+      "sha256": "f4efcdd8c990035bc2c0ec60b494fe3de3aae6f7c264ed301f05c9279101d41b",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/midi.js.map",
+      "bytes": 220,
+      "sha256": "93932e25fc7e51f30da92ead5757ef66d78b6adab935ce0f3ff70201868f2a30",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/native.d.ts",
+      "bytes": 349,
+      "sha256": "b717dda2091590623449073e3cb55e10c1f38f0d06a224436fc10980b242d006",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/native.d.ts.map",
+      "bytes": 201,
+      "sha256": "3171cd08042d9b0a57f8a5a0ae2e5d3a114d4ebffccb9d2bbc9a479a3fab7193",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/native.js",
+      "bytes": 1465,
+      "sha256": "1fbbb0ef7c13d5152663d2de9b6dfa252dd474d3033f7372aac2445351b5eb83",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/native.js.map",
+      "bytes": 695,
+      "sha256": "ff9fc02bcdb360d18c488087f5609cf05029575f5eb3637753e1e7c88055cf7b",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/notes.d.ts",
+      "bytes": 659,
+      "sha256": "6b8e7ef13b0db607f30dc963a28e19673fd858e9282c4c6caae847632c6eee38",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/notes.d.ts.map",
+      "bytes": 168,
+      "sha256": "c74a907615b057348951a857f79a45a5157a1ef20f150656b7af0ee5635a4ce7",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/notes.js",
+      "bytes": 911,
+      "sha256": "fbde6bc1849e212e2a85aa82822e77c8787aa8d24b88b6b22ceb453e4dc68187",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/notes.js.map",
+      "bytes": 851,
+      "sha256": "ed11ae615486bddaf888995888a8c7d11d98492fca7658a81504dbdcdd0bcb74",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/output.d.ts",
+      "bytes": 592,
+      "sha256": "8efd553f7260fb956c38907b5b5f4a5d9545f2d22446b23a4a2e0527b5cdffcd",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/output.d.ts.map",
+      "bytes": 626,
+      "sha256": "0d4608bcd985a54524bc5f10e3ce63e48e29dd13597f4dad31a23ab2902401e2",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/output.js",
+      "bytes": 2248,
+      "sha256": "8ece9aa7528ab0d57a161fbab0752ab50c560ed23f85b0e242bfb53dac7e9a3d",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/dist/output.js.map",
+      "bytes": 2117,
+      "sha256": "36e13315ff6c446f399b4997d9e05913807414eb9a289795e81d017ae54d81b7",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/LICENSE",
+      "bytes": 1104,
+      "sha256": "2122011cc0f7e99cf945906d3d63e978ad5454e75ca2fc8d30aaddd69b3a549b",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/load-native.js",
+      "bytes": 311,
+      "sha256": "ec945043ed92b3ae97cad0fa3979c75f63c9daf621a5b0b46c21d94755b9a849",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/package.json",
+      "bytes": 2721,
+      "sha256": "66b8e372da99b67ec64a821fb1debcddf172864414f560a0a70fa0e44df057fc",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/prebuilds/midi-darwin-x64/node-napi-v7.node",
+      "bytes": 171704,
+      "sha256": "77289fd57c5f13a159ec75f1a575f013fdbe31f94228059f7ea42a56f3e5f49b",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/README.md",
+      "bytes": 7474,
+      "sha256": "39587b8e17512c75d80e171d866b199c26550289116f88f0b62209b50ad488c7",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/src-cpp/input.cpp",
+      "bytes": 11615,
+      "sha256": "1b9ee6bc76f36fb9ebb3d34cc94c196e998e0131039175a6d15ef73ef0e24724",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/src-cpp/input.h",
+      "bytes": 1672,
+      "sha256": "7cbbc0d5847ce3208f9f94391f4cb9f89a990fb54133a94e3a592301e6843844",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/src-cpp/midi.cpp",
+      "bytes": 820,
+      "sha256": "ca302b66c17ea44dafc7c83afe9ec480b4445018aeeb0ccc6867b2ca159e0a12",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/src-cpp/output.cpp",
+      "bytes": 8346,
+      "sha256": "7b5aff6e329499d1563b6da3a9e376a01eec7283feedb9f9af960bd8e529ad68",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/src-cpp/output.h",
+      "bytes": 982,
+      "sha256": "ecf912a8ab81224892954b5db6b6da7ddc6efa2e5a9abd60806a5648fac21880",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/vendor/rtmidi/RtMidi.cpp",
+      "bytes": 168278,
+      "sha256": "412cabe0ab461d6bfa4725469af17a9df907eda29356e806be56b86aa951b574",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/@julusian/midi/vendor/rtmidi/RtMidi.h",
+      "bytes": 27901,
+      "sha256": "74f98ca172243b0b9c0c59f53c4e20285d879ffa86b3d61692109b013f4606f9",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/common.gypi",
+      "bytes": 762,
+      "sha256": "f15742e3019096b85ef3e8985e2fe66c4dda722908577e113a1b0264893ecca8",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/except.gypi",
+      "bytes": 560,
+      "sha256": "ddbc09f5b66fe24dd898fbe659085a6ff72e9575025004fc3762271dba781e8b",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/index.js",
+      "bytes": 306,
+      "sha256": "3c28ff95988283743d4b54e53dd820c02b48129c513cbd16637c6e87cd683057",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/LICENSE.md",
+      "bytes": 1245,
+      "sha256": "4fcf69bbecb999ec8fa0ece62bc8934b7cdd45061ac1a8b1939a09be64cd4352",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/napi-inl.deprecated.h",
+      "bytes": 6323,
+      "sha256": "b66ed1e565e735bbfabcc2f72d466ab7c5414d3ef8851d1af440b81be7f2375c",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/napi-inl.h",
+      "bytes": 218490,
+      "sha256": "d43630cc2a3f3c16b49f7abcf80680767fd33d0f3abfffe90d1c84e4fddbf015",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/napi.h",
+      "bytes": 115181,
+      "sha256": "257ab5cba0beca0ad9e57949ab7b763acc3885ea5a04dc8a678f4899967af273",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/node_api.gyp",
+      "bytes": 132,
+      "sha256": "3cd2c44fb0974f016376b676d46bbebbca7c89d4383b09ece30e4cb4122a1499",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/noexcept.gypi",
+      "bytes": 639,
+      "sha256": "494060b87197c489497a038504147c435b1d09306152048add42ba0d7d16e747",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/nothing.c",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/package-support.json",
+      "bytes": 467,
+      "sha256": "b1cb7da23cca1681c7392a3c889eb0cc4916c53d2d7692d4b654ae751f3442f3",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/package.json",
+      "bytes": 10455,
+      "sha256": "adb8e56121c7a4d909736df914d670c36adbf38bf4e9bd3354ee6c8ffe6d48a3",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/README.md",
+      "bytes": 13732,
+      "sha256": "1d6f031b5bcec0a6c023702c32f134bb167e764ca270a8c287236e8aa0af9767",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/tools/check-napi.js",
+      "bytes": 3176,
+      "sha256": "9e1207808023cd998fe9e377aefbe77d6c59fa129f94e6acbf24907149d8c11e",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/tools/clang-format.js",
+      "bytes": 2002,
+      "sha256": "3e0b5e6d6f1a0c5ed106115871d0fd48f37bac5554effdacaf8d2439f4ed0c65",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/tools/conversion.js",
+      "bytes": 15013,
+      "sha256": "e089cbad94331ad07dfb103b5d5aafaaf99fba89e9674d64f4f35e9dfc432357",
+      "mode": 493
+    },
+    {
+      "path": "node_modules/node-addon-api/tools/eslint-format.js",
+      "bytes": 2071,
+      "sha256": "befbda4868248093b1f5e4307d28f412d12fa16929cd0c07f5e2575e2635646d",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/node-addon-api/tools/README.md",
+      "bytes": 3217,
+      "sha256": "65e9ea918538f453166b10a1d609cf44cec3d2d01f23fecb5265fb3a4bf303d5",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/pkg-prebuilds/bin/copy.mjs",
+      "bytes": 4159,
+      "sha256": "c0dae0a7a9daf1b6375763c36ee1314d64abad1612eeb1d4f2f0916ca0b962df",
+      "mode": 493
+    },
+    {
+      "path": "node_modules/pkg-prebuilds/bin/verify.mjs",
+      "bytes": 1132,
+      "sha256": "5968eb2c1629f2cf5c5f2ef67286d993c8b6329cdc6721f7c80eabd609397997",
+      "mode": 493
+    },
+    {
+      "path": "node_modules/pkg-prebuilds/bindings.d.ts",
+      "bytes": 1123,
+      "sha256": "742be23e4954eaf28c98c7998c19109bce59cb673f184bb1ac8e0a0e5346d9a8",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/pkg-prebuilds/bindings.js",
+      "bytes": 3483,
+      "sha256": "fee3428decad2ed6c12a54e50b67eb870bb4b2b09bceef59400d5fb23cd6edea",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/pkg-prebuilds/lib/prebuild.js",
+      "bytes": 1119,
+      "sha256": "a3b92966137073a31a19fb17a1bc78d9bcf07a17d363c645d0983f074435ae33",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/pkg-prebuilds/LICENSE",
+      "bytes": 1070,
+      "sha256": "91bdff7e4074b2b0deb06636278bcff4f7df93800f8db327c16201cbca95a22f",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/pkg-prebuilds/package.json",
+      "bytes": 563,
+      "sha256": "fbf4f2c5fd1eb3c9a93f781de9cb21241f0b9492c16b6cccbdc0c0f8295fa7d7",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/pkg-prebuilds/README.md",
+      "bytes": 4735,
+      "sha256": "eaf004b37487c2ada4f3d053effc4336ae00fb7b5ba03077515e26f380fceb9a",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/CopyrightNotice.txt",
+      "bytes": 822,
+      "sha256": "da16ddb65f8ca390998fb99223d0112498b56b45784d00afd77ff8ce1ac4de8b",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/LICENSE.txt",
+      "bytes": 655,
+      "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/modules/index.d.ts",
+      "bytes": 801,
+      "sha256": "b8f34dd1757f68e03262b1ca3ddfa668a855b872f8bdd5224d6f993a7b37dc2c",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/modules/index.js",
+      "bytes": 1416,
+      "sha256": "b3a4765da2bc019c79f2c2c12b36f860e946119d976897f1ce945caf227d0468",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/modules/package.json",
+      "bytes": 26,
+      "sha256": "f2a77d1fa2e7ee710b2835b2933d75d9c7f5dad4f1bab69e1679876e32b5e9eb",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/package.json",
+      "bytes": 1219,
+      "sha256": "f02b4851df316f29bdfcd404aa1eb41e4e216b5859015f81fcd3e91caf8be931",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/README.md",
+      "bytes": 4033,
+      "sha256": "d2e199aa7eafd807ba6c3c31edaf06cc06712f30ef965687e22d315b9e8f0543",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/SECURITY.md",
+      "bytes": 2757,
+      "sha256": "89c4e4b9ba7ec705482e2de05135d0626d33bf8c2c66119c65d7a306dd83459c",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/tslib.d.ts",
+      "bytes": 18317,
+      "sha256": "a6a5253138c5432c68a1510c70fe78a644fe2e632111ba778e1978010d6edfec",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/tslib.es6.html",
+      "bytes": 36,
+      "sha256": "759c26504a9ccbbfcd730269c9c5ef15512cf16ba617e61a92212365e57c9f5d",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/tslib.es6.js",
+      "bytes": 19215,
+      "sha256": "480042d65f5abdacdcf9d9ade38f9d484455be82aa34bd472bf6ab87ea0e3620",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/tslib.es6.mjs",
+      "bytes": 17648,
+      "sha256": "0929993220938091ede542d688b0fdb87dad99a7e77678e1983c32d18a503339",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/tslib.html",
+      "bytes": 32,
+      "sha256": "e14179f388a9690437165289d45ff7747f0f839538b5abec63d2dcfe21c2a5f4",
+      "mode": 420
+    },
+    {
+      "path": "node_modules/tslib/tslib.js",
+      "bytes": 23382,
+      "sha256": "8855865a058bc0a6df8f5db45347be041a2d6bbe1654216c51a805648c1b6e8a",
+      "mode": 420
+    },
+    {
+      "path": "plugin.json",
+      "bytes": 2023,
+      "sha256": "5f450147246644ff6227ac9cd60f194d40300196f7ace387d05cfcf5bc61040c",
+      "mode": 420
+    },
+    {
+      "path": "runtime/darwin-x64/node",
+      "bytes": 115498880,
+      "sha256": "c2e43022d8903698377cc7ae8bb71db2d227990d089cad2237f60a0f60756ff8",
+      "mode": 493
+    },
+    {
+      "path": "server/index.mjs",
+      "bytes": 1954325,
+      "sha256": "04c81534057a86be8d47640248c34f75af1d891c7566f94ebbb13e6dee3b403c",
+      "mode": 420
+    },
+    {
+      "path": "server/index.mjs.LEGAL.txt",
+      "bytes": 1618,
+      "sha256": "8ddf0daef706cdde943e9a1af838e544f254d6fdb247b54733675f501eef0dd2",
+      "mode": 420
+    },
+    {
+      "path": "server/panel.html",
+      "bytes": 1060477,
+      "sha256": "8f466e0307d003ae144387d757bcf22046ea47de38d13e0a1d7243c2537e62fa",
+      "mode": 420
+    },
+    {
+      "path": "skills/fm1-app-library/SKILL.md",
+      "bytes": 2931,
+      "sha256": "34089a88c19d5677617d09ebc604e66fdde4ae13f7e9be452b6984ed57cdf6fc",
+      "mode": 420
+    },
+    {
+      "path": "skills/fm1-forge-setup/SKILL.md",
+      "bytes": 2119,
+      "sha256": "b3aa3ac9df79db0a7678b5ab2c722bbe634c05f8d48f64d8acd29f24f3f4ab11",
+      "mode": 420
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.json",
+      "bytes": 2177,
+      "sha256": "7dca04391a23422c88ba6dfffa64a4d0cfdcd52bbdf5f94b4d0839cf2fc19f73",
+      "mode": 420
+    }
+  ],
+  "fileHashScope": "Every packaged file except BUILD-MANIFEST.json itself.",
+  "fileModeScope": "POSIX permission mode for every file; bundled Node must remain executable with mode 0755."
+}

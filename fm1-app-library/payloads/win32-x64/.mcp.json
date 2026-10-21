@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "fm1-forge-windows": {
+      "type": "stdio",
+      "command": "./runtime/win32-x64/node.exe",
+      "args": [
+        "${PLUGIN_ROOT}/server/index.mjs"
+      ],
+      "cwd": "${PLUGIN_ROOT}"
+    }
+  }
+}

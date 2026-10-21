@@ -1,0 +1,33 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "author": {
+    "name": "Keitarou Kondou"
+  },
+  "description": "Native macOS MIDI, reviewed stock and custom FWSC SysEx updates, and local firmware-project configuration. USB serial and UBOOT writes remain unavailable.",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "brandColor": "#000000",
+        "brandColorDark": "#a3efcc",
+        "capabilities": [
+          "Interactive"
+        ],
+        "category": "Productivity",
+        "composerIcon": "./assets/fm1-tab-light-128.png",
+        "composerIconDark": "./assets/fm1-tab-dark-128.png",
+        "defaultPrompt": "Open FM-1 Forge and connect FM-1 directly in the native panel.",
+        "developerName": "Keitarou Kondou",
+        "displayName": "FM-1 Forge macOS",
+        "logo": "./assets/fm1-tab-light-128.png",
+        "logoDark": "./assets/fm1-tab-dark-128.png",
+        "longDescription": "A self-contained macOS arm64 preview with a bundled runtime and native MIDI component. Connect FM-1 through native MIDI, review the official V15 package or a validated custom FWSC with its target build, then explicitly confirm the SysEx update. Durable original-attempt recovery prevents automatic retries after an uncertain transfer. Configure and save firmware-project drafts and settings locally. Codex starts the packaged server; no separately started helper is needed. Custom FWSC starts from stock V15 and verifies the exact Forge identity and build after reboot; subsequent common-firmware self-updates remain disabled. Raw MIDI commands, USB serial, UBOOT writes and compiler setup remain unavailable. Physical update acceptance is pending.",
+        "shortDescription": "macOS MIDI and FWSC updates"
+      },
+      "onboardingSkill": "./skills/fm1-forge-setup/SKILL.md"
+    }
+  },
+  "homepage": "https://fm1-app-library.keitark.chatgpt.site/",
+  "name": "fm1-app-library",
+  "repository": "https://github.com/Keitark/fm-1-forge",
+  "version": "3.4.0-alpha.9"
+}
