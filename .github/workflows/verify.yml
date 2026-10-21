@@ -90,13 +90,14 @@ jobs:
           Invoke-WebRequest -Uri 'https://nodejs.org/dist/v22.22.2/node-v22.22.2-win-x64.zip' -OutFile $archive
           if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7c93e9d92bf68c07182b471aa187e35ee6cd08ef0f24ab060dfff605fcc1c57c') { throw 'Windows runtime archive hash mismatch' }
           Expand-Archive -LiteralPath $archive -DestinationPath $env:RUNNER_TEMP
+          Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/nodejs/node/v22.22.2/LICENSE' -OutFile "$env:RUNNER_TEMP/Node-v22.22.2-LICENSE"
       - name: Build Windows native payload
         shell: pwsh
         run: |
           node site/scripts/build-fm1-panel.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory -Path 'tmp/native-win32-x64' -Force | Out-Null
-          node desktop/scripts/build-windows.mjs --out "$env:GITHUB_WORKSPACE/tmp/native-win32-x64/fm1-app-library" --node "$env:RUNNER_TEMP/node-v22.22.2-win-x64/node.exe" --node-license "$env:RUNNER_TEMP/node-v22.22.2-win-x64/LICENSE"
+          node desktop/scripts/build-windows.mjs --out "$env:GITHUB_WORKSPACE/tmp/native-win32-x64/fm1-app-library" --node "$env:RUNNER_TEMP/node-v22.22.2-win-x64/node.exe" --node-license "$env:RUNNER_TEMP/Node-v22.22.2-LICENSE"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           tar -czf tmp/native-win32-x64.tar.gz -C tmp/native-win32-x64 fm1-app-library
           exit $LASTEXITCODE
