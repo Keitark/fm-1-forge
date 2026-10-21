@@ -6,14 +6,14 @@ const user={isTrusted:true},synthetic={isTrusted:false},all=['stock-midi','firmw
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 const disconnected=(supportedTransports=all)=>({connected:false,transport:null,identity:null,installationAvailable:false,supportedTransports});
 const connected=transport=>({connected:true,transport,identity:transport==='stock-midi'?'FM-1_015':transport==='firmware-midi'?'FM1_FORGE_001':'FM1DIAG/1 MOD-EDITOR/1 RAM-TRANSFER UBOOT=SERIAL COMMIT=BLOCKED',...(transport==='serial'?{profile:'MOD-EDITOR/1'}:{}),loader:false,installationAvailable:false,supportedTransports:all});
-function fixture({supportedTransports=all,stockUpdateAvailable=false,handler}={}){
+function fixture({supportedTransports=all,stockUpdateAvailable=false,desktopPlatform='win32',handler}={}){
   const nodes=new Map(),calls=[],signals=[],timers=new Map(),events=new Map(),documentEvents=new Map(),changes=[];let sequence=0;
   const el=id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',disabled:false,hidden:false,className:'',onclick:null,onchange:null,open:false,showModal(){this.open=true;},close(){this.open=false;},addEventListener(){},removeEventListener(){},removeAttribute(name){delete this[name];}});return nodes.get(id);};
   const forbidden=()=>assert.fail('Desktop controls must not invoke browser device APIs');
   const runtime={navigator:{requestMIDIAccess:forbidden,serial:{requestPort:forbidden},usb:{requestDevice:forbidden}},document:{hidden:false,addEventListener:(name,fn)=>documentEvents.set(name,fn),removeEventListener:name=>documentEvents.delete(name)},
     addEventListener:(name,fn)=>events.set(name,fn),removeEventListener:name=>events.delete(name),setTimeout:(fn,ms)=>{const id=++sequence;timers.set(id,{fn,ms});return id;},clearTimeout:id=>timers.delete(id)};
   const abort=new AbortController(),call=async(name,args,signal)=>{calls.push({name,args});signals.push(signal);return handler?handler(name,args):name==='connect_fm1_device'?connected(args.transport):disconnected();};
-  const controller=mountDesktopDevicesUi({el,call,runtime,signal:abort.signal,supportedTransports,stockUpdateAvailable,onChange:value=>changes.push(value)});
+  const controller=mountDesktopDevicesUi({el,call,runtime,signal:abort.signal,supportedTransports,stockUpdateAvailable,desktopPlatform,onChange:value=>changes.push(value)});
   return {el,nodes,calls,signals,timers,events,documentEvents,changes,controller,runtime,abort,async poll(){const entry=timers.entries().next().value;assert.ok(entry,'one status timer expected');timers.delete(entry[0]);entry[1].fn();await tick();}};
 }
 
@@ -242,4 +242,12 @@ test('unsupported updater and late initial responses keep stock controls disable
   const f=stockFixture({status:stockStatus({supported:false})});await f.controller.ready;assert.equal(f.controller.state().stockUpdateAvailable,false);assert.equal(f.el('direct-stock-file').disabled,true);await f.controller.selectPackage(fileFor(new Uint8Array(packageBytes)),user);assert.equal(f.calls.length,1);f.controller.dispose();
   let release;const late=stockFixture({handler:name=>name==='get_fm1_stock_update_status'?new Promise(resolve=>{release=resolve;}):undefined});late.controller.dispose();release(stockStatus({writing:true,attempt:receipt()}));await late.controller.ready;
   assert.equal(late.controller.state().attempt,null);assert.equal(late.timers.size,0);assert.equal(late.calls.length,1);
+});
+
+test('macOS connection controls use the bundled native edition and preserve passive mount',async()=>{
+  const f=fixture({desktopPlatform:'darwin'});await f.controller.ready;
+  assert.equal(f.el('inventory-freshness').textContent,'macOS desktop plugin connection');
+  assert.match(f.el('direct-device-note').textContent,/bundled macOS plugin server/);
+  assert.doesNotMatch(f.el('direct-device-note').textContent,/Windows/);assert.equal(f.calls.length,0);
+  await f.controller.connectMidi(user);assert.equal(f.calls[0].name,'connect_fm1_device');assert.equal(f.controller.state().identity,'FM-1_015');f.controller.dispose();
 });

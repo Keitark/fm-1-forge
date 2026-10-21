@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { UI_HTML, WINDOWS_UI_HTML } from '../lib/fm1-ui.mjs';
+import { UI_HTML, WINDOWS_UI_HTML, MACOS_UI_HTML } from '../lib/fm1-ui.mjs';
 import * as generated from '../lib/fm1-app-sdk.generated.mjs';
 import { appearanceRuntime } from '../lib/fm1-appearance.mjs';
 import { moduleGraphRuntime } from '../lib/fm1-module-graph.mjs';
@@ -1125,5 +1125,20 @@ test('Windows native panel mounts its fixed MCP transport without browser permis
     await until(()=>p.node('connection-label').textContent==='Device disconnected');
     assert.deepEqual(p.requests.filter(name=>name==='connect_fm1_device'),['connect_fm1_device']);
     assert.ok(p.requests.includes('disconnect_fm1_device'));
+  }finally{p.dispose();}
+});
+
+test('macOS native panel renders its own edition with the same app-only native transport',async()=>{
+  const markup=MACOS_UI_HTML.split('<script>')[0];assert.doesNotMatch(markup,/id="direct-common(?:-|")/);assert.match(markup,/<h2>Custom firmware update · SysEx<\/h2>/);
+  const p=await panel({html:MACOS_UI_HTML,embedded:true,preserveDirectMode:true,backendOverride:async(name)=>{
+    if(name==='get_fm1_stock_update_status'||name==='get_fm1_custom_update_status')return {supported:true,writing:false,attempt:null,review:null};
+    assert.fail('Unexpected macOS desktop tool '+name);
+  }});
+  try{
+    await until(()=>p.requests.includes('get_fm1_custom_update_status')&&!p.node('direct-connect-midi').disabled);
+    assert.equal(JSON.parse(p.node('direct-hardware-report').textContent).platform,'darwin');assert.equal(p.node('surface-label').textContent,'FM-1 Forge macOS plugin');assert.equal(p.node('direct-context').textContent,'macOS · bundled runtime');
+    assert.equal(p.node('inventory-freshness').textContent,'macOS desktop plugin connection');assert.match(p.node('direct-device-note').textContent,/bundled macOS plugin server/);
+    assert.equal(p.node('direct-midi').textContent,'Native MIDI · no browser permission');assert.equal(p.node('direct-connect-serial').disabled,true);
+    assert.deepEqual(p.requests,['get_fm1_stock_update_status','get_fm1_custom_update_status']);
   }finally{p.dispose();}
 });

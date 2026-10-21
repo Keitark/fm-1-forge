@@ -52,3 +52,21 @@ test('successful native open keeps both objects owned until one idempotent close
   assert.equal(f.calls.filter(call => call === 'input:destroy').length, 1);
   assert.equal(f.calls.filter(call => call === 'output:destroy').length, 1);
 });
+
+test('macOS native enumeration never invokes Windows metadata or opens ports', async () => {
+  for (const arch of ['arm64', 'x64']) {
+    const f = nativeFixture(); let metadataCalls = 0;
+    const fixtureBackend = await f.backend(); // Constructor remains passive on the test host.
+    const inventory = await fixtureBackend.enumerate();
+    const module = { Input: { getPortNames: () => inventory.inputs.map(port => port.name) }, Output: { getPortNames: () => inventory.outputs.map(port => port.name) } };
+    const backend = await createNativeMidiBackend({ midiModule: module, platform: 'darwin', metadataReader: async () => { metadataCalls++; throw new Error('PowerShell must not run on macOS '+arch); } });
+    const found = await backend.enumerate();assert.equal(found.inputs[0].name,pair.inputName);assert.equal(found.outputs[0].name,pair.outputName);assert.equal(metadataCalls,0);assert.deepEqual(f.calls,[]);
+  }
+});
+
+test('Windows native enumeration retains its physical metadata lookup', async () => {
+  let metadataCalls = 0;
+  const module = { Input: { getPortNames: () => [pair.inputName] }, Output: { getPortNames: () => [pair.outputName] } };
+  const backend = await createNativeMidiBackend({ midiModule: module, platform: 'win32', metadataReader: async timeoutMs => { metadataCalls++;assert.equal(timeoutMs,250);return null; } });
+  await backend.enumerate(250);assert.equal(metadataCalls,1);
+});

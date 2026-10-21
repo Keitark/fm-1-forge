@@ -15,7 +15,7 @@ on 2026-10-19 without browser MIDI permission. The Windows edition supports revi
 V15-to-custom FWSC SysEx path with exact Forge build verification. Both require
 explicit confirmation and retain original-attempt recovery records. Physical
 update acceptance is pending. Subsequent common-firmware self-updates, compiler
-distribution and macOS/Linux qualification remain pending.
+distribution and Linux support remain pending. A separate macOS native preview is described below.
 See [the Windows package guide](desktop/README.md) and
 [native panel evidence](docs/WINDOWS_MCP_ROUTING_20261019.md).
 
@@ -305,3 +305,12 @@ serialized bytes, with durable
 receipt recovery for proven oversize rejections. Device writes and
 physical screen/audio/control acceptance require
 the established bench prerequisites and an explicitly confirmed operation.
+
+## macOS desktop preview
+
+**FM-1 Forge macOS 3.4.0-alpha.8** adds native Apple Silicon and Intel packages,
+with a bundled runtime and CoreMIDI component. It reuses the reviewed stock and
+custom FWSC SysEx paths and their recovery/confirmation checks. Download the
+matching native-CI artifact and install the included local marketplace; see
+[the macOS guide](docs/MACOS.md). Native package checks and physical FM-1 tests
+are reported separately. No Mac device flashing is claimed by this change.

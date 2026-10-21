@@ -1,13 +1,16 @@
 {
   "name": "fm1-forge-windows-package",
-  "version": "3.4.0-alpha.7",
+  "version": "3.4.0-alpha.8",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22 <23" },
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "build:windows": "node scripts/build-windows.mjs",
-    "test:package": "node --test test/package-windows.test.mjs"
+    "test:package": "node --test test/package-windows.test.mjs test/package-macos.test.mjs",
+    "build:macos": "node scripts/build-macos.mjs"
   },
   "devDependencies": {
     "@julusian/midi": "3.8.1",

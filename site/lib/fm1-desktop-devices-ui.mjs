@@ -1,6 +1,6 @@
 import {mountDesktopCustomUi} from './fm1-desktop-custom-ui.mjs';
 
-/** Foreground controls for the bundled Windows MCP server.
+/** Foreground controls for the bundled native MCP server.
  * Mounting reads a saved writer receipt only; connections and writes require a
  * trusted action. The native server owns transfers across panel lifetimes.
  */
@@ -47,7 +47,8 @@ function base64(bytes){
   return result;
 }
 
-export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChange=()=>{},supportedTransports=[],stockUpdateAvailable=false,customUpdateAvailable=false,pollIntervalMs=3000}={}){
+export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChange=()=>{},supportedTransports=[],stockUpdateAvailable=false,customUpdateAvailable=false,pollIntervalMs=3000,desktopPlatform='win32'}={}){
+  const desktopLabel=desktopPlatform==='darwin'?'macOS':'Windows';
   if(typeof el!=='function'||typeof call!=='function')throw new TypeError('Desktop device controls require the panel elements and fixed MCP tool caller.');
   if(!Number.isInteger(pollIntervalMs)||pollIntervalMs<1000||pollIntervalMs>60000)throw new RangeError('Desktop status polling must be 1000–60000 milliseconds.');
   const stockCapability=stockUpdateAvailable===true,customCapability=customUpdateAvailable===true;
@@ -73,13 +74,13 @@ export function mountDesktopDevicesUi({el,call,runtime=globalThis,signal,onChang
     const badge=el('connection');if(badge)badge.className='badge'+(current.connected?' online':'');
     const indicator=el('connection-check');if(indicator)indicator.hidden=!checking||runtime.document?.hidden===true;
     put('update-mode',current.connected?LABELS[current.transport]+(canUseStock()&&current.transport==='stock-midi'?' · official V15 updates':' · desktop read-only'):'Not connected');
-    put('inventory-freshness','Windows desktop plugin connection');
+    put('inventory-freshness',desktopLabel+' desktop plugin connection');
     for(const transport of TRANSPORTS){const node=el(BUTTONS[transport]);if(node)node.disabled=busy||writerBlocked()||!available.includes(transport);}
     const disconnect=el('direct-disconnect');if(disconnect)disconnect.disabled=busy||writerBlocked()||!current.connected;
     for(const id of UPDATE_CONTROLS){const node=el(id);if(node)node.disabled=true;}
     for(const id of ['direct-stock-recovery','direct-transfer','direct-common-transfer']){const node=el(id);if(node)node.hidden=true;}
     const capabilities=available.length?'Available: '+available.map(transport=>LABELS[transport]).join(', ')+'.':'Device transport capabilities are unavailable. Use Refresh to check the desktop server.';
-    put('direct-device-note',notice||'Device access runs through the bundled Windows plugin server. '+capabilities);
+    put('direct-device-note',notice||'Device access runs through the bundled '+desktopLabel+' plugin server. '+capabilities);
     const qualification='Desktop firmware installation is unavailable until the native transfer and recovery path is qualified. Connection checks do not write firmware.';
     put('direct-stock-note',qualification);put('direct-common-note',qualification);put('direct-package-summary','Native device connection only · package installation disabled.');put('direct-common-summary','Native device connection only · package installation disabled.');
     put('direct-hardware-note','Desktop connections use fixed MCP device tools. Browser MIDI, serial and USB permissions are not used.');

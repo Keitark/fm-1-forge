@@ -8,14 +8,14 @@ const fail = (code, message) => new StockError(code, message);
 
 // Loaded only by an explicit native connection. No renderer permission request,
 // HTTP listener, Python runtime or independently running service is involved.
-export async function createNativeMidiBackend({ midiModule, metadataReader = readWindowsMetadata } = {}) {
+export async function createNativeMidiBackend({ midiModule, metadataReader = readWindowsMetadata, platform = process.platform } = {}) {
   let midi;
   try { midi = midiModule ?? await import('@julusian/midi'); }
-  catch { throw fail('midi_runtime_unavailable', 'The packaged Windows MIDI runtime is unavailable.'); }
+  catch { throw fail('midi_runtime_unavailable', 'The packaged native MIDI runtime is unavailable.'); }
   const enumerate = async (timeoutMs = 10000) => {
     try {
-      return correlateInventory({ inputs: midi.Input.getPortNames(), outputs: midi.Output.getPortNames() }, await metadataReader(timeoutMs));
-    } catch { throw fail('midi_inventory_unavailable', 'Windows MIDI inventory is unavailable.'); }
+      return correlateInventory({ inputs: midi.Input.getPortNames(), outputs: midi.Output.getPortNames() }, platform === 'win32' ? await metadataReader(timeoutMs) : null);
+    } catch { throw fail('midi_inventory_unavailable', 'Native MIDI inventory is unavailable.'); }
   };
   return {
     enumerate,
@@ -57,7 +57,7 @@ export async function createNativeMidiBackend({ midiModule, metadataReader = rea
         async send(packet) {
           if (closed || failure) throw failure ?? fail('disconnected', 'The MIDI connection is closed.');
           try { output.sendMessage(Array.from(packet)); return true; }
-          catch { throw fail('send_failed', 'Windows MIDI delivery failed.'); }
+          catch { throw fail('send_failed', 'Native MIDI delivery failed.'); }
         },
         async read(milliseconds) {
           if (failure) throw failure;

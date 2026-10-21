@@ -1,7 +1,6 @@
-import path from 'node:path';
-import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { createDeviceOwner } from './device-owner.mjs';
+import { desktopDataDirectory } from './platform.mjs';
 import { createNativeMidiBackend } from './native-midi.mjs';
 import { identityQuery as stockIdentityQuery, parseIdentity as parseStockIdentity, StockError } from '../../tools/jieli-wl82/stock-sysex/protocol.mjs';
 import { canonicalName } from '../../tools/jieli-wl82/stock-sysex/selection.mjs';
@@ -14,7 +13,7 @@ const error = (code, message) => new StockError(code, message);
 
 function selectedPair(inventory) {
   if (!inventory || !Array.isArray(inventory.inputs) || !Array.isArray(inventory.outputs) || inventory.inputs.length > 256 || inventory.outputs.length > 256) {
-    throw error('invalid_inventory', 'Windows MIDI inventory exceeds its bounds.');
+    throw error('invalid_inventory', 'Native MIDI inventory exceeds its bounds.');
   }
   const names = values => values.map(port => canonicalName(typeof port === 'string' ? port : port?.name));
   const inputs = names(inventory.inputs), outputs = names(inventory.outputs), pairs = [];
@@ -40,7 +39,7 @@ function safeError(caught) {
   return { code, message };
 }
 
-export function createDeviceService({ backendFactory = createNativeMidiBackend, clock = realClock, directory = process.env.PLUGIN_DATA ?? path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'), 'FM1Forge', 'Windows'), ownerFactory = createDeviceOwner } = {}) {
+export function createDeviceService({ backendFactory = createNativeMidiBackend, clock = realClock, directory = desktopDataDirectory(), ownerFactory = createDeviceOwner } = {}) {
   const owner = ownerFactory({ directory });
   let generation = 0, writer = null, endpointReview = null;
   const requireIdle = () => { if (writer) throw error('device_busy', 'A reviewed stock update owns the FM-1 connection.'); };

@@ -78,3 +78,73 @@ jobs:
           $stockTests = Get-ChildItem tools/jieli-wl82/stock-sysex/test -Filter '*.test.mjs' | Select-Object -ExpandProperty FullName
           node --test $stockTests
           exit $LASTEXITCODE
+
+
+  macos:
+    name: macOS ${{ matrix.arch }} native package
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            node_sha256: db4b275b83736df67533529a18cc55de2549a8329ace6c7bcc68f8d22d3c9000
+          - runner: macos-15-intel
+            arch: x64
+            node_sha256: 12a6abb9c2902cf48a21120da13f87fde1ed1b71a13330712949e8db818708ba
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.2'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install pinned build dependencies
+        run: |
+          npm ci --prefix site
+          npm ci --ignore-scripts --prefix tools/jieli-wl82/stock-sysex
+      - name: Canonical native test paths
+        run: |
+          canonical_temp="$(node --input-type=module -e 'import {realpathSync} from "node:fs";console.log(realpathSync(process.env.RUNNER_TEMP))')"
+          echo "TMPDIR=$canonical_temp" >> "$GITHUB_ENV"
+          echo "TEMP=$canonical_temp" >> "$GITHUB_ENV"
+          echo "TMP=$canonical_temp" >> "$GITHUB_ENV"
+      - name: Native desktop and SysEx contracts
+        run: |
+          node --test desktop/test/*.test.mjs
+          node --test tools/jieli-wl82/stock-sysex/test/*.test.mjs
+      - name: Fetch reviewed matching Node distribution
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+          NODE_ARCHIVE_SHA256: ${{ matrix.node_sha256 }}
+        run: |
+          set -euo pipefail
+          test "$(node -p process.arch)" = "$TARGET_ARCH"
+          archive="node-v22.22.2-darwin-$TARGET_ARCH.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 "https://nodejs.org/dist/v22.22.2/$archive" --output "$RUNNER_TEMP/$archive"
+          printf '%s  %s\n' "$NODE_ARCHIVE_SHA256" "$RUNNER_TEMP/$archive" | shasum -a 256 --check
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+      - name: Build self-contained macOS marketplace
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          node site/scripts/build-fm1-panel.mjs
+          mkdir -p "tmp/fm1-forge-macos-$TARGET_ARCH/.agents/plugins"
+          node desktop/scripts/build-macos.mjs --arch "$TARGET_ARCH" --out "$GITHUB_WORKSPACE/tmp/fm1-forge-macos-$TARGET_ARCH/fm1-app-library" --node "$RUNNER_TEMP/node-v22.22.2-darwin-$TARGET_ARCH/bin/node" --node-license "$RUNNER_TEMP/node-v22.22.2-darwin-$TARGET_ARCH/LICENSE"
+          node desktop/scripts/stage-macos-marketplace.mjs "$GITHUB_WORKSPACE/tmp/fm1-forge-macos-$TARGET_ARCH"
+          node desktop/scripts/smoke-macos.mjs "$GITHUB_WORKSPACE/tmp/fm1-forge-macos-$TARGET_ARCH/fm1-app-library" "$TARGET_ARCH"
+          tar -czf "tmp/FM-1-Forge-macOS-$TARGET_ARCH-3.4.0-alpha.8.tar.gz" -C tmp "fm1-forge-macos-$TARGET_ARCH"
+          (
+            cd tmp
+            shasum -a 256 "FM-1-Forge-macOS-$TARGET_ARCH-3.4.0-alpha.8.tar.gz"
+          ) > "tmp/FM-1-Forge-macOS-$TARGET_ARCH-3.4.0-alpha.8.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FM-1-Forge-macOS-${{ matrix.arch }}-3.4.0-alpha.8
+          path: |
+            tmp/FM-1-Forge-macOS-*.tar.gz
+            tmp/FM-1-Forge-macOS-*.tar.gz.sha256
+          if-no-files-found: error

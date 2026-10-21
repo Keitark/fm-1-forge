@@ -24,7 +24,7 @@ before(async()=>{
 });
 after(async()=>{if(bundleRoot){assert.ok(path.basename(bundleRoot).startsWith('fm1-server-contract-bundle-'));assert.equal(path.dirname(bundleRoot),os.tmpdir());await fs.rm(bundleRoot,{recursive:true,force:true});}});
 
-async function fixture(t,{updates=true,custom=true}={}){
+async function fixture(t,{updates=true,custom=true,platform='win32',arch='x64'}={}){
   const base=await fs.mkdtemp(path.join(os.tmpdir(),'fm1-server-contract-data-')),original=await fs.realpath(base),directory=path.join(base,'metadata'),store=createProjectStore({directory}),calls=[];let current=idle(),closed=0;
   const deviceService={
     async connect(args){calls.push({method:'connect',args});current={...idle(),connected:true,transport:args.transport,identity:args.transport==='stock-midi'?'FM-1_015':'FM1_FORGE_001'};return {...current};},
@@ -56,7 +56,7 @@ async function fixture(t,{updates=true,custom=true}={}){
     async start(args){customCalls.push({method:'start',args});return {writing:true,attempt:customAttempt,review:null};},
     async close(){customCalls.push({method:'close'});},
   }:undefined;
-  const server=await serverModule.createDesktopServer({deviceService,stockUpdateService,customUpdateService,uiHtml:panel,store});
+  const server=await serverModule.createDesktopServer({deviceService,stockUpdateService,customUpdateService,uiHtml:panel,store,platform,arch});
   const revision='2025-11-25',client=new Client({name:'FM-1 desktop contract test',version:'1'},{capabilities:{},supportedProtocolVersions:[revision],versionNegotiation:{mode:'legacy'}});
   t.after(async()=>{try{await server.close();await client.close();}finally{assert.equal(await fs.realpath(base),original);assert.ok(path.basename(base).startsWith('fm1-server-contract-data-'));await fs.rm(base,{recursive:true,force:true});}});
   const [clientTransport,serverTransport]=InMemoryTransport.createLinkedPair();await server.connect(serverTransport);await client.connect(clientTransport);
@@ -127,7 +127,7 @@ test('file viewer accepts opaque host references and rejects filesystem paths an
 
 test('server shutdown closes the injected device service exactly once and rejects missing packaged panel',async t=>{
   const f=await fixture(t);await f.tool('connect_fm1_device',{transport:'stock-midi'});await f.server.close();await f.server.close();assert.equal(f.closeCount,1);assert.equal(f.calls.at(-1).method,'close');
-  let touched=false;await assert.rejects(serverModule.createDesktopServer({deviceService:{close(){touched=true;}},uiHtml:'<html>wrong panel</html>',store:f.store}),/packaged Windows panel/);assert.equal(touched,false);
+  let touched=false;await assert.rejects(serverModule.createDesktopServer({deviceService:{close(){touched=true;}},uiHtml:'<html>wrong panel</html>',store:f.store,platform:'win32',arch:'x64'}),/packaged Windows panel/);assert.equal(touched,false);
 });
 
 test('protocol shutdown completes even when native device cleanup reports an error',async t=>{
@@ -183,4 +183,26 @@ test('custom review/start dispatch remains bound to the separate service and mis
   const started=await f.tool('start_fm1_custom_update',{review_id:'b'.repeat(32),confirmed:true});assert.equal(started.structuredContent.attempt.boot_build_verified,false);assert.equal(started.structuredContent.attempt.observed_build_sha256,null);
   await f.tool('review_fm1_custom_recovery',{job_id:'c'.repeat(32)});assert.deepEqual(f.customCalls.map(value=>value.method),['beginUpload','appendUpload','review','start','reviewResume']);assert.deepEqual(f.updateCalls,[]);assert.deepEqual(f.calls,[]);
   const absent=await fixture(t,{custom:false});assert.equal((await absent.tool('open_fm1_library')).structuredContent.desktop.customUpdateAvailable,false);await refused(absent,'begin_fm1_custom_upload',{raw_bytes:623156,manifest:{}});assert.deepEqual(absent.calls,[]);
+});
+
+test('macOS editions advertise actual platform, native resource and passive tools for Apple Silicon and Intel',async t=>{
+  for(const arch of ['arm64','x64']){
+    const f=await fixture(t,{platform:'darwin',arch});
+    assert.equal(f.client.getServerVersion().name,'FM-1 Forge macOS');
+    const answer=(await f.tool('open_fm1_library')).structuredContent;
+    assert.equal(answer.desktop.platform,'darwin');assert.equal(answer.desktop.protocolVersion,2);
+    assert.deepEqual(answer.desktop.supportedTransports,transports);assert.equal(answer.desktop.stockUpdateAvailable,true);assert.equal(answer.desktop.customUpdateAvailable,true);
+    assert.match(answer.forge.gate.message,/in the macOS panel/);
+    const tools=(await f.client.listTools()).tools;
+    assert.equal(tools.find(value=>value.name==='open_fm1_library').title,'FM-1 Forge macOS');
+    for(const name of ['open_fm1_library','review_fm1_stock_update','review_fm1_custom_update'])assert.equal(tools.find(value=>value.name===name)._meta.ui.resourceUri,'ui://fm1/forge-macos-v1.html');
+    const resource=await f.client.readResource({uri:'ui://fm1/forge-macos-v1.html'});assert.match(resource.contents[0].text,/const desktopMode=true/);
+    const configured=(await f.tool('configure_fm1_project')).structuredContent;assert.match(configured.message,/this macOS panel/);
+    assert.deepEqual(f.calls,[]);assert.deepEqual(f.updateCalls,[]);assert.deepEqual(f.customCalls,[]);
+  }
+});
+
+test('unsupported platform injection is rejected before creating local stores or MIDI services',async()=>{
+  await assert.rejects(serverModule.createDesktopServer({platform:'linux',arch:'x64',uiHtml:panel}),{code:'unsupported_desktop_platform'});
+  await assert.rejects(serverModule.createDesktopServer({platform:'darwin',arch:'ia32',uiHtml:panel}),{code:'unsupported_desktop_platform'});
 });
