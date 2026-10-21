@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import { pathToFileURL } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 import { Client } from '../../site/node_modules/@modelcontextprotocol/client/dist/index.mjs';
 import { StdioClientTransport } from '../../site/node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
 
@@ -21,6 +22,8 @@ assert.equal(manifest.format,'fm1-forge-universal-package-v1');
 assert.deepEqual(manifest.targets,targets);assert.equal(manifest.version,'3.4.0-alpha.9');
 assert.deepEqual(manifest.nativeInputs.map(input=>input.target).sort(),[...targets].sort());
 const hash=data=>createHash('sha256').update(data).digest('hex');
+const maximumGitFileBytes=100*1024*1024;
+assert.ok((await fs.stat(path.join(root,'BUILD-MANIFEST.json'))).size<maximumGitFileBytes,'The outer manifest must fit GitHub ordinary Git');
 const safeRelative=name=>typeof name==='string'&&name.length>0&&!name.includes('\\')&&!/[\u0000-\u001f\u007f:]/.test(name)&&!name.startsWith('/')&&name.split('/').every(part=>part&&part!=='.'&&part!=='..');
 async function tree(directory,relative=''){
   const output=[];
@@ -36,6 +39,7 @@ async function verifyFiles(directory){
   for(const record of manifest.files){
     assert.ok(safeRelative(record.path),'Unsafe manifest file path');assert.ok(!expected.has(record.path),'Duplicate manifest file path');expected.add(record.path);
     assert.ok(Number.isInteger(record.mode)&&record.mode>=0&&record.mode<=0o777,'Missing package file mode');
+    assert.ok(Number.isSafeInteger(record.bytes)&&record.bytes>=0&&record.bytes<maximumGitFileBytes,`Package file exceeds GitHub ordinary Git limit: ${record.path}`);
     const filename=path.join(directory,record.path),data=await fs.readFile(filename),stat=await fs.lstat(filename);
     assert.ok(stat.isFile()&&!stat.isSymbolicLink(),'Manifest file must be a regular file');
     assert.equal(data.length,record.bytes,`Package byte count: ${record.path}`);assert.equal(hash(data),record.sha256,`Package SHA-256: ${record.path}`);
@@ -45,11 +49,35 @@ async function verifyFiles(directory){
   assert.equal(hash(await fs.readFile(path.join(directory,'BUILD-MANIFEST.json'))),hash(await fs.readFile(path.join(root,'BUILD-MANIFEST.json'))),'Installed manifest changed');
 }
 await verifyFiles(root);
+const nativeManifests=new Map();
 for(const input of manifest.nativeInputs){
   assert.equal(input.path,`payloads/${input.target}`);
   const bytes=await fs.readFile(path.join(root,input.path,'BUILD-MANIFEST.json'));assert.equal(hash(bytes),input.manifestSha256);
   const native=JSON.parse(bytes);assert.equal(`${native.platform}-${native.arch}`,input.target);assert.equal(native.version,manifest.version);
   assert.equal(native.nativeLoadCheck.loaded,true);assert.equal(native.nativeLoadCheck.enumeratedPorts,false);assert.equal(native.nativeLoadCheck.openedDevice,false);
+  assert.equal(input.runtimeSha256,native.runtime.sha256);nativeManifests.set(input.target,native);
+}
+// macOS Node distributions exceed GitHub's ordinary Git file limit. Verify the
+// gzip representation against the unchanged, natively tested raw runtime receipt.
+const archivedTargets=['darwin-arm64','darwin-x64'];
+assert.ok(Array.isArray(manifest.runtimeArchives),'Missing compressed runtime receipts');
+assert.deepEqual(manifest.runtimeArchives.map(archive=>archive.target).sort(),archivedTargets);
+const outerFiles=new Map(manifest.files.map(record=>[record.path,record]));
+for(const archive of manifest.runtimeArchives){
+  const rawPath=`runtime/${archive.target}/node`,prefix=`payloads/${archive.target}/`;
+  assert.equal(archive.path,`${prefix}${rawPath}.gz`);
+  const native=nativeManifests.get(archive.target),raw=native.files.find(record=>record.path===rawPath);
+  assert.ok(raw,'Missing immutable native runtime file receipt');assert.equal(raw.mode,0o755);
+  assert.equal(archive.rawBytes,raw.bytes);assert.equal(archive.rawSha256,raw.sha256);assert.equal(archive.rawSha256,native.runtime.sha256);
+  assert.ok(Number.isSafeInteger(archive.rawBytes)&&archive.rawBytes>0&&archive.rawBytes<=200*1024*1024,'Unexpected raw Node runtime size');
+  const packed=outerFiles.get(archive.path),digestFile=outerFiles.get(`${prefix}${rawPath}.sha256`);
+  assert.ok(packed&&digestFile,'Missing packaged compressed runtime files');
+  assert.equal(packed.bytes,archive.bytes);assert.equal(packed.sha256,archive.sha256);assert.equal(packed.mode,0o644);assert.equal(digestFile.mode,0o644);
+  assert.equal(outerFiles.has(`${prefix}${rawPath}`),false,'Raw macOS Node must not be stored in the Git package');
+  await assert.rejects(fs.lstat(path.join(root,prefix,rawPath)),{code:'ENOENT'},'Raw macOS Node must be absent');
+  assert.equal(await fs.readFile(path.join(root,prefix,`${rawPath}.sha256`),'utf8'),`${archive.rawSha256}\n`);
+  const bytes=await fs.readFile(path.join(root,archive.path));assert.equal(hash(bytes),archive.sha256);
+  const decoded=gunzipSync(bytes,{maxOutputLength:archive.rawBytes});assert.equal(decoded.length,archive.rawBytes);assert.equal(hash(decoded),archive.rawSha256);
 }
 for(const filename of ['mcp.json','.mcp.json']){
   const config=JSON.parse(await fs.readFile(path.join(root,filename),'utf8'));
@@ -135,6 +163,6 @@ async function codexStatus(){
 }
 const codexInstallation=await codexStatus();
 await verifyFiles(installedRoot);await verifyFiles(root);
-const receipt={format:'fm1-forge-universal-verification-v1',version:manifest.version,platform:process.platform,arch:process.arch,selectedTarget:target,verifiedFiles:manifest.files.length+1,posixModesVerified:process.platform==='darwin',nativeAddon,checks,codexInstallation,enumeratedPorts:false,deviceOpened:false,firmwareWritten:false,physicalAcceptance:'pending'};
+const receipt={format:'fm1-forge-universal-verification-v1',version:manifest.version,platform:process.platform,arch:process.arch,selectedTarget:target,verifiedFiles:manifest.files.length+1,posixModesVerified:process.platform==='darwin',runtimeArchivesVerified:manifest.runtimeArchives.length,runtimeExtractionVerified:process.platform==='darwin',nativeAddon,checks,codexInstallation,enumeratedPorts:false,deviceOpened:false,firmwareWritten:false,physicalAcceptance:'pending'};
 await fs.writeFile(path.join(marketplace,`UNIVERSAL-VERIFICATION-${target}.json`),JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});
 console.log(JSON.stringify(receipt,null,2));

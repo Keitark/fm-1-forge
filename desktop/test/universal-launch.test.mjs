@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { chmod, copyFile, link, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, link, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { test } from 'node:test';
 import { selectDesktopPayload } from '../universal/start.mjs';
 
@@ -29,7 +31,13 @@ async function runtimeAlias(source, destination) {
   }
 }
 
-async function packageFixture(t, { payload = true } = {}) {
+let packedRuntime;
+async function compressedRuntime() {
+  packedRuntime ??= readFile(process.execPath).then(raw => ({ gzip: gzipSync(raw), sha256: createHash('sha256').update(raw).digest('hex') }));
+  return packedRuntime;
+}
+
+async function packageFixture(t, { payload = true, payloadSource } = {}) {
   const root = await fixture(t), target = selectDesktopPayload();
   await mkdir(path.join(root, 'runtime'));
   await copyFile(launcherSource, path.join(root, 'start.mjs'));
@@ -40,22 +48,24 @@ async function packageFixture(t, { payload = true } = {}) {
   } else {
     const runtime = path.join(root, 'payloads', target, 'runtime', target);
     await mkdir(runtime, { recursive: true });
-    await runtimeAlias(process.execPath, path.join(runtime, 'node'));
+    const packed = await compressedRuntime();
+    await writeFile(path.join(runtime, 'node.gz'), packed.gzip);
+    await writeFile(path.join(runtime, 'node.sha256'), packed.sha256 + '\n');
   }
   if (payload) {
     const server = path.join(root, 'payloads', target, 'server');
     await mkdir(server, { recursive: true });
-    await writeFile(path.join(server, 'index.mjs'),
+    await writeFile(path.join(server, 'index.mjs'), payloadSource ??
       'export async function startStdio(){process.stdout.write(JSON.stringify({target:' +
       JSON.stringify(target) + ',platform:process.platform,arch:process.arch,data:process.env.PLUGIN_DATA,args:process.argv.slice(2)}));}');
   }
   return root;
 }
 
-function invoke(root, args = []) {
+function invoke(root, args = [], { input } = {}) {
   return spawnSync(path.join(root, 'runtime/node'), [path.join(root, 'start.mjs'), ...args], {
-    cwd: root, encoding: 'utf8', timeout: 10000, windowsHide: true,
-    env: { ...process.env, PATH: '', PLUGIN_DATA: 'preserved-user-data', FM1_TARGET: 'linux-x64', FM1_PLATFORM: 'linux', FM1_ARCH: 'arm64' },
+    cwd: root, encoding: 'utf8', timeout: 20000, windowsHide: true, input,
+    env: { ...process.env, PATH: '', TMPDIR: root, PLUGIN_DATA: 'preserved-user-data', FM1_TARGET: 'linux-x64', FM1_PLATFORM: 'linux', FM1_ARCH: 'arm64' },
   });
 }
 
@@ -82,7 +92,12 @@ test('POSIX dispatcher uses fixed system utilities and bundled Darwin runtimes',
   assert.match(shell, /\/usr\/bin\/uname -m/);
   assert.match(shell, /arm64\) target=darwin-arm64/);
   assert.match(shell, /x86_64\) target=darwin-x64/);
-  assert.match(shell, /exec "\$node_path" "\$@"/);
+  assert.match(shell, /"\$cache\/node" "\$@" <&0 &/);
+  assert.match(shell, /umask 077/);
+  assert.match(shell, /\/usr\/bin\/gzip -dc/);
+  assert.match(shell, /\/usr\/bin\/shasum -a 256/);
+  assert.match(shell, /\/bin\/chmod 0500/);
+  assert.doesNotMatch(shell, /rm -rf|rm -r /);
   assert.doesNotMatch(shell, /curl|wget|python|command -v|\/usr\/bin\/env|eval/);
 });
 
@@ -92,6 +107,7 @@ test('common extensionless command starts the matching native payload with PATH 
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stderr, '');
   assert.deepEqual(JSON.parse(run.stdout), { target: selectDesktopPayload(), platform: process.platform, arch: process.arch, data: 'preserved-user-data', args: [] });
+  assert.deepEqual((await readdir(root)).filter(name => name.startsWith('fm1-forge-runtime.')), []);
 });
 
 test('launcher refuses additional target or runtime arguments before importing a payload', { skip: !supportedHost }, async t => {
@@ -123,4 +139,46 @@ test('universal skills describe automatic selection and explicit programming rev
     assert.match(skill, /UBOOT/);
     assert.match(skill, /PLUGIN_DATA/);
   }
+});
+
+test('macOS temporary runtime preserves all stdio, private modes and cleanup', { skip: process.platform !== 'darwin' }, async t => {
+  const payloadSource = `import {statSync} from 'node:fs';import path from 'node:path';export async function startStdio(){let input='';for await(const chunk of process.stdin)input+=chunk;process.stderr.write('payload stderr\\n');process.stdout.write(JSON.stringify({input,nodeMode:statSync(process.execPath).mode&0o777,cacheMode:statSync(path.dirname(process.execPath)).mode&0o777,data:process.env.PLUGIN_DATA}));}`;
+  const root = await packageFixture(t, { payloadSource }), run = invoke(root, [], { input: 'MCP stdin preserved\n' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stderr, 'payload stderr\n');
+  assert.deepEqual(JSON.parse(run.stdout), { input: 'MCP stdin preserved\n', nodeMode: 0o500, cacheMode: 0o700, data: 'preserved-user-data' });
+  assert.deepEqual((await readdir(root)).filter(name => name.startsWith('fm1-forge-runtime.')), []);
+});
+
+test('macOS rejects a corrupt compressed runtime or digest and cleans partial extraction', { skip: process.platform !== 'darwin' }, async t => {
+  const root = await packageFixture(t), target = selectDesktopPayload();
+  const runtime = path.join(root, 'payloads', target, 'runtime', target), packed = await compressedRuntime();
+  for (const [gzip, sha256] of [[packed.gzip, '0'.repeat(64) + '\n'], [packed.gzip, 'A'.repeat(64) + '\n'], [packed.gzip, packed.sha256 + '\nextra\n'], [packed.gzip, packed.sha256], [Buffer.from('invalid gzip'), packed.sha256 + '\n']]) {
+    await writeFile(path.join(runtime, 'node.gz'), gzip);
+    await writeFile(path.join(runtime, 'node.sha256'), sha256);
+    const run = invoke(root);
+    assert.equal(run.status, 1);
+    assert.equal(run.stdout, '');
+    assert.equal(run.stderr, 'FM-1 Forge could not start. Verify the installed desktop package.\n');
+    assert.deepEqual((await readdir(root)).filter(name => name.startsWith('fm1-forge-runtime.')), []);
+  }
+});
+
+test('macOS supervisor forwards termination, preserves exit status and removes its runtime', { skip: process.platform !== 'darwin' }, async t => {
+  const root = await packageFixture(t);
+  const marker = path.join(root, 'signal-observed');
+  const payloadSource = `import {writeFileSync} from 'node:fs';export async function startStdio(){process.on('SIGTERM',()=>{writeFileSync(${JSON.stringify(marker)},'TERM');process.exit(23);});setInterval(()=>{},1000);process.stdout.write('READY\\n');}`;
+  await writeFile(path.join(root, 'payloads', selectDesktopPayload(), 'server/index.mjs'), payloadSource);
+  const result = await new Promise((resolve, reject) => {
+    const child = spawn(path.join(root, 'runtime/node'), [path.join(root, 'start.mjs')], { cwd: root, env: { ...process.env, PATH: '', TMPDIR: root }, stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '', signaled = false;
+    const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('Runtime signal forwarding timed out')); }, 20000);
+    child.on('error', error => { clearTimeout(timer); reject(error); });
+    child.stdout.on('data', data => { stdout += data; if (!signaled && stdout.includes('READY\n')) { signaled = true; child.kill('SIGTERM'); } });
+    child.stderr.on('data', data => { stderr += data; });
+    child.on('close', (code, signal) => { clearTimeout(timer); resolve({ code, signal, stdout, stderr, signaled }); });
+  });
+  assert.deepEqual(result, { code: 23, signal: null, stdout: 'READY\n', stderr: '', signaled: true });
+  assert.equal(await readFile(marker, 'utf8'), 'TERM');
+  assert.deepEqual((await readdir(root)).filter(name => name.startsWith('fm1-forge-runtime.')), []);
 });

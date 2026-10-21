@@ -3,8 +3,9 @@ import { createHash } from 'node:crypto';
 import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { test } from 'node:test';
-import { checkedPackagePath, parseUniversalArguments, stageUniversalManifest, universalMcpConfiguration, UNIVERSAL_MCP_SERVER_NAME, UNIVERSAL_TARGETS, validateNativeInputs, validateNativeReceipt, validatePackageFiles, buildUniversalPackage } from '../scripts/build-universal.mjs';
+import { compressDarwinRuntime, assertGitFileSizes, checkedPackagePath, parseUniversalArguments, stageUniversalManifest, universalMcpConfiguration, UNIVERSAL_MCP_SERVER_NAME, UNIVERSAL_TARGETS, validateNativeInputs, validateNativeReceipt, validatePackageFiles, buildUniversalPackage } from '../scripts/build-universal.mjs';
 import { getPackageTarget, NODE_LICENSE_SHA256, NODE_VERSION, PACKAGE_VERSION, PINNED_BUILD_DEPENDENCIES } from '../scripts/build-native.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -165,4 +166,54 @@ test('Windows refuses full assembly before creating an output with lost POSIX mo
   const root = await fixture(t), output = path.join(root, 'unclaimed');
   await assert.rejects(buildUniversalPackage({ outputDirectory: output }), /POSIX host/);
   await assert.rejects(lstat(output), /ENOENT/);
+});
+
+async function runtimeFixture(t, id = 'darwin-arm64') {
+  const root = await fixture(t), manifest = receipt(id), runtime = manifest.files[0];
+  const bytes = Buffer.from('A native runtime fixture\n'.repeat(4096));
+  runtime.sha256 = digest(bytes); runtime.bytes = bytes.length; manifest.runtime.sha256 = runtime.sha256;
+  const filename = path.join(root, runtime.path);
+  await mkdir(path.dirname(filename), { recursive: true });
+  await writeFile(filename, bytes); await chmod(filename, 0o755);
+  await writeFile(path.join(root, 'BUILD-MANIFEST.json'), JSON.stringify(manifest));
+  return { root, manifest, bytes, filename };
+}
+
+test('Darwin runtime archive preserves exact raw bytes and immutable native manifest', async t => {
+  for (const id of ['darwin-arm64', 'darwin-x64']) {
+    const item = await runtimeFixture(t, id), before = await readFile(path.join(item.root, 'BUILD-MANIFEST.json'));
+    const archived = await compressDarwinRuntime(item.root, id), compressed = await readFile(`${item.filename}.gz`);
+    assert.equal(archived.target, id);
+    assert.equal(archived.path, `payloads/${id}/runtime/${id}/node.gz`);
+    assert.equal(archived.bytes, compressed.length); assert.equal(archived.sha256, digest(compressed));
+    assert.equal(archived.rawBytes, item.bytes.length); assert.equal(archived.rawSha256, digest(item.bytes));
+    assert.deepEqual(gunzipSync(compressed), item.bytes);
+    assert.equal(await readFile(`${item.filename}.sha256`, 'utf8'), `${digest(item.bytes)}\n`);
+    assert.deepEqual(await readFile(path.join(item.root, 'BUILD-MANIFEST.json')), before);
+    await assert.rejects(lstat(item.filename), /ENOENT/);
+    if (process.platform !== 'win32') {
+      assert.equal((await lstat(`${item.filename}.gz`)).mode & 0o777, 0o644);
+      assert.equal((await lstat(`${item.filename}.sha256`)).mode & 0o777, 0o644);
+    }
+  }
+});
+
+test('Darwin gzip output is deterministic and refuses tampered raw input or existing archive', async t => {
+  const one = await runtimeFixture(t), two = await runtimeFixture(t);
+  const first = await compressDarwinRuntime(one.root, 'darwin-arm64'), second = await compressDarwinRuntime(two.root, 'darwin-arm64');
+  assert.equal(first.sha256, second.sha256);
+  const tampered = await runtimeFixture(t); await writeFile(tampered.filename, 'changed runtime');
+  await assert.rejects(compressDarwinRuntime(tampered.root, 'darwin-arm64'), /differs from its native manifest/);
+  await assert.rejects(lstat(`${tampered.filename}.gz`), /ENOENT/);
+  assert.equal(await readFile(tampered.filename, 'utf8'), 'changed runtime');
+  const existing = await runtimeFixture(t); await writeFile(`${existing.filename}.gz`, 'preserve previous');
+  await assert.rejects(compressDarwinRuntime(existing.root, 'darwin-arm64'), /already exists/);
+  assert.deepEqual(await readFile(existing.filename), existing.bytes);
+  assert.equal(await readFile(`${existing.filename}.gz`, 'utf8'), 'preserve previous');
+  await assert.rejects(compressDarwinRuntime(existing.root, 'win32-x64'), /Only Darwin/);
+});
+
+test('Git distribution rejects any individual file at the 100 MiB limit', () => {
+  assert.doesNotThrow(() => assertGitFileSizes([{ path: 'runtime/node.exe', bytes: 87_074_816 }, { path: 'node.gz', bytes: 100 * 1024 * 1024 - 1 }]));
+  for (const bytes of [100 * 1024 * 1024, 100 * 1024 * 1024 + 1, -1, NaN]) assert.throws(() => assertGitFileSizes([{ path: 'oversized', bytes }]), /100 MiB/);
 });

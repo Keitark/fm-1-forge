@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { chmod, copyFile, lstat, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, lstat, mkdir, readFile, readdir, realpath, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { gzipSync, gunzipSync } from 'node:zlib';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertFreshOutput, getPackageTarget, NODE_LICENSE_SHA256, NODE_VERSION, PACKAGE_VERSION, PINNED_BUILD_DEPENDENCIES, packageFileHashes, requireAbsoluteInput } from './build-native.mjs';
 
@@ -181,6 +182,38 @@ export function stageUniversalManifest(source, legacy = false) {
   return staged;
 }
 
+/** Compress only the verified copied Darwin Node executable for Git's file-size limit. */
+export async function compressDarwinRuntime(directory, id) {
+  const target = targetDescription(id);
+  if (target.platform !== 'darwin') throw new Error('Only Darwin runtimes are archived');
+  const root = await checkedRoot(directory);
+  const manifest = JSON.parse(await readFile(path.join(root, 'BUILD-MANIFEST.json'), 'utf8'));
+  const { files } = validateNativeReceipt(manifest, id);
+  const relative = target.runtimeRelative, filename = path.join(root, relative);
+  const stat = await lstat(filename);
+  if (!stat.isFile() || stat.isSymbolicLink() || !contained(root, await realpath(filename))) throw new Error('Darwin runtime must be a contained regular file');
+  const raw = await readFile(filename), expected = files.get(relative);
+  if (raw.length !== expected.bytes || digest(raw) !== expected.sha256) throw new Error('Darwin runtime differs from its native manifest');
+  const archiveName = `${filename}.gz`, checksumName = `${filename}.sha256`;
+  for (const output of [archiveName, checksumName]) {
+    try { await lstat(output); throw new Error('Darwin runtime archive output already exists'); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  const archive = gzipSync(raw, { level: 9, mtime: 0 });
+  if (!gunzipSync(archive).equals(raw)) throw new Error('Darwin runtime archive round-trip failed');
+  await writeFile(archiveName, archive, { flag: 'wx', mode: 0o644 });
+  await writeFile(checksumName, `${expected.sha256}\n`, { flag: 'wx', mode: 0o644 });
+  await chmod(archiveName, 0o644); await chmod(checksumName, 0o644);
+  if (digest(await readFile(archiveName)) !== digest(archive) || (await readFile(checksumName, 'utf8')) !== `${expected.sha256}\n` || digest(await readFile(filename)) !== expected.sha256) throw new Error('Darwin runtime archive changed while staging');
+  // This is the exact copied output file; source payloads and manifests remain untouched.
+  await unlink(filename);
+  return { target: id, path: `payloads/${id}/${relative}.gz`, bytes: archive.length, sha256: digest(archive), rawBytes: raw.length, rawSha256: expected.sha256 };
+}
+
+export function assertGitFileSizes(files) {
+  for (const file of files) if (!Number.isSafeInteger(file.bytes) || file.bytes < 0 || file.bytes >= 100 * 1024 * 1024) throw new Error(`Package file reaches GitHub's 100 MiB limit: ${file.path}`);
+}
+
 async function copyVerifiedTree(input, destination) {
   await mkdir(destination, { recursive: true });
   for (const entry of input.entries) {
@@ -253,15 +286,20 @@ export async function buildUniversalPackage(options) {
     const copied = await validateNativePackage(path.join(output, 'payloads', input.id), input.id);
     if (copied.manifestSha256 !== input.manifestSha256) throw new Error('Native manifest changed during assembly');
   }
+  const runtimeArchives = [];
+  for (const id of ['darwin-arm64', 'darwin-x64']) runtimeArchives.push(await compressDarwinRuntime(path.join(output, 'payloads', id), id));
   const files = await packageFileHashes(output, '', { includeModes: true });
+  assertGitFileSizes(files);
   const report = { format: 'fm1-forge-universal-package-v1', version: PACKAGE_VERSION, targets: [...UNIVERSAL_TARGETS], expectedTargets: [...UNIVERSAL_TARGETS],
     ...(options.sourceRevision ? { sourceRevision: options.sourceRevision.toLowerCase() } : {}),
     nativeInputs: inputs.map(input => ({ target: input.id, path: `payloads/${input.id}`, manifestSha256: input.manifestSha256, version: input.manifest.version, sourceCount: input.manifest.sources.length, runtimeSha256: input.manifest.runtime.sha256 })),
-    runtime: { version: NODE_VERSION, licenseSha256: NODE_LICENSE_SHA256 }, sources: sorted(sources), files,
-    fileHashScope: 'Every packaged file except this outer BUILD-MANIFEST.json. Native payload manifests are retained byte for byte.',
-    fileModeScope: 'POSIX permission mode for every file; macOS runtime modes are preserved and runtime/node is 0755.',
+    runtime: { version: NODE_VERSION, licenseSha256: NODE_LICENSE_SHA256 }, runtimeArchives, sources: sorted(sources), files,
+    fileHashScope: 'Every packaged file except this outer BUILD-MANIFEST.json. Native payload manifests are retained byte for byte; each Darwin Node is stored as verified gzip plus its raw SHA-256.',
+    fileModeScope: 'POSIX permission mode for every file; native macOS runtime mode 0755 is retained in its native receipt; stored runtime archives and checksum files are 0644; runtime/node is 0755.',
     verification: { assembledOn: process.platform, enumeratedPorts: false, openedDevice: false, nativeAcceptance: 'See each immutable native payload BUILD-MANIFEST.json and matching native CI smoke receipt.' } };
-  await writeFile(path.join(output, 'BUILD-MANIFEST.json'), json(report), { flag: 'wx' });
+  const reportBytes = Buffer.from(json(report));
+  assertGitFileSizes([{ path: 'BUILD-MANIFEST.json', bytes: reportBytes.length }]);
+  await writeFile(path.join(output, 'BUILD-MANIFEST.json'), reportBytes, { flag: 'wx' });
   return { outputDirectory: output, version: PACKAGE_VERSION, targets: [...UNIVERSAL_TARGETS], files: files.length + 1, deviceOpened: false };
 }
 

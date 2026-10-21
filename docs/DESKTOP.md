@@ -47,7 +47,10 @@ The portable MCP configuration has one server, `fm1-forge`, with command
 
 - Windows selects the adjacent reviewed `runtime/node.exe`.
 - macOS executes `runtime/node`, a `/bin/sh` launcher using the fixed system
-  `uname` to choose the included Apple Silicon or Intel Node runtime.
+  `uname` to choose the included Apple Silicon or Intel Node runtime. The Mac
+  runtime is stored as gzip to meet Git hosting limits. The launcher unpacks it
+  into a fresh private temporary directory, checks its exact SHA-256, runs it
+  with the original protocol streams and removes that temporary runtime on exit.
 - `start.mjs` selects the matching intact native payload from the actual
   `process.platform` and `process.arch`. Environment or command-line target
   overrides are not accepted.
@@ -79,8 +82,10 @@ compiler distribution are outside this package's current support.
 Native CI builds Windows x64 and each Mac architecture using hash-pinned
 Node v22.22.2 and MIDI 3.8.1. The assembler accepts exactly three matching
 version/source closures, verifies every file, runtime pin, license notice and
-Mac mode, and retains each native manifest unchanged. The outer manifest records
-all payload hashes, launcher sources, source commit and POSIX modes.
+Mac mode, and retains each native manifest unchanged. Mac runtime containers
+record both compressed and original hashes; server code and native addons stay
+unchanged. Every shipped file is below 100 MiB for Git distribution. The outer
+manifest records all payload hashes, launcher sources, source commit and POSIX modes.
 
 ```sh
 node desktop/scripts/build-universal.mjs --out /checkout/tmp/fm1-forge-desktop/fm1-app-library --windows /checkout/tmp/native/win32-x64/fm1-app-library --macos-arm64 /checkout/tmp/native/darwin-arm64/fm1-app-library --macos-x64 /checkout/tmp/native/darwin-x64/fm1-app-library --source-revision FULL_40_HEX_COMMIT
