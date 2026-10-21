@@ -4,5 +4,9 @@ tools/jieli-wl82/* -text
 # Normalize repository documentation and metadata.
 *.md text eol=lf
 *.json text eol=lf
+*.mjs text eol=lf
 .gitignore text eol=lf
 .gitattributes text eol=lf
+
+# Preserve the exact Apache updater bytes recorded by ORIGIN.md.
+site/lib/browser-common/* -text

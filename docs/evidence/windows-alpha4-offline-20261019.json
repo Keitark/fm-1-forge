@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "version": "3.4.0-alpha.4",
+  "checks": {
+    "desktop_tests": {
+      "passed": 80,
+      "failed": 0,
+      "skipped": 0
+    },
+    "site_tests": {
+      "passed": 478,
+      "failed": 0,
+      "skipped": 0
+    },
+    "stock_sysex_tests": {
+      "passed": 46,
+      "failed": 0,
+      "skipped": 0
+    },
+    "typescript": "passed",
+    "panel_build": "passed",
+    "production_build": "passed",
+    "packaged_protocols": [
+      "2026-07-28",
+      "2025-11-25",
+      "2024-11-05"
+    ],
+    "empty_path_launch": "passed",
+    "installed_file_hashes": 127
+  },
+  "package_manifest_sha256": "023e7e8791a00d5744d4046a004e09e633b9b903dbc059545478c1f3a6faf9e8",
+  "archive_sha256": "538e3a7a01749cf427194d7b9dea718d15e417e5aca5622823a383adf60a5c74",
+  "native_addon_loaded_without_enumeration": true,
+  "app_only_install_tool": true,
+  "custom_installation_enabled": false,
+  "physical_stock_write_performed": false,
+  "native_alpha4_panel_acceptance": "pending: current chat retains alpha3 MCP instance; open a new chat to activate installed alpha4"
+}

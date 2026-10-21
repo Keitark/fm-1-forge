@@ -1,5 +1,693 @@
 # Integration verification
 
+## Steady connection labels and simplified panel, 2026-10-12
+
+Automatic, manual and wake checks now use a small blinking circle beside the
+device status. The heading and device label retain their last confirmed value
+until a fresh inventory changes it; identical values do not rewrite those text
+nodes. Age expiry, pending responses, transport errors and relay loss cannot
+replace that text with a polling message. Observation age and relay status
+remain separate, and the unchanged freshness checks disable firmware actions
+when the device observation expires. Stale initial payloads never establish a
+confirmed port. The indicator pauses when hidden or offline and respects
+reduced-motion preferences.
+
+The user requested removal of the firmware-dependent Hardware activity view.
+Its markup, styles, runtime and native lifecycle calls are removed from the
+panel, which no longer requests input snapshots. The underlying explicit
+read-only telemetry tool and firmware remain unchanged. Resource v12 retains
+v11 and all historical aliases.
+
+All **308 Site tests**, TypeScript checking and the production build passed.
+Source and production-minified regressions cover steady text across pending,
+expired and failed checks, neutral stale initial data, confirmed device/port
+changes, the accessible blinking indicator and absence of panel sampling.
+
+Pushed Site source `fea1efe4a43aaff58f9eadba970b46135a389cbd` deployed
+owner-private with MCP enabled as `appgdep_6accecb78c9881919a869696359156b1`.
+The built archive SHA-256 is
+`95b241c5d3b4e972813cf34695171d07920c17b670a8e077a696b1d9d8fc8fa1`.
+
+## Blank native panel, 2026-10-12
+
+The Codex widget frame loaded, then its startup script failed with
+`ReferenceError: inputFreshness is not defined` and a fatal execution event.
+The connector ID in the host log matches the existing FM1 Site. Production
+minification renamed the serialized input functions, while their runtime
+exports still referenced the source identifiers. Source-only UI tests and a
+successful build did not exercise this compiled startup path.
+
+The panel build now freezes all seven browser runtime strings before server
+minification, alongside the official SDK bundle. The UI imports these literal
+strings instead of serializing compiled functions. Resource v11 retains v10
+and every earlier alias, so existing entrypoints remain valid.
+
+All **304 Site tests**, TypeScript checking and the production build passed.
+Eleven new regressions reject stale generated runtimes and execute full native
+startup and sampled activity through minified UI HTML. An in-memory mutation
+back to source runtime imports reproduces the exact `inputFreshness` failure.
+The native screenshot API still reports no accessible app tab in this chat;
+visual acceptance requires a successfully opened host panel.
+
+Pushed Site source `a85b9559e51cd15f16c338f8cd669b5c11a91282` deployed
+owner-private with MCP enabled as `appgdep_6acce358570481919a5607702b538f06`.
+The built archive SHA-256 is
+`5924e7d00872405607f30c643625327798e23138cdbdb04d4a07e4eb2835b752`.
+
+## Refresh transition flicker, 2026-10-12
+
+Starting an automatic refresh could paint an expired observation before the
+monitor's asynchronous work was assigned. With no pending saved request yet,
+that synchronous redraw briefly showed **Connection status unavailable**.
+The monitor now publishes a separate checking phase before its first redraw,
+including timer, manual and wake entrypoints. Immediate successful resampling
+retains that phase through the timer handoff. Fresh observations keep their
+device label; expired ones show **Checking connection** while checking. Real
+failure, relay loss and pauses still end the checking phase. The 15-second
+freshness ceiling and disabled actions for expired observations are unchanged.
+
+All **293 Site tests**, TypeScript checking and the production build passed.
+Deterministic monitor and native-host regressions inspect every heading paint
+during a delayed stale refresh, zero-delay renewal, failure and relay loss;
+they also preserve drafts, selected variants and saved job progress. No local
+backend or firmware source changed for this correction.
+
+Pushed Site source `9c6b3b004f2bda2489742bebce77774edd3a049e` deployed
+owner-private with MCP enabled as `appgdep_6accd86970ec8191b77743c4e6575c1d`.
+The archive SHA-256 is
+`b97233a3e6b25f2c29cb063d9d28b80c91ccd241a39e724156f1bfcd1da408c1`.
+Resource v10 retains v9 and earlier aliases. Actual new-tab visual acceptance
+remains pending: the current task's native MCP Apps inventory had zero open
+tabs after calling Forge's open tool, and the available browser controls cannot
+create a native outer Codex tab. Open Forge through the side-panel Plugins and
+MCPs selector to load the updated resource.
+
+## Sampled hardware activity, 2026-10-12
+
+The panel previously had no knob/key activity display. Resource v9 adds an
+explicit Start/Stop monitoring action, 41 held/seen key indicators, seven
+encoder counters and deltas, and a volume ADC/gain meter. MOD-EDITOR reports
+volume only; full controls require the FM1-FORGE diagnostic telemetry protocol.
+Sampling is bounded and observational, pauses for device ownership, and clears
+held lights and deltas when its validated source/first-receipt age expires.
+Short presses can occur between samples. Firmware seen coverage is not physical
+control acceptance.
+
+All **289 Site tests**, **240 Python tests**, **15 local-store/UI tests**,
+TypeScript checking and the production build passed. Coverage includes strict
+fixed telemetry rows, invalid data and clocks, immutable replay, owner
+isolation, bridge job arbitration, finite serial closure, native lifecycle and
+preserved drafts/variants/job progress. Test fixtures now wait for native
+startup and synchronize simulated browser/source/Site clocks; production
+freshness validation was not relaxed.
+
+The live Windows reader initially lost its second response because pyserial
+timeout setters reconfigured an open CDC connection. Fixed settings before
+open and two bounded 150 ms handshake intervals corrected that. The guarded
+authenticated local HTTP route returned MOD-EDITOR/1 on COM4, ADC **433/1023**,
+gain **54/127**, valid=true and **zero ADC errors**. Keys and encoders were
+correctly marked unsupported. Only HELLO and MOD VOL were sent; no firmware,
+clock, volume or recovery-mode change was made. Finish unfinished local RAM
+imports/exports before monitoring because a new MOD CDC session cancels those
+transfer sessions while retaining playback and the loaded document.
+
+Pushed Site source `f9a9223e9bfd142cfb1d8d6af4fdd4a95047351a` deployed
+owner-private with MCP enabled as `appgdep_6accbf45249c81918c30c7898c8f4295`.
+Its built archive SHA-256 is
+`6afc4994043ef873897fa43eada7537ca7d12f4683780a53b101765431ebf94f`.
+The existing native tab still has its cached prior resource and needs reopening;
+native v9 activity UI acceptance is pending. The normal-user bridge and relay
+were updated with their original journals, credentials and permissions retained;
+the protected helper and restored MOD firmware were preserved. Windows
+PowerShell 5 startup preparation also passed after removing nested quoting
+from its Python token check. No host reboot or physical key/knob exercise was
+performed during this implementation.
+
+## Automatic detection and local startup recovery, 2026-10-12
+
+The user reported a connected FM1 that the panel did not detect automatically.
+The local bridge and relay needed recovery, and native observation exposed
+two additional UI problems: pending status delivery could outlive its relay
+heartbeat, and slow request/snapshot round trips plus the polling gap allowed
+fresh inventory to expire between checks. Connection-only painting also skipped
+the saved request history.
+
+The controller now reads a fresh relay heartbeat while inspecting the same
+pending request ID, overlaps the two read-only requests, polls pending delivery
+every second and promptly renews status after a successful cycle. A terminal
+snapshot can be reused once for at most one second; manual refresh, wake and
+pause discard it. The strict 15-second inventory freshness limit remains.
+Stale pending inventory displays **Checking
+connection** with last-seen age and disables transfer actions. Hidden/offline
+panels pause; visibility recovery resumes checks. History paints during
+connection-only refresh, preserving drafts, selected jobs and progress.
+Firmware operations are never automatically resubmitted.
+
+Native acceptance then exposed a queue-age defect: current COM4 enumeration
+could arrive already stale because its request had waited in the queue. The
+bridge now timestamps the start and completion of passive enumeration, starting
+before the first PnP scan. The Site validates that interval against request
+creation and the immutable first Site receipt, with a 15-second maximum scan
+duration. Freshness uses scan start; legacy results retain their conservative
+queue-age bound. Invalid intervals fail closed, and replayed outbox results
+cannot renew sample or first-receipt timestamps. Transient panel RPC failures
+show a retry notice without replacing a still-valid authoritative observation.
+
+All **258 Site tests**, **46 backend tests**, TypeScript checking and the Vinext production build
+passed. A slow fake-clock regression with three-second status calls and
+three-second relay round trips verifies repeated renewal over 60 seconds.
+Regressions also cover delayed queues, stale outbox replay, duplicate results,
+invalid intervals and native RPC failures after fresh observations.
+Pushed Site source: `99027ff5837f8d00cd7920d9d3eced88369e80be`.
+Valid archive SHA256:
+`7246148959a72d608f2eeb9312c71f5609a766163455955f5e60834ba510d602`.
+Owner-private deployment `appgdep_6accb36ebe5c8191862ff9ef39e2dc28` succeeded
+with MCP enabled and environment revision 1. Saved version:
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_17e11f7a5bb48191a73f9d0a6cfe9d8a`.
+The plugin package remains **3.1.4**. Canonical UI resource v8 retains v7 and
+all older aliases. A fresh native tab loaded the updated transient-error code
+without a complete Codex restart or reinstall. It renewed saved status requests
+automatically and displayed **FM1 on COM4**, **Checked 13s ago**, after previously
+showing **Checking connection** during a delayed reply. Expired observations
+continue to disable firmware actions. Actual unplug/replug was not performed.
+
+![Native panel detecting FM1 on COM4](images/forge-connection-20261012.jpg)
+
+The new `tools/jieli-wl82/start-forge-services.ps1` wrapper was run twice as a
+normal user. Both runs verified authenticated bridge health and preserved the
+same bridge PID **201412**, relay PID **77160**, attached protected session,
+private credentials, catalog and saved jobs. `-PrepareOnly` also passed without
+HTTP or service launch. A hidden, normal-user per-user Startup shortcut was
+registered at
+`C:\Users\keita\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\FM1 Forge connection.lnk`;
+its target and arguments were read back. The wrapper itself does not register
+startup entries. Actual startup after a Windows restart remains untested.
+Newly launched relays keep switching and official-updater handoff disabled;
+newly launched bridges do not attach a previous protected helper automatically.
+
+After an authenticated idle-state check, the owned bridge was restarted to load
+the timestamp code as PID **339132**, preserving its session, catalog and tokens.
+Relay PID **77160** stayed running. Local enumeration measured 0.828 seconds;
+upgraded status reported an ordered one-second interval, COM4, no enumeration
+error and no active/unknown job. All connection checks were passive.
+
+The local `factory-diag` starter was explicitly migrated from old image
+`e52573f32d27a68e016d7aa36ac65ff254a6a8bada9c5f0fd70c4365f4f60a8c`
+to tested default image
+`c239d59da41e187e5f04c579fe72551a8996c2c867f203d9a4acbd83ce545bde`.
+The exact old bundle was backed up outside catalog discovery. Expected-old
+comparison and atomic replacement changed only that starter; all other package
+hashes, the empty set list, jobs and approvals were preserved. Saved catalog
+request `c8196ebc8e56493c93afa25130020969` returned the new image as ready.
+Reviews remain digest-bound; no onboarding proof was fabricated.
+
+Protected local CLI transfers, full-image readbacks, serial startup and three
+CPU benchmark runs passed for both SDK-default **360/180/60/90 MHz** on this
+unit and `sdk-320` **320/160/53.3/80 MHz** (CPU/HSB/LSB/SFC). Each final run also
+passed USB audio duplex under load, with no reported peripheral or USB errors.
+This establishes the tested workload rather than prolonged thermal/stability
+qualification, audible output or complete physical control acceptance. The
+original MOD image's restoration write and full readback passed. Final startup
+observation `2cf94275a766458cb55c279634b2c8e9` identified **MOD-EDITOR/1** on
+**COM4**, with audio frames advancing from 1113920 to 1246272 and underruns
+remaining zero. The
+[clock benchmark report](https://github.com/Keitark/fm1-tracker/blob/codex/12-fm1-forge/docs/FM1_FORGE_CLOCK_BENCH_20261012.md)
+records the measurements, exact images and protected receipts. These CLI
+results do not create the MCP service's persisted diagnostics onboarding proof
+or unlock the panel's new-project gate.
+
+## Blank production panel correction, 2026-10-12
+
+Issue #12 tracks the completely blank native FM1 view. Codex logs recorded
+`ReferenceError: dF is not defined` both before and after a full restart. Static
+resource reads and the opener succeeded. The production Worker had renamed
+`librarySets` to `dF`, but individually serialized sibling functions referenced
+that name outside its original scope. Extracting the built functions reproduced
+the exact exception in both filtering and controller painting.
+
+The Apps library now serializes one self-contained factory, retaining all
+shared bindings through minification. Existing exported helpers and library
+behavior remain compatible. A new esbuild-minified isolated-runtime regression
+failed before the correction and passes afterward, exercising set validation,
+filtering, controller painting, selection and disconnected availability.
+
+All 243 Site tests, TypeScript checking and the production build passed. The
+actual built Worker was run locally; its legacy `ui://fm1/device-panel-v6.html`
+resource returned HTTP 200, MIME `text/html;profile=mcp-app`, 873900 bytes and
+eight scripts. Its generated library runtime passed filtering and painting.
+Browser QA of this exact HTML with an isolated fixture rendered the black
+surface and changed two package variants to the selected set's one variant;
+the browser error log was empty. This preview performed no device operation
+and is separate from native-host acceptance. Screenshot:
+`F:\dev\fm1\tmp\fm1-forge-production-blank-panel-fix.jpg`.
+
+Pushed Site source: `dd93da92ec108b47a00a93e04f0a4724581ce56d`.
+Archive SHA256:
+`7aa27d4ecc6fda9db22cd1c646b8429d8f2208e416a96fda161220b6bd80bdb1`.
+Private deployment: `appgdep_6acc844ef5e48191b8d4e402d782e9b1`.
+Saved version:
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_554f30a4da208191a0c1da9ca94e66cc`.
+Deployment succeeded with MCP enabled and environment revision 1. A newly
+opened model-tool native MCP App rendered its header, factory, Apps library
+and all six package cards. Its actual DOM contains the repaired
+`window.FM1Library=(function dF(){...})()` factory, an opaque `rgb(0,0,0)` shell
+and no visible UI error. Screenshot:
+`F:\dev\fm1\tmp\fm1-forge-native-blank-panel-fixed.jpg`.
+The separate global view in the user's other window is outside the supported
+MCP Apps inventory; its crashed document needs reopening for this correction.
+The service's opening snapshot reports an offline relay and stale inventory,
+so this check establishes rendering, not current hardware connectivity.
+The existing plugin package remains 3.1.4; this is a hosted-runtime correction.
+IDs, private audience, drafts, saved jobs and hardware gates are preserved.
+
+## Native tab artwork 3.1.4, 2026-10-12
+
+Issue #11 tracks the generic native tab glyph. Original SVG sources provide an
+FM1 outline, LCD, knobs, pads and keys with transparent interiors. Matching
+PNG32/128 files were rendered with existing sharp 0.35.4/librsvg; actual 16-pixel
+previews and light/dark mask simulations were reviewed. Both variants have the
+same alpha mask. The detailed header and favicon remain unchanged.
+
+- PNG128 light SHA256: `68b2c3b2c827185f0531fa3164f0a6f5442f6c3218d36a4cc36bb07c121f802a`.
+- PNG128 dark SHA256: `5d5248c7363bab2bb528e97a1f3e980e11b921705d55e78605f26eee2755dd19`.
+- Native icon metadata uses PNG MIME, explicit `128x128` and light/dark themes;
+  inlined bytes match both Site and packaged assets exactly.
+- Existing SDK/server/extensions tests: 78 passed. Production build passed.
+- Plugin updated in place to 3.1.4, release
+  `pluginrel_6acc643f7d7481918260c903623ff070`; account readback verified both
+  manifests and six new assets. Exact default prompt, author details, skills,
+  MCP bindings, scope and private audience were preserved.
+- Overlay archive SHA256:
+  `e84344effff7bdc5769cceb05a2b08938359bc6c253afe92fd06866cd045e5ea`.
+- Site source: `703d886de6ade8800dd3891d2d5a0bf2183298e8`; archive SHA256:
+  `a48e2b867f0ef69bd223fe3994f1a93cfeaf261c9f6d46c63e72333f55a26648`.
+- Private deployment `appgdep_6acc64a33c54819182291a9e30003ac9` succeeded with
+  MCP enabled and environment revision 1; IDs and owner-only audience unchanged.
+
+Installed Codex 26.1002.7124.0 selects native local Apps tab icons from exported
+service entrypoints (`L_n`, `J_n/Y_n`), resolves theme/size (`Rqr/Bqr`), and
+applies the alpha as a monochrome mask (`HY/qOa/sgi/ngi`). The cached FM1 opener
+still has the older title/resource and SVG-any icon. The official SDK requires
+icons on the opening tool; adding icons to strict `{type:"thread"}` is invalid.
+Publishing source or the standalone package does not prove the separate Sites
+App's export refreshed. No rescan tool is exposed. Fresh native-tab acceptance
+is pending; the host controls its final tint. No hardware operation was performed.
+
+Preview: `F:\dev\fm1\tmp\fm1-forge-tab-icon-preview.png`.
+
+## Drag-and-drop module graph, 2026-10-12
+
+The current Site resource is `ui://fm1/forge-panel-v6.html`; v5 and all earlier
+aliases remain available. The existing installed plugin package stays 3.1.3.
+USB, HAL, User module and Tweaks are real drop targets. Optional modules return
+to the shelf; Add/Remove/Replace buttons and HAL checkboxes provide keyboard
+alternatives. CDC and UBOOT helper stay enabled. All five user HAL access flags
+default true. Schema v2 is shared by export, prompt, saved drafts, native forms,
+files and context; strict legacy v1 imports acquire all-enabled flags.
+
+All **230 Site tests** passed, with the final two UI regressions rerun after
+review corrections; TypeScript checking and production build passed. Coverage
+includes every HAL toggle, wrong-section/protected-module drops, native
+roundtrips and legacy migration, pending old forms, dirty-file preservation,
+refresh preservation, required clock opt-in and preserving a 30 MHz LCD preset
+when its existing module is dropped back into Tweaks. No dependencies changed.
+
+Browser QA performed actual pointer drags to remove/restore a HAL and replace
+diagnostics with a user starter, and add Fast LCD to Tweaks, verifying the
+emitted JSON. A drag-event trace confirmed native dragstart/dragover/drop;
+initial automated gestures ending on a newly entered child did not complete a
+drop, and targeting section padding completed it. The 760 px panel-width
+preview had no horizontal overflow. A fresh published native
+MCP App loaded the graph, schema v2 and opaque black background. Native Add/
+Remove/Replace and checkbox actions changed the real configuration for HAL,
+user module and Fast LCD; defaults were restored without saving a draft or
+sending a chat/build/transfer request. Screenshot:
+`F:\dev\fm1\tmp\fm1-forge-native-module-graph.png`. The existing thread tab
+can retain older HTML and needs reopening; this acceptance covers the newly
+opened model-tool native MCP App.
+
+Pushed Site source `eedf0f98d4961ab5d5dda995782af5a9bb5ceecd` deployed privately
+with MCP enabled and environment revision 1; terminal status **succeeded**.
+Deployment `appgdep_6acc55eac76c8191a74e7a20daec05d1`; saved version
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_2be8c7e4aac48191b5f4d7d03d5a261c`.
+Archive SHA256:
+`5c14f3e42744fdf35a6636759cf73c45790b06534f5797b43a5ec51c637a4381`.
+
+Firmware implementation and offline build/ELF/source-closure evidence are in
+Keitark/fm1-tracker, `docs/FM1_FORGE_GRAPH_HAL_20261012.md`. Selections govern
+trusted user callback/input access; fixed diagnostics, recovery, UAC mixing
+and physical master gain continue. Physical hardware acceptance remains pending.
+No helper elevation, official updater or device write occurred.
+
+
+## Native background contrast correction, 2026-10-12
+
+The user-provided native thread-panel screenshot showed white host background
+behind dark-palette headings, summary, Refresh button and gaps. The loaded
+native document uses `backgroundMode=transparent`; the app previously relied
+on body/canvas painting while cards had their own opaque backgrounds.
+
+`#fm1-shell` now owns the full-width, minimum-viewport-height opaque background
+for header, main, gaps, footer and dialog. Palette variables still inherit from
+body; all non-solid pattern rules paint the shell. Host styling, safe-area
+padding, selected appearance, drafts and confirmation gates remain intact.
+The canonical resource is v5; v4 and all earlier aliases remain served. This is
+a Site UI correction; the installed plugin package stays at 3.1.3.
+
+All 212 Site tests, TypeScript checking and the production build passed. Actual
+browser QA used a white outer iframe with html/body forced transparent via
+`!important`: the shell remained opaque and covered viewport width/height.
+Heading, summary, Refresh and footer were measured across all 13 palettes;
+their minimum actual text contrast was 5.76:1. All five patterns painted the
+shell as selected. Reset returned to Forge Black/Solid.
+
+Pushed Site source `931c1a0977c89ceb6870f59cb91277896d05e414` deployed privately
+with MCP enabled, environment revision 1, terminal status **succeeded**:
+deployment `appgdep_6acc4e4f2c3c81919566b0bf3fbe0ea1`, saved version
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_b5d54beaea508191b694f5b2db360b59`.
+Archive SHA256:
+`08ba5328d8729db639b3ca159fe272c93e9c0c781eddfaa12d013afc9d654d04`.
+
+A newly opened model-tool native MCP App loaded `#fm1-shell` in Codex with
+`data-host-theme:light` and Forge Black/Solid selected. Its computed background
+was opaque `rgb(0,0,0)`; width equaled the 966 px viewport and content height
+3354 px exceeded the 1143 px viewport. Heading and summary used the expected
+light/muted Forge foregrounds, and footer remained within the shell. Screenshot:
+`F:\dev\fm1\tmp\fm1-forge-native-owned-background.png`. The previously opened
+native thread tab still contains older HTML and needs reopening. This check
+covers the model-tool native MCP App route; no Codex theme setting was changed.
+
+## Native timer correction 3.1.3, 2026-10-12
+
+The first actual 3.1.2 MCP App opening displayed **Illegal invocation** and
+did not start polling. The default injected clock invoked unbound browser
+timers as methods of a plain clock object; the native Window receiver check
+rejected that call. This was a real host failure despite the passing VM suite,
+and native acceptance for 3.1.2 is not claimed.
+
+Version 3.1.3 wraps calls through `globalThis.setTimeout/clearTimeout`, preserving
+the browser receiver. A regression executes the injected browser runtime with
+receiver-sensitive timers and covers polling, pending IDs, pause/wake and
+teardown. The freshness and passive-transfer boundaries remain unchanged.
+
+The installed plugin cache updated to 3.1.3, but a newly opened MCP App still
+contained the 3.1.2 SDK version and old unbound timer runtime, and displayed
+**Illegal invocation**. This proves stale native resource content; it does not
+establish a failure of the corrected 3.1.3 runtime. The canonical resource moved
+to `ui://fm1/forge-panel-v4.html`, with all three UI-bound descriptors updated
+and the v3 alias retained. Both protocol-era SDK tests check this exact binding
+and identical content through every old alias. OpenAI documents the resource URI
+as a cache key; refreshing registered host metadata may still be necessary.
+
+Final v4-source checks passed: all 212 Site tests, TypeScript checking and the
+production build. Source commit `56f85d9c71e2facf584465422898defc36047f7b` was
+pushed and deployed privately with MCP enabled: deployment
+`appgdep_6acc4b432ba08191a6f6bfc479a1b882`, saved version
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_d8557cfb41108191a45a749fcaf5ab6b`,
+terminal state **succeeded**, environment revision 1. Archive SHA256:
+`c350868e026594630daa2896bd84de0a15ed7304a65f39d14278276c856707c2`.
+The same private plugin ID `plugins_6ac9ad3fc1c8819195580a4747c50052` was updated
+in place to 3.1.3, release `pluginrel_6acc48baecc081919db4c7acf69b9f70`; the
+installed local cache is 3.1.3. Only the two existing manifest version fields
+changed in the account package. Plugin overlay ZIP SHA256:
+`35966ffbcc21ed9e32ceffcd321f227615cd5fcc4f460f5c5801749bfe16515e`.
+
+After the final deployment, a newly opened `open_fm1_library` MCP App in Codex
+loaded the 3.1.3 SDK script and the `globalThis.setTimeout` runtime. Without
+clicking Refresh, its heading changed from unavailable to **FM1 disconnected**.
+Two later DOM observations showed **Checked 13s ago**, then **Checked 12s ago**
+with the same disconnected heading and no error, demonstrating a later automatic
+observation rather than a frozen opening snapshot. The app document was visible.
+Screenshot: `F:\dev\fm1\tmp\fm1-forge-3.1.3-auto-disconnected.png`.
+This acceptance is for the model-opened native MCP App route; the separate
+New Tab native thread entrypoint and its icon still need user confirmation.
+
+## Automatic connection refresh 3.1.2, 2026-10-12
+
+The opening panel consumed saved inventory without an automatic status request.
+A fresh relay heartbeat was incorrectly enough to display cached COM ports as
+current. A passive live check at the start of this correction, request
+`8f535a1dc6c14baba97c8db6e26ff9cc`, completed with no serial ports, MIDI endpoints
+or UBOOT disks and `update_mode.mode:disconnected`. It performed no device I/O.
+
+Normal panels now check passive device inventory on a five-second visible
+schedule, shortly after opening and on visibility/focus/network recovery.
+Hidden/offline panels pause checks and teardown clears timers and listeners.
+One unresolved status ID is reused across ticks and manual refresh; the server
+also coalesces concurrent panels per owner. Background refresh only renders
+connection fields and availability, preserving package selection, open approval,
+project/appearance edits and selected job progress. File/form-only entrypoints
+do not start polling.
+
+The server adds an explicit 15-second freshness contract. Receipt timestamps
+cannot be supplied by the caller or renewed by duplicate ACKs. Original request
+age bounds delayed relay journal delivery; cached initial/tool payloads also
+expire by both server age and elapsed/wall time in the panel. New failed/unknown
+observations invalidate older success. Enumeration failures and RPC timeouts
+show unavailable/stale status rather than physical disconnection. Old ports
+remain only as clearly labeled last-seen history. No D1 schema, relay setup,
+permissions or hardware transport changes were needed.
+
+Validation: **211 final Site tests passed**, with zero failures/skips; TypeScript
+checking and the final production build passed. Focused tests cover COM10
+disconnection/reconnection, delayed/cached observations, enumeration failure,
+owner isolation, duplicate ACKs, multiple panels, pending request reuse,
+manual/automatic overlap, visibility/offline/teardown and preservation of
+drafts, themes, package variants, approvals and saved progress. Offline backend
+safety tests confirm passive inventory opens no device transport or helper.
+Logs: `F:/dev/fm1/tmp/fm1-forge-autorefresh-3.1.2-tests.tap`,
+`F:/dev/fm1/tmp/fm1-forge-autorefresh-3.1.2-typecheck.log`, and
+`F:/dev/fm1/tmp/fm1-forge-autorefresh-3.1.2-build.log`.
+
+Private Site source `014d98e65b6db8e36bc46623e41f5570b950043f` deployed as
+`appgdep_6acc466e05c88191b89cd6befa5089e8`, succeeded with MCP enabled and
+environment revision 1. Its saved version is
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_6fe7c835c63081919530000f67c92017`.
+Site archive SHA256:
+`71f30676bb1b82321156638738c1bd8a2563e288f8b829d0cb62c1476064e111`.
+
+The same private plugin was updated to **3.1.2**, release
+`pluginrel_6acc4699b57481919edaab8351426ddc`. Readback verifies both manifest
+versions and every other field is unchanged. The two-file manifest overlay
+SHA256 is `23464a5ba55b5db6870875d0e89349ecf0f9cc238d7d9de89bb8bc0553cc27f2`.
+Post-deployment passive request `5954313f4aec405182328604af3ac0bb` succeeded
+with no device interfaces. A subsequent saved snapshot aged correctly to
+`inventory_status.state:stale` after 21 seconds despite a connected relay.
+
+The already loaded native tab needs reopening once to load the new code.
+Actual native automatic polling acceptance is recorded separately from the
+passing VM tests and live server checks; at publication it remains pending
+that reopen. The earlier settings trusted-tool scope and native tab icon are
+separate outstanding checks. No physical unplug/replug was requested for
+this release, and no firmware transfer was performed.
+
+## FM1 Forge native panel patch 3.1.1, 2026-10-12
+
+The ProTracker width was caused by `.card:last-child` spanning `1/-1` across
+both library columns. The obsolete desktop span/min-height and mobile reset
+were removed. Before the fix, the original native panel measured **777 px**
+for ProTracker and **380.5 px** for the other cards. After publication, all six
+cards measured **309.5 px** at the newly opened panel's narrower viewport,
+with `grid-column:auto` for each. This is actual native DOM geometry.
+
+The first layout-only private deployment
+`appgdep_6acc34fad34c8191bea825ee3956cf79` succeeded with MCP enabled from
+source `f3a7772a1b44f6d717a72beac251626efe57054d`. Its archive SHA256 is
+`28eeb9f4e6eb7ee734d624b332fe4f0ebd5e2272961cea23290399eba35687a7`.
+The 90 affected UI/extension UI tests, TypeScript and production build passed.
+
+The subsequent icon patch uses the existing **128×128 PNG only** in opening
+tool, server, form and mention icon metadata. The SVG constant, HTML artwork,
+favicon and packaged composer/logo assets remain intact. The Codex host selects
+the largest declared icon, so the previous SVG `sizes:["any"]` took precedence
+over PNG. Its native tab mask loads that image through `Image.decode()`;
+decode/render failure falls back to the generic icon. No explicit SVG rejection
+was found, so the precise cause remains SVG rendering or stale/null exported
+entrypoint metadata. The PNG-only change is a bounded compatibility correction.
+Codex owns monochrome tab tint; black/mint colour is not promised in tab chrome.
+
+Private Site source `eed95fc4fb986a13e33316bb5e75ea221feb1f33` deployed as
+`appgdep_6acc3a966d3c8191b5c7f17aab7ed6ca`, succeeded with MCP enabled and
+environment revision 1. Its saved version is
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_011863a3d1c48191809829be83195f1e`.
+The archive SHA256 is
+`c9282f862981da0c7336cbbe08ca9f4863d2368cff9e0a84404b91d1915199a0`.
+All **171 final Site tests**, TypeScript checking and production build passed.
+The SDK remains the same official 0.2.0 package; no dependency/runtime change.
+
+The same private plugin ID was updated to account release **3.1.1**,
+`pluginrel_6acc3b8aace4819196d12adb15208a46`. Readback confirms both versions
+and preserves every other manifest field. The version-only manifest overlay
+archive SHA256 is
+`03f95e39367e140540eeea7be682c880c53bd449c2a0320d28cf961bac1b7b99`.
+Installed cache synchronization and the new native icon are checked separately
+from successful account publication.
+
+The user confirmed that the global shortcut leaves the app view when returning
+to this original chat. Opening **Side-panel New Tab → More tools… → Plugins
+and MCPs → FM1 Forge** then stayed beside the chat, but still showed a generic
+icon before the PNG patch. Its native tab title was **FM1 device panel** rather
+than the current advertised title. The user was asked to reopen that native
+conversation tab after the patch; final icon acceptance remains pending.
+
+A settled settings reload in the native conversation tab returned
+`MCP app cannot call tool outside its trusted tool scope: settings.read`
+(code `-32000`). The earlier immediate **Owner defaults loaded** label came
+from the initial snapshot and was not proof of RPC completion; this was
+corrected explicitly. Refresh of the trusted connection/catalog remains
+outstanding. No new tool-scope acceptance, native forms or file-editor acceptance
+is claimed from rendering the new panel alone. No hardware transfer, updater
+launch or protected-helper elevation occurred.
+
+## FM1 Forge official SDK release 3.1.0, 2026-10-11
+
+The owner-private Site source `010f44ac2e2baac5495a5afcdf6ce08ec8869d69`
+was pushed and packaged from the validated build. Private deployment
+`appgdep_6acb96d71d4c81919523e3309a7aa184` succeeded with MCP enabled and
+environment revision 1. Its saved version is
+`appgprj_6ac85b74d57c81918be6c3db6e09efdb~appgver_55ee6bb025008191a6f805b9fa3213f2`.
+The Site archive SHA256 is
+`b0bae1aba3c0d3859b92a3ddd0afe196e6130f27ca8ff9cdfbb6e1eddbfe42c2`.
+
+The existing private plugin `plugins_6ac9ad3fc1c8819195580a4747c50052`
+was updated to **3.1.0**, release
+`pluginrel_6acb96f97b648191bda9f413986e1d6f`. Account readback and the local
+installed cache both confirm 3.1.0. The setup skill exists and is referenced
+through `extensions.com.openai.onboardingSkill`; the account normalizer mirrors
+this reference into the compatibility manifest. Original presentation,
+default prompt, account attribution, MCP connection and assets remain intact.
+No plugin was deleted, recreated or uninstalled.
+
+The unmodified official OpenAI MCP Extensions SDK is **0.2.0**, source
+`0d606217705e0e71eb21fff009619b67b80611dc`; npm still supplied 0.1.0 when checked.
+The vendored package SHA256 is
+`79a1cc9e6832f557ea9f46c8925fdbeb82ba80247a60824666b14cf90cf1b755`.
+See [provenance](../site/vendor/openai-mcp-extensions.ORIGIN.md) for packaging
+and the upstream declaration-export correction. No SDK runtime was modified.
+
+| Check | Result |
+| --- | --- |
+| Upstream official SDK | 41 tests passed |
+| Final Site suites | 171 tests passed; none skipped |
+| TypeScript and production build | Passed |
+| Backend, relay, recovery and updater integration | 190 Python tests passed |
+| Browser store | 10 JavaScript tests passed |
+| Real SDK modern/legacy discovery | In-memory transports pass; 18 tools, settings and mentions advertised |
+| Private Site deployment | Succeeded; MCP enabled |
+| Account release and installed cache | 3.1.0, same private plugin identity |
+| Native panel rendering | Forge v3 controls, COM10, connected relay; HTML/body both black |
+| Native model context | Attach and clear both succeeded; original draft retained |
+| Native local file opening | Host opened the existing extension guide |
+| New server tools in this chat's native panel | Host rejected `settings.read` as outside its trusted tool scope |
+| Other native entrypoints, forms, mentions and file editing | Implemented and tested; end-to-end host acceptance remains pending metadata refresh/platform support |
+| Real send/new-chat/draft actions | Capability and regression tests passed; no real message or new chat submitted |
+| Hardware transfer/qualification | Not performed by this release |
+
+The native panel's settings initially load from the opening tool's server
+snapshot. That proves storage and rendering, but not a subsequent settings RPC:
+**Reload defaults** produced `MCP app cannot call tool outside its trusted tool
+scope: settings.read`. This turn's available connector catalog still contains
+the earlier FM1 tool set. Inspection of the installed Codex host implementation
+locates this exact rejection in its trusted connector/target catalog lookup,
+before a server call; it does not inspect `_meta.ui.visibility` there. The
+official specification already defaults omitted visibility to model and app.
+Stale discovery is a supported explanation, not a confirmed refresh outcome.
+
+The [official connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt)
+documents refreshing directly connected custom MCP metadata and rerunning
+affected tests in a new conversation. Its
+[review guide](https://developers.openai.com/plugins/deploy/app-review)
+also distinguishes newly approved tools from live/cached UI resources. No
+permission was broadened or host restriction bypassed. The user was asked to
+refresh the existing connection; that final native acceptance is outstanding.
+The [actual native screenshot](evidence/fm1-forge-native-3.1.0-20261011.jpg)
+shows the new black panel controls and the host's settings-tool rejection.
+An authenticated direct SDK probe also received an HTTP authentication
+rejection, so it does not establish live modern-protocol discovery acceptance.
+
+The canonical resource is `ui://fm1/forge-panel-v3.html`, with previous aliases
+retained. Configuration drafts, settings and mention resources are owner-scoped
+in D1. File writes require the exact opened opaque resource, advertised
+writability and ETag, and preserve unsaved text on conflict. Tests include
+cancelled forms, invalid data, no automatic relay calls when file/form results
+open a panel, and rejection of a forged project gate without persisted proof.
+
+Native status still reports no accepted diagnostic baseline and both relay
+write flags disabled. No protected helper was elevated, no updater was launched
+and no device was flashed. The previous unqualified diagnostics candidate and
+physical LCD/input/audio/UAC/clock acceptance boundaries remain unchanged.
+
+## Historical FM1 Forge final release 3.0.1, 2026-10-11
+
+Final Site source `3e97b09eaa41515deda1401cd46d42397ee479ed` deployed privately
+as `appgdep_6acb15fa58908191bf74baadb8ab0b70`; deployment succeeded with MCP
+enabled. Resource `ui://fm1/forge-panel-v2.html` retains the earlier aliases.
+The same private plugin ID `plugins_6ac9ad3fc1c8819195580a4747c50052` was updated
+to release `pluginrel_6acb15fe4ce88191bb211830c3425552`, version **3.0.1**.
+The Site URL, `/mcp` endpoint and owner-private access remain unchanged.
+
+| Final check | Result |
+|---|---|
+| Full final Site test suites | Passed |
+| Site typechecking | Passed |
+| Site production build | Passed |
+| Integration test suite | 181 tests passed |
+| Primary immutable-runtime suite | 51 tests run; five skipped |
+| Primary backend suite | 35 tests passed |
+| Private Site publication | Succeeded; MCP enabled |
+| Private plugin update | Same ID; release 3.0.1 |
+| Native Forge card | Verified in Codex: Forge branding/onboarding, diagnostic catalog, COM10 and black HTML/body background |
+| New protected helper | Not started; runtime elevation canceled |
+| Diagnostics transfer / candidate qualification | Not accepted; no firmware write occurred |
+| Physical LCD, inputs, audio, USB and stability | Pending device tests |
+
+The native panel defaults to opaque black/plain, retains optional appearances,
+and separates fixed USB/system recovery, shared HAL and user modules. The
+project configuration rejects unknown fields, unsafe folders and incompatible
+presets. User text remains in text controls and host text messages. Tests cover
+native messaging support/rejection, standalone copy fallback and retention of
+the exact original job and uncertain transfer outcome while editing a project.
+A DB-backed regression rotated 32 newer requests and retained the original
+per-owner diagnostics proof, independent of the twelve visible recent requests.
+
+Compiler evidence established the real setter as `system_clock_set`; `clk_set`
+is a stub. The 320 MHz SDK table supplies a 53 MHz LSB, while the 15/30 MHz
+RGB444 LCD presets require 60 MHz. The panel, Python validator and schema now
+reject that combination. `sdk-320` with stock DMA and `sdk-default` with each
+LCD preset remain selectable. Higher FPS and clock stability are not accepted
+from compilation or offline tests.
+
+The then-current native Forge card was subsequently inspected in Codex. Its DOM
+contains diagnostic onboarding, module options and the exact diagnostic catalog;
+the HTML and body backgrounds both compute to `rgb(0, 0, 0)`. FM1 is detected
+on COM10 and transfer actions remain disabled. An actual native screenshot
+confirmed the black cards and mint accents. This does not establish firmware
+or physical hardware acceptance. The hosted service title was also renamed from
+FM1 App Library to FM1 Forge, preserving its project, URL and private audience.
+Runtime elevation was canceled, leaving no new protected helper and no writes.
+Existing snapshots, receipts and saved job IDs are preserved. The diagnostics
+baseline and physical tests remain separate prerequisites; no firmware
+candidate or hardware qualification is claimed.
+
+The local bridge and outbound relay were then restarted through their supported
+launchers, with 53 completed/reported relay journals retained. The bridge
+PID was 154724 and relay PID was 209572. Both relay write permissions remained off;
+catalog inventory recognizes all six profiles. These are metadata connections,
+with no device operation requested. The old session's `stopped:false` field
+reflects the absence of its stop marker; its recorded helper PID 240396 is dead.
+The old verified baseline is usable for offline packaging, but that status field
+alone does not establish an available protected helper.
+
+The validated default diagnostic bundle was subsequently installed through the
+authenticated local catalog endpoint as `factory-diag` / `diagnostics`, SHA256
+`e52573f32d27a68e016d7aa36ac65ff254a6a8bada9c5f0fd70c4365f4f60a8c`.
+Its 1 MiB container changes 53 application sectors (`0x4000` through `0x38000`,
+directory written last) against rollback SHA256
+`4d4da3ab34b643034ea91ddb670fd3556b737a05835ed77fced687eae6ad345c`.
+The protected-worker pure candidate validator independently confirmed protected
+boot/config/reserved bytes are identical. No device I/O or firmware write was
+requested; catalog readiness establishes compatibility only.
+
 ## FM1 appearance update, 2026-10-10
 
 Site v6 adds twelve prepared palettes and five independently selectable
@@ -34,15 +722,18 @@ reporting custom/light and `rgb(248,244,238)`. Native reset restored FM1
 Mint/Solid; the earlier FM1 Mint/Circuit Grid preference was then restored.
 Persistence across reopening was verified in the synthetic host only.
 
-A later read-only native Refresh failed with **MCP app cannot call tool outside
-its trusted tool scope: open_fm1_library**. A second assistant library call had
-returned **Unknown tool**, and FM1 tools are absent from the current tool
-inventory. Sites still reports an active v6, no disabling authority and the
+At that 2026-10-10 check, a later read-only native Refresh failed with
+**MCP app cannot call tool outside its trusted tool scope: open_fm1_library**.
+A second assistant library call had
+returned **Unknown tool**, and FM1 tools were absent from that check's tool
+inventory. Sites still reported an active v6, no disabling authority and the
 same MCP endpoint/plugin ID. Plugin metadata lookup returned 404. The cause
-is unconfirmed; the loaded panel's local Appearance controls remain usable,
-but current remote tool availability and native reopening are not accepted.
+was unconfirmed; the loaded panel's local Appearance controls remained usable,
+but remote tool availability and native reopening were not accepted at that time.
+Later installed-tool and native openings succeeded, as recorded in the newer
+entries above; this is historical failure evidence.
 No firmware operation was attempted during this check. Follow-up is tracked in
-[issue #6](https://github.com/Keitark/fm1-marketplace-plugin/issues/6).
+[issue #6](https://github.com/Keitark/fm-1-forge/issues/6).
 
 ![Installed native FM1 panel with Mint Light and Circuit Grid](images/fm1-native-appearance-mint-light.png)
 
@@ -305,7 +996,7 @@ returned **HTTP 401**. It did not establish modern remote protocol negotiation.
 No raw secrets or private physical identifiers were persisted. Physical
 write/readback/startup, screen, audio, and controls remain unaccepted.
 
-## Current version 3 deployment and native acceptance
+## Historical version 3 deployment and native acceptance
 
 Owner-private version **3** deployed successfully as
 `appgdep_6ac8fc0660648191a2521acd37271e3c`, runtime revision **1**, MCP-ready.

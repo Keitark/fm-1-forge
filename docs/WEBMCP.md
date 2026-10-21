@@ -17,7 +17,7 @@ Current host-tool availability is limited despite active v6: native
 **Refresh** fails with **MCP app cannot call tool outside its trusted tool scope:
 open_fm1_library**, and a repeated assistant open returned **Unknown tool**.
 The cause is unconfirmed and reopening is not a verified remedy. See
-[issue #6](https://github.com/Keitark/fm1-marketplace-plugin/issues/6). The local
+[issue #6](https://github.com/Keitark/fm-1-forge/issues/6). The local
 Appearance controls remain usable; current metadata/progress calls depend on
 restored host-tool availability.
 

@@ -1,6 +1,7 @@
 """Offline laptop adapter tests. No real USB, PnP, serial or named pipe access."""
 import base64
 import hashlib
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -97,6 +98,120 @@ class BackendTests(unittest.TestCase):
         self.client.unlink()
         with self.assertRaisesRegex(ValueError, 'flash-session-client'):
             backend.WindowsBackend(self.repo, self.session)
+
+    def stock_adapter(self):
+        state = self.root / 'stock-state'
+        state.mkdir()
+        config = self.root / 'stock-local.json'
+        node = self.root / 'node.exe'
+        node.write_bytes(b'not executable; mocked native process')
+        package = self.root / 'official.fwsc'
+        package.write_bytes(bytes(backend.STOCK_SIZE))
+        worker = self.repo / 'tools/jieli-wl82/stock-sysex/cli.mjs'
+        worker.parent.mkdir(parents=True)
+        worker.write_text('// mocked worker', encoding='utf-8')
+        config.write_text(json.dumps({'nodeBinary': str(node), 'localPackagePath': str(package),
+                                     'reviewedSha256': backend.STOCK_SHA256}), encoding='utf-8')
+        adapter = backend.WindowsBackend(self.repo, stock_sysex_config=config, stock_sysex_state=state)
+        return adapter, config, node, package, worker
+
+    def test_stock_local_config_rejects_changed_package_size_digest_or_runtime_without_launch(self):
+        adapter, config, node, package, worker = self.stock_adapter()
+        with patch.object(backend.sys, 'platform', 'win32'), patch.object(backend.subprocess, 'Popen', side_effect=AssertionError('No native process')):
+            with self.assertRaisesRegex(ValueError, 'SHA256'):
+                adapter._stock_local_config()
+            with patch.object(backend, 'digest', return_value=backend.STOCK_SHA256):
+                self.assertEqual(adapter._stock_local_config()['nodeBinary'], str(node))
+                package.write_bytes(b'changed')
+                with self.assertRaisesRegex(ValueError, 'size'):
+                    adapter._stock_local_config()
+                package.write_bytes(bytes(backend.STOCK_SIZE))
+                worker.unlink()
+                with self.assertRaisesRegex(ValueError, 'Node'):
+                    adapter._stock_local_config()
+
+    def test_unconfigured_stock_status_has_no_child_or_device_io(self):
+        with patch.object(backend.subprocess, 'Popen', side_effect=AssertionError('No process')):
+            metadata = self.adapter.stock_update_metadata(inventory('sysex')['update_mode'], inventory('sysex')['midi_endpoints'])
+        self.assertFalse(metadata['configured'])
+        self.assertFalse(metadata['available'])
+        self.assertFalse(metadata['readback_supported'])
+
+    def test_stock_runtime_only_advertises_exact_consistent_passive_midi_pair(self):
+        adapter, *_ = self.stock_adapter()
+        pair = {'inputName': 'FM-1', 'outputName': 'FM-1'}
+        with patch.object(adapter, '_stock_local_config', return_value={}), patch.object(adapter, '_run_stock_worker',
+                return_value={'ok': True, 'data': {'pairs': [pair]}}) as child:
+            meta = adapter.stock_update_metadata(inventory('sysex')['update_mode'], inventory('sysex')['midi_endpoints'])
+            self.assertTrue(meta['available'])
+            self.assertEqual(meta['expected_stock_pair'], pair)
+            self.assertEqual(child.call_args.args, ('probe',))
+            for mode in ('serial', 'ambiguous', 'unknown'):
+                data = inventory(mode)
+                self.assertFalse(adapter.stock_update_metadata(data['update_mode'], data['midi_endpoints'])['available'])
+
+    def test_stock_update_rechecks_expiry_hash_and_route_before_native_update(self):
+        adapter, *_ = self.stock_adapter()
+        ident = '1' * 32
+        pair = {'inputName': 'FM-1', 'outputName': 'FM-1'}
+        fresh = inventory('sysex')
+        fresh['stock_update'] = {'available': True, 'expected_stock_pair': pair}
+        arguments = dict(expected_sha256=backend.STOCK_SHA256, job_id=ident,
+                         expected_stock_pair=pair, endpoint_review_id=ident, approval_expires=9999999999)
+        with patch.object(adapter, '_stock_local_config', return_value={}), patch.object(adapter, 'status', return_value=fresh), patch.object(adapter, '_run_stock_worker') as child:
+            self.assertFalse(adapter.execute('stock_sysex_update', **(arguments | {'expected_sha256': 'a' * 64}))['ok'])
+            self.assertFalse(adapter.execute('stock_sysex_update', **(arguments | {'approval_expires': 1}))['ok'])
+            fresh['stock_update']['expected_stock_pair'] = {'inputName': 'ota-FM-1', 'outputName': 'ota-FM-1'}
+            self.assertFalse(adapter.execute('stock_sysex_update', **arguments)['ok'])
+            child.assert_not_called()
+
+    def test_stock_already_ota_is_local_recovery_not_a_new_write_route(self):
+        adapter, *_ = self.stock_adapter()
+        pair = {'inputName': 'ota-FM-1 3', 'outputName': 'ota-FM-1 4'}
+        data = inventory('ota_sysex')
+        with patch.object(adapter, '_stock_local_config', return_value={}), patch.object(adapter, '_run_stock_worker',
+                return_value={'ok': True, 'data': {'pairs': [pair]}}) as child:
+            meta = adapter.stock_update_metadata(data['update_mode'], data['midi_endpoints'])
+            self.assertTrue(meta['native_runtime'])
+            self.assertTrue(meta['recovery_required'])
+            self.assertFalse(meta['available'])
+            self.assertIsNone(meta['expected_stock_pair'])
+            self.assertEqual(child.call_args.args, ('probe',))
+
+    def test_stock_native_stream_errors_after_upgrade_are_unknown_and_success_requires_boot_identity(self):
+        adapter, _, node, package, worker = self.stock_adapter()
+        ident = '2' * 32
+        pair = {'inputName': 'FM-1', 'outputName': 'FM-1'}
+        config = {'nodeBinary': str(node), 'localPackagePath': str(package)}
+        class Child:
+            def __init__(self, value):
+                self.stdin, self.stdout = io.StringIO(), io.StringIO(json.dumps(value) + '\n')
+                self.returncode = 0
+            def wait(self, **kwargs): return self.returncode
+            def poll(self): return self.returncode
+        for destructive, state in ((True, 'unknown'), (False, 'failed')):
+            value = {'type': 'error', 'ok': False, 'operation': 'update', 'error': {
+                'destructive_started': destructive, 'state': state, 'code': 'timeout'}}
+            with patch.object(adapter, '_stock_local_config', return_value=config), patch.object(backend.subprocess, 'Popen', return_value=Child(value)) as child:
+                if destructive:
+                    with self.assertRaises(RuntimeError):
+                        adapter._run_stock_worker('update', job_id=ident, pair=pair, review=ident)
+                else:
+                    self.assertFalse(adapter._run_stock_worker('update', job_id=ident, pair=pair, review=ident)['ok'])
+                self.assertEqual(child.call_args.args[0], [str(node), str(worker)])
+        fresh = inventory('sysex')
+        fresh['stock_update'] = {'available': True, 'expected_stock_pair': pair}
+        proof = {'jobId': ident, 'sha256': backend.STOCK_SHA256, 'identity': 'FM-1_015',
+                 'transfer_finished': True, 'boot_identity_verified': True, 'readback_verified': False}
+        with patch.object(adapter, '_stock_local_config', return_value=config), patch.object(adapter, 'status', return_value=fresh), patch.object(adapter, '_run_stock_worker', return_value={'ok': True, 'data': proof}) as worker:
+            answer = adapter.execute('stock_sysex_update', expected_sha256=backend.STOCK_SHA256,
+                job_id=ident, expected_stock_pair=pair, endpoint_review_id=ident, approval_expires=9999999999)
+            self.assertTrue(answer['data']['protected_baseline_invalidated'])
+            self.assertFalse(answer['data']['readback_verified'])
+            worker.return_value['data']['boot_identity_verified'] = False
+            with self.assertRaises(RuntimeError):
+                adapter.execute('stock_sysex_update', expected_sha256=backend.STOCK_SHA256,
+                    job_id=ident, expected_stock_pair=pair, endpoint_review_id=ident, approval_expires=9999999999)
 
     def test_constructor_rejects_session_descriptor_for_another_directory(self):
         (self.session / 'session.json').write_text(
@@ -266,6 +381,89 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(result['update_mode']['app_entry_method'], 'serial')
         self.assertFalse(result['update_mode']['official_available'])
 
+    def test_input_preflight_refuses_absent_and_unknown_or_reserved_sessions(self):
+        absent = backend.WindowsBackend(self.repo)
+        self.assertEqual(absent._input_readiness(), 'unavailable')
+        safe = {'operation': 'idle', 'blocked': False, 'reset_pending': False,
+                'needs_observation': False, 'loader_running': False}
+        self.write_state(safe)
+        self.assertEqual(self.adapter._input_readiness(), 'ready')
+        for changes in ({'operation': 'flash'}, {'blocked': True}, {'reset_pending': True},
+                        {'needs_observation': True}, {'loader_running': True},
+                        {'stopped': True}, {'blocked': None}, {'operation': None}):
+            with self.subTest(changes=changes):
+                self.write_state(dict(safe, **changes))
+                self.assertEqual(self.adapter._input_readiness(), 'busy')
+        for key in safe:
+            state = dict(safe)
+            del state[key]
+            self.write_state(state)
+            with self.subTest(missing=key):
+                self.assertEqual(self.adapter._input_readiness(), 'busy')
+        self.write_state(safe)
+        (self.session / 'stopped.txt').write_text('stopped', encoding='utf-8')
+        self.assertEqual(self.adapter._input_readiness(), 'busy')
+        (self.session / 'stopped.txt').unlink()
+        (self.session / 'state.json').write_text('not-json', encoding='utf-8')
+        self.assertEqual(self.adapter._input_readiness(), 'busy')
+
+    def test_input_snapshot_uses_local_fixed_sampler_without_broker_execution(self):
+        result = {'state': 'busy'}
+        with patch.object(backend, 'sample_inputs', return_value=result) as sample, \
+             patch.object(backend.subprocess, 'run', side_effect=AssertionError('No broker command')):
+            self.assertEqual(self.adapter.input_snapshot(), result)
+        self.assertEqual(sample.call_args.kwargs, {'preflight': self.adapter._input_readiness})
+
+    def test_status_observation_bounds_all_passive_enumeration_and_state_metadata(self):
+        events = []
+        state = backend.read_json(self.session / 'state.json')
+
+        def clock():
+            if not events:
+                events.append('started_at')
+                return 1000.9
+            self.assertEqual(events[-1], 'session_state')
+            events.append('completed_at')
+            return 1006.8
+
+        def comports():
+            self.assertEqual(events, ['started_at'])
+            events.append('serial_pnp')
+            return []
+
+        def disk_pnp(args, **kwargs):
+            events.append('disk_pnp')
+            self.assertIn('Get-CimInstance Win32_DiskDrive', args[-1])
+            return SimpleNamespace(stdout='[]', returncode=0)
+
+        def midi_pnp():
+            events.append('midi_pnp')
+            return {'endpoints': [], 'error': None}
+
+        def session_state(path):
+            self.assertEqual(path, self.session / 'state.json')
+            events.append('session_state')
+            return state
+
+        def no_transport(*args, **kwargs):
+            raise AssertionError('Passive observation must not open a device or pipe')
+
+        ports = SimpleNamespace(comports=comports)
+        modules = {'serial': SimpleNamespace(Serial=no_transport),
+                   'serial.tools': SimpleNamespace(list_ports=ports)}
+        with patch.dict('sys.modules', modules), patch.object(backend.sys, 'platform', 'win32'), \
+             patch.object(backend.time, 'time', side_effect=clock), \
+             patch.object(backend.subprocess, 'run', side_effect=disk_pnp), \
+             patch.object(backend, 'enumerate_midi_endpoints', side_effect=midi_pnp), \
+             patch.object(backend, 'read_json', side_effect=session_state), \
+             patch.object(self.adapter, '_pipe', side_effect=no_transport):
+            result = self.adapter.status()
+        self.assertEqual(events, ['started_at', 'serial_pnp', 'disk_pnp',
+                                  'midi_pnp', 'session_state', 'completed_at'])
+        self.assertEqual(result['observation'], {'started_at': 1000, 'completed_at': 1006})
+        self.assertFalse(result['device_io'])
+        self.assertEqual(result['update_mode']['mode'], 'disconnected')
+
     def test_catalog_package_ids_are_immutable(self):
         bundle = self.bundle()
         self.adapter.install_catalog(bundle)
@@ -332,6 +530,25 @@ class BackendTests(unittest.TestCase):
         self.assertTrue(result['data']['written_readback_verified'])
         self.assertTrue(result['data']['serial_boot_verified'])
         self.assertFalse(result['data']['physical_acceptance'])
+
+    def test_forge_diagnostics_requires_exact_live_firmware_identity(self):
+        bundle = self.bundle()
+        bundle.update(id='factory-diag', profile='diagnostics', title='Forge diagnostics')
+        self.adapter.install_catalog(bundle)
+        for identity in ('FM1-FORGE/1', 'NES', 'FM1-FORGE/2'):
+            with self.subTest(identity=identity):
+                calls = []
+                def pipe(operation, request=None):
+                    calls.append(operation)
+                    return {'ok': True, 'data': {'result': {'profile': identity}}}
+                with patch.object(self.adapter, '_pipe', side_effect=pipe), \
+                     patch.object(self.adapter, 'status', return_value={'uboot_disks': [{'DeviceID': 'fake'}]}):
+                    result = self.adapter.execute('switch_app', catalog_id='factory-diag', entry_method='already_uboot')
+                self.assertEqual(result['ok'], identity == 'FM1-FORGE/1')
+                self.assertEqual(calls, ['plan', 'flash', 'reset', 'observe', 'serial_status'])
+                if result['ok']:
+                    self.assertEqual(result['data']['catalog_id'], 'factory-diag')
+                    self.assertFalse(result['data']['physical_acceptance'])
 
     def test_switch_from_running_app_uses_existing_serial_uboot_transition(self):
         self.adapter.install_catalog(self.bundle())

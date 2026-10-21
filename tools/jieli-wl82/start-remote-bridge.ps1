@@ -9,7 +9,8 @@ param(
     [switch]$PublishTailscale,
     [switch]$PrepareOnly,
     [string]$OfficialUpdater,
-    [ValidatePattern('^[0-9a-f]{64}$')][string]$OfficialUpdaterSha256
+    [ValidatePattern('^[0-9a-f]{64}$')][string]$OfficialUpdaterSha256,
+    [string]$StockSysExConfig
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -129,6 +130,17 @@ if (-not $PSBoundParameters.ContainsKey('OfficialUpdater') -and -not $PSBoundPar
     if ($oldConfig.PSObject.Properties['official_updater']) { $OfficialUpdater = $oldConfig.official_updater }
     if ($oldConfig.PSObject.Properties['official_updater_sha256']) { $OfficialUpdaterSha256 = $oldConfig.official_updater_sha256 }
 }
+if (-not $PSBoundParameters.ContainsKey('StockSysExConfig') -and $oldConfig -and $oldConfig.PSObject.Properties['stock_sysex_config']) {
+    $StockSysExConfig = $oldConfig.stock_sysex_config
+}
+if ($StockSysExConfig) {
+    $StockSysExConfig = (Resolve-Path -LiteralPath $StockSysExConfig).Path
+    Assert-NoReparse $StockSysExConfig
+    Protect-State (Join-Path $state 'stock-sysex')
+    # Validate the pinned package/runtime without opening any MIDI endpoint.
+    & $runtime -B -c 'import sys,pathlib;sys.path.insert(0,sys.argv[1]);from remote_backend import WindowsBackend;b=WindowsBackend(sys.argv[2],stock_sysex_config=sys.argv[3],stock_sysex_state=pathlib.Path(sys.argv[4])/"stock-sysex");b._stock_local_config()' $PSScriptRoot $repo $StockSysExConfig $state
+    if ($LASTEXITCODE -ne 0) { throw 'Stock SysEx local configuration failed validation; no MIDI endpoint was opened.' }
+}
 if ($SessionRoot) {
     $SessionRoot = (Resolve-Path -LiteralPath $SessionRoot).Path
     Assert-NoReparse $SessionRoot
@@ -225,7 +237,9 @@ if ($running) {
     if (-not $health) { throw 'Recorded bridge PID is alive but authenticated health is unavailable. No duplicate was launched.' }
     if ($oldConfig -and ($oldConfig.session -ne $SessionRoot -or $oldConfig.port -ne $Port -or
         $oldConfig.official_updater -ne $OfficialUpdater -or
-        $oldConfig.official_updater_sha256 -ne $OfficialUpdaterSha256)) { throw 'Running bridge uses different launch settings; inspect it locally before restarting.' }
+        $oldConfig.official_updater_sha256 -ne $OfficialUpdaterSha256 -or
+        (($oldConfig.PSObject.Properties['stock_sysex_config'] -and $oldConfig.stock_sysex_config) -ne [bool]$StockSysExConfig) -or
+        ($StockSysExConfig -and $oldConfig.stock_sysex_config -ne $StockSysExConfig))) { throw 'Running bridge uses different launch settings; inspect it locally before restarting.' }
     Write-Output "Bridge already running, PID $($running.Id), loopback port $Port."
     if ($PublishTailscale) { Publish-Bridge }
     return
@@ -245,12 +259,13 @@ function Quote-Argument([string]$Argument) {
 $arguments = @('-u', $bridge, '--repo', $repo, '--state-dir', $state, '--token-file', $tokenFile, '--port', [string]$Port)
 if ($SessionRoot) { $arguments += @('--session', $SessionRoot) }
 if ($OfficialUpdater) { $arguments += @('--official-updater', $OfficialUpdater, '--official-updater-sha256', $OfficialUpdaterSha256) }
+if ($StockSysExConfig) { $arguments += @('--stock-sysex-config', $StockSysExConfig) }
 $tag = [Guid]::NewGuid().ToString('N')
 $stdout = Join-Path $state "bridge-$tag.out.log"
 $stderr = Join-Path $state "bridge-$tag.err.log"
 $process = Start-Process -FilePath $runtime -ArgumentList (($arguments | ForEach-Object { Quote-Argument $_ }) -join ' ') -WorkingDirectory $repo -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
 [IO.File]::WriteAllText($pidFile, [string]$process.Id, [Text.UTF8Encoding]::new($false))
-@{repo=$repo;session=$SessionRoot;port=$Port;python=$runtime;official_updater=$OfficialUpdater;official_updater_sha256=$OfficialUpdaterSha256;pid=$process.Id;stdout=$stdout;stderr=$stderr} |
+@{repo=$repo;session=$SessionRoot;port=$Port;python=$runtime;official_updater=$OfficialUpdater;official_updater_sha256=$OfficialUpdaterSha256;stock_sysex_config=$StockSysExConfig;pid=$process.Id;stdout=$stdout;stderr=$stderr} |
     ConvertTo-Json | Set-Content -LiteralPath $configFile -Encoding UTF8
 $ready = $false
 for ($attempt=0; $attempt -lt 30; $attempt++) {

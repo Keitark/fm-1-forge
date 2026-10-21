@@ -1,0 +1,68 @@
+#!/bin/sh
+set -eu
+umask 077
+
+fail() {
+  printf '%s\n' 'FM-1 Forge could not start. Verify the installed desktop package.' >&2
+  exit 1
+}
+
+read_digest() {
+  IFS= read -r expected || return 1
+  extra=
+  if IFS= read -r extra || [ -n "$extra" ]; then return 1; fi
+  [ "${#expected}" -eq 64 ] || return 1
+  case "$expected" in *[!0-9a-f]*) return 1 ;; esac
+}
+
+cleanup() {
+  if [ -n "$cache" ]; then
+    /bin/rm -f "$cache/node" 2>/dev/null || :
+    /bin/rmdir "$cache" 2>/dev/null || :
+  fi
+}
+
+forward_signal() {
+  pending_signal=$1
+  if [ -n "$child" ]; then kill -"$1" "$child" 2>/dev/null || :; fi
+}
+
+case "$0" in
+  */*) runtime_dir=${0%/*} ;;
+  *) fail ;;
+esac
+package_root=$(CDPATH= cd -P "$runtime_dir/.." 2>/dev/null && pwd -P) || fail
+[ "$(/usr/bin/uname -s 2>/dev/null)" = Darwin ] || fail
+case "$(/usr/bin/uname -m 2>/dev/null)" in
+  arm64) target=darwin-arm64 ;;
+  x86_64) target=darwin-x64 ;;
+  *) fail ;;
+esac
+runtime="$package_root/payloads/$target/runtime/$target"
+[ -f "$runtime/node.gz" ] && [ -f "$runtime/node.sha256" ] || fail
+read_digest < "$runtime/node.sha256" || fail
+
+cache=
+child=
+pending_signal=
+trap cleanup 0
+trap 'forward_signal TERM' TERM
+trap 'forward_signal INT' INT
+trap 'forward_signal HUP' HUP
+cache=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/fm1-forge-runtime.XXXXXXXX" 2>/dev/null) || fail
+/usr/bin/gzip -dc "$runtime/node.gz" > "$cache/node" 2>/dev/null || fail
+actual=$(/usr/bin/shasum -a 256 "$cache/node" 2>/dev/null) || fail
+actual=${actual%% *}
+[ "$actual" = "$expected" ] || fail
+/bin/chmod 0500 "$cache/node" 2>/dev/null || fail
+
+"$cache/node" "$@" <&0 &
+child=$!
+if [ -n "$pending_signal" ]; then forward_signal "$pending_signal"; fi
+status=0
+while :; do
+  wait "$child" && status=0 || status=$?
+  if ! kill -0 "$child" 2>/dev/null; then break; fi
+done
+child=
+exit "$status"

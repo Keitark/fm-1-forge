@@ -1,0 +1,25 @@
+{
+  "name": "fm1-forge-windows-package",
+  "version": "3.4.0-alpha.9",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build:windows": "node scripts/build-windows.mjs",
+    "test:package": "node --test test/package-windows.test.mjs test/package-macos.test.mjs",
+    "build:macos": "node scripts/build-macos.mjs",
+    "build:universal": "node scripts/build-universal.mjs"
+  },
+  "devDependencies": {
+    "@julusian/midi": "3.8.1",
+    "@cfworker/json-schema": "4.1.1",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/server": "2.3.1",
+    "@openai/mcp-extensions": "file:../site/vendor/openai-mcp-extensions-0.2.0.tgz",
+    "esbuild": "0.28.0",
+    "zod": "4.2.0"
+  }
+}

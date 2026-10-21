@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "version": "3.4.0-alpha.7",
+  "site_tests": {
+    "skipped": 0,
+    "failed": 0,
+    "passed": 500
+  },
+  "server_and_package_contracts": {
+    "skipped": 0,
+    "failed": 0,
+    "passed": 26
+  },
+  "focused_selector_tests": {
+    "skipped": 0,
+    "failed": 0,
+    "passed": 44,
+    "included_in_site_total": true
+  },
+  "panel_build": "passed",
+  "packaged_protocols": [
+    "2026-07-28",
+    "2025-11-25",
+    "2024-11-05"
+  ],
+  "empty_path_launch": "passed",
+  "installed_file_hashes": 127,
+  "package_manifest_sha256": "1ffe2a2dd07fe5c1458e1f9b5f7238734a67bcde68749bd9b3fb6d56abbc617a",
+  "archive_sha256": "d5762a9f28a45b672860b7b3af7acb29c390b1129623fa25fc337702d48c8303",
+  "duplicate_common_arm_form_in_windows_markup": false,
+  "hosted_common_form_retained": true,
+  "file_selection_during_pending_poll": "passed with actual deferred file-change handler",
+  "selection_preserved_after_poll": true,
+  "confirmed_disconnect_disables_selectors": true,
+  "active_writer_guards_retained": true,
+  "native_addon_loaded_without_enumeration": true,
+  "physical_write_performed": false,
+  "live_panel_acceptance": "pending: current Codex chat must reload the installed plugin connection to use resource v4"
+}

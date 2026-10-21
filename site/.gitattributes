@@ -1,0 +1,2 @@
+# Preserve copied updater bytes and their recorded source hashes.
+lib/browser-common/* -text

@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "version": "3.4.0-alpha.6",
+  "checks": {
+    "desktop_tests": {
+      "skipped": 0,
+      "passed": 102,
+      "failed": 0
+    },
+    "site_tests": {
+      "skipped": 0,
+      "passed": 497,
+      "failed": 0
+    },
+    "stock_and_custom_sysex_tests": {
+      "skipped": 0,
+      "passed": 70,
+      "failed": 0
+    },
+    "typescript": "passed",
+    "panel_build": "passed",
+    "production_build": "passed",
+    "packaged_protocols": [
+      "2026-07-28",
+      "2025-11-25",
+      "2024-11-05"
+    ],
+    "empty_path_launch": "passed",
+    "installed_file_hashes": 127,
+    "alpha6_version_contracts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "package_manifest_sha256": "6780fede2233ce6d00b6009a5db70571d2e8cc2c391e04b2019450f18bf6e6db",
+  "archive_sha256": "f24e6f967f6c6653830b4429a20bdff3424a53ab7574bd127d79707724562704",
+  "native_addon_loaded_without_enumeration": true,
+  "app_only_install_tools": true,
+  "v15_to_custom_fwsc_enabled": true,
+  "common_firmware_self_update_enabled": false,
+  "physical_stock_write_performed": false,
+  "physical_custom_write_performed": false,
+  "custom_package": {
+    "full_readback_verified": false,
+    "raw_bytes": 623156,
+    "application_bytes": 160560,
+    "hardware_qualified": false,
+    "live_baseline_verified": false,
+    "target_build_sha256": "d30f420bf4609e0102a70eab12003aa893271cd6823201db2ae3d4832e2aba3c",
+    "package_sha256": "28feacb925a1bb634beae7e38e9094964e8e61e7a69af2c0c5f601adcc572472",
+    "layout_preservation": "offline pinned public V15 including authenticated partial boundary tail",
+    "application_sha256": "3b8c9fb2eb369a865c486ec9021a6eefadf71273a42d7dd1d185205501d69aa8"
+  },
+  "native_alpha6_panel_acceptance": "pending: open a fresh chat to activate the installed alpha6 native panel",
+  "upstream_custom_packager_mit_notice_preserved_in_distributed_bundle": true
+}
