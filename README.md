@@ -7,6 +7,23 @@ Repository: [Keitark/fm-1-forge](https://github.com/Keitark/fm-1-forge).
 Firmware and HAL sources live separately in
 [Keitark/fm1-tracker](https://github.com/Keitark/fm1-tracker).
 
+## One desktop plugin: Windows and macOS
+
+**FM-1 Forge 3.4.0-alpha.9** includes Windows x64, Apple Silicon and Intel Mac
+runtimes and native MIDI components in one plugin. Codex automatically launches
+the matching backend; users do not choose an architecture or install Node/Python
+or a separate helper. See the [unified desktop installation guide](docs/DESKTOP.md).
+
+```sh
+codex plugin marketplace add Keitark/fm-1-forge@desktop
+codex plugin add fm1-app-library@fm1-forge
+```
+
+The `desktop` distribution branch contains the built local marketplace. Stock
+and custom FWSC programming retain explicit confirmation and recovery checks.
+Mac hardware flashing remains unverified; this release covers native MIDI/SysEx,
+not serial/UBOOT writing or Linux.
+
 ## Windows desktop preview
 
 **FM-1 Forge Windows 3.4.0-alpha.7** packages its own runtime and native MIDI

@@ -1,5 +1,9 @@
 # FM-1 Forge macOS preview
 
+For the current single-install Windows/macOS package with automatic CPU selection,
+see [FM-1 Forge desktop](DESKTOP.md). The alpha.8 instructions below remain
+available for the separate architecture-specific preview.
+
 Version **3.4.0-alpha.8** adds a separate native macOS plugin edition for Apple
 Silicon (`arm64`) and Intel (`x64`). The Windows alpha.7 installation and the
 hosted Forge plugin are preserved. Linux is not enabled by this change.

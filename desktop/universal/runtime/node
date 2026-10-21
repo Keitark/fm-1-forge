@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  printf '%s\n' 'FM-1 Forge could not start. Verify the installed desktop package.' >&2
+  exit 1
+}
+
+case "$0" in
+  */*) runtime_dir=${0%/*} ;;
+  *) fail ;;
+esac
+package_root=$(CDPATH= cd -P "$runtime_dir/.." 2>/dev/null && pwd -P) || fail
+[ "$(/usr/bin/uname -s 2>/dev/null)" = Darwin ] || fail
+case "$(/usr/bin/uname -m 2>/dev/null)" in
+  arm64) target=darwin-arm64 ;;
+  x86_64) target=darwin-x64 ;;
+  *) fail ;;
+esac
+node_path="$package_root/payloads/$target/runtime/$target/node"
+[ -f "$node_path" ] && [ -x "$node_path" ] || fail
+exec "$node_path" "$@"
