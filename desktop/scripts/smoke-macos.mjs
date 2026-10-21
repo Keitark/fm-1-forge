@@ -26,14 +26,14 @@ for(const revision of ['2026-07-28','2025-11-25','2024-11-05']){
   const transport=new StdioClientTransport({command:node,args:[path.join(root,'server/index.mjs')],cwd:root,env:{PATH:'',HOME:os.homedir(),PLUGIN_DATA:data,TMPDIR:data,TEMP:data,TMP:data},stderr:'pipe'});
   const client=new Client({name:'Forge macOS passive acceptance',version:'1'},{capabilities:{},supportedProtocolVersions:[revision],versionNegotiation:{mode:revision==='2026-07-28'?{pin:revision}:'legacy'}});
   try{
-    await client.connect(transport);assert.equal(client.getServerVersion().version,manifest.version);
+    await client.connect(transport);assert.equal(client.getServerVersion().name,'FM-1 Forge macOS');assert.equal(client.getServerVersion().version,manifest.version);
     const tools=(await client.listTools()).tools;assert.equal(tools.length,24);
     for(const name of ['start_fm1_stock_update','start_fm1_custom_update']){const tool=tools.find(item=>item.name===name);assert.deepEqual(tool._meta.ui.visibility,['app']);assert.equal(tool.annotations.destructiveHint,true);}
     const opened=await client.callTool({name:'open_fm1_library',arguments:{}});assert.ok(!opened.isError,JSON.stringify(opened));
     assert.equal(opened.structuredContent.desktop.platform,'darwin');assert.equal(opened.structuredContent.desktop.customUpdateAvailable,true);assert.equal(opened.structuredContent.desktop.installationAvailable,false);
     for(const name of ['get_fm1_stock_update_status','get_fm1_custom_update_status']){const status=await client.callTool({name,arguments:{}});assert.deepEqual(status.structuredContent,{supported:true,writing:false,attempt:null,review:null});}
     const panel=await client.readResource({uri:'ui://fm1/forge-macos-v1.html'});const markup=panel.contents[0].text.split('<script>')[0];
-    assert.ok(panel.contents[0].text.includes('FM-1 Forge macOS'));assert.ok(markup.includes('Custom firmware update · SysEx'));assert.ok(!/id="direct-common(?:-|\")/.test(markup));
+    assert.ok(panel.contents[0].text.includes("const desktopPlatform='darwin';"));assert.ok(panel.contents[0].text.includes('const desktopMode=true;'));assert.ok(markup.includes('Custom firmware update · SysEx'));assert.ok(!/id="direct-common(?:-|\")/.test(markup));
     checks.push({revision,tools:tools.length,passive:true,emptyPath:true});
   }finally{await client.close();}
 }
