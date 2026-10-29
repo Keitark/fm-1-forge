@@ -18,8 +18,8 @@ import { ICONS } from '../site/lib/fm1-icon.mjs';
 import { PRESETS, PATTERNS } from '../site/lib/fm1-appearance.mjs';
 import { normalizeProjectConfig } from '../site/lib/fm1-forge-project.mjs';
 
-export const RESOURCE_URI='ui://fm1/forge-windows-v4.html';
-export const VERSION='3.4.0-alpha.10';
+export const RESOURCE_URI='ui://fm1/forge-windows-v5.html';
+export const VERSION='3.4.0-alpha.11';
 const supportedTransports=['stock-midi','firmware-midi'];
 const projectGate=label=>({diagnostics_verified:false,can_start_project:false,message:'Configure and build a project with Codex, then review the generated custom FWSC and exact target build in the '+label+' panel. A build request does not authorize installation.'});
 const result=data=>({content:[{type:'text',text:JSON.stringify(data)}],structuredContent:data});

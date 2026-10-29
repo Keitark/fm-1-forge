@@ -34,7 +34,7 @@ for (const revision of ['2026-07-28', '2025-11-25', '2024-11-05']) {
     for (const name of ['get_fm1_stock_update_status', 'get_fm1_custom_update_status']) {
       const status = await client.callTool({ name, arguments: {} }); assert.deepEqual(status.structuredContent, { supported: true, writing: false, attempt: null, review: null });
     }
-    const panel = await client.readResource({ uri: 'ui://fm1/forge-windows-v4.html' });
+    const panel = await client.readResource({ uri: 'ui://fm1/forge-windows-v5.html' });
     assert.ok(panel.contents[0].text.includes('Verify tracker boot'));
     checks.push({ revision, tools: tools.length, emptyPath: true, passive: true });
   } finally { await client.close(); }

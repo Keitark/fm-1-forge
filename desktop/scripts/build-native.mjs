@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveDesktopPlatform } from '../lib/platform.mjs';
 
-export const PACKAGE_VERSION = '3.4.0-alpha.10';
+export const PACKAGE_VERSION = '3.4.0-alpha.11';
 export const WINDOWS_MCP_SERVER_NAME = 'fm1-forge-windows';
 export const MACOS_MCP_SERVER_NAME = 'fm1-forge-macos';
 export const NODE_VERSION = 'v22.22.2';
@@ -248,7 +248,7 @@ function cleanRuntimeEnvironment() {
 }
 
 function runNode(executable, args, cwd) {
-  const result = spawnSync(executable, args, { cwd, encoding: 'utf8', windowsHide: true, shell: false, env: cleanRuntimeEnvironment(), timeout: 30_000, maxBuffer: 1024 * 1024 });
+  const result = spawnSync(executable, args, { cwd, encoding: 'utf8', windowsHide: true, shell: false, env: cleanRuntimeEnvironment(), timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
   if (result.error || result.status !== 0) throw new Error(`Reviewed runtime check failed: ${result.error?.message ?? result.stderr.trim()}`);
   return JSON.parse(result.stdout.trim());
 }
@@ -279,7 +279,12 @@ export async function buildNativePackage(options, target) {
   const names = Object.keys(sourceMcp.mcpServers ?? {});
   if (names.length !== 1) throw new Error('Source plugin must declare one reviewed MCP server');
   if (names.includes(target.serverName)) throw new Error(`${target.label} MCP server key must be distinct from the hosted source server`);
-  const UI_HTML = (await import(pathToFileURL(path.join(root, 'site/lib/fm1-ui.mjs')).href))[target.uiExport];
+  // The generated SDK IIFE also contains the device controllers. Rebuild it
+  // before rendering HTML, then use a fresh process to avoid ESM module caches.
+  const panelGenerator = path.join(root, 'site/scripts/build-fm1-panel.mjs');
+  const generated = spawnSync(nodeExecutable, [panelGenerator], { cwd: root, encoding: 'utf8', windowsHide: true, shell: false, env: cleanRuntimeEnvironment(), timeout: 30_000, maxBuffer: 1024 * 1024 });
+  if (generated.error || generated.status !== 0) throw new Error(`Panel runtime generation failed: ${generated.error?.message ?? generated.stderr.trim()}`);
+  const UI_HTML = runNode(nodeExecutable, ['--input-type=module', '-e', `const ui=await import(${JSON.stringify(pathToFileURL(path.join(root, 'site/lib/fm1-ui.mjs')).href)});process.stdout.write(JSON.stringify(ui[${JSON.stringify(target.uiExport)}]));`], root);
   if (typeof UI_HTML !== 'string' || UI_HTML.length < 1000 || !UI_HTML.includes('const desktopMode=true;')) throw new Error(`${target.label} panel HTML is unavailable`);
   // Atomic ownership claim: never delete/reuse a pre-existing output, including a partial earlier build.
   await mkdir(output);
@@ -329,6 +334,7 @@ export async function buildNativePackage(options, target) {
   sourceFiles.push(...['plugin.json', '.codex-plugin/plugin.json', 'mcp.json'].map(name => path.join(sourcePlugin, name)));
   sourceFiles.push(...Object.values(DEPENDENCY_LICENSE_OVERRIDES).map(override => path.join(root, 'desktop/licenses', override.file)));
   sourceFiles.push(...['LICENSE', 'NOTICE'].map(name => path.join(root, 'site/lib/browser-common', name)));
+  sourceFiles.push(panelGenerator);
   if (target.platform === 'win32') sourceFiles.push(...['windows-midi-inventory.ps1', 'windows-tracker-cdc.ps1'].map(name => path.join(root, 'tools/jieli-wl82/stock-sysex', name)));
   const sources = [];
   for (const filename of [...new Set(sourceFiles)].sort()) {

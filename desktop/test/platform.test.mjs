@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { resolveDesktopPlatform, desktopDataDirectory } from '../lib/platform.mjs';
 
 test('native targets retain the Windows edition and explicitly select both macOS CPUs', () => {
-  assert.deepEqual(resolveDesktopPlatform({ platform: 'win32', arch: 'x64' }), { platform: 'win32', arch: 'x64', label: 'Windows', name: 'FM-1 Forge Windows', resourceUri: 'ui://fm1/forge-windows-v4.html', uiExport: 'WINDOWS_UI_HTML' });
+  assert.deepEqual(resolveDesktopPlatform({ platform: 'win32', arch: 'x64' }), { platform: 'win32', arch: 'x64', label: 'Windows', name: 'FM-1 Forge Windows', resourceUri: 'ui://fm1/forge-windows-v5.html', uiExport: 'WINDOWS_UI_HTML' });
   for (const arch of ['arm64', 'x64']) {
     const edition = resolveDesktopPlatform({ platform: 'darwin', arch });
     assert.equal(edition.platform, 'darwin'); assert.equal(edition.arch, arch);

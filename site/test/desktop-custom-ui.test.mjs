@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import vm from 'node:vm';
 import {mountDesktopDevicesUi} from '../lib/fm1-desktop-devices-ui.mjs';
 import {customFwscHtml} from '../lib/fm1-desktop-custom-ui.mjs';
+import {MCP_APPS_SCRIPT} from '../lib/fm1-app-sdk.generated.mjs';
 
 const user={isTrusted:true},synthetic={isTrusted:false},tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 const rawBytes=623156,hash=letter=>letter.repeat(64),opaque=letter=>letter.repeat(32);
@@ -17,7 +20,7 @@ const status=overrides=>({supported:true,writing:false,attempt:null,review:null,
 const device=overrides=>({connected:true,transport:'stock-midi',identity:'FM-1_015',profile:null,loader:false,installationAvailable:false,supportedTransports:['stock-midi'],...overrides});
 const packageFile=bytes=>({name:'my-firmware.fwsc',size:bytes.byteLength,arrayBuffer:async()=>bytes.buffer});
 const manifestFile=value=>{const bytes=new TextEncoder().encode(JSON.stringify(value));return {name:'my-firmware.manifest.json',size:bytes.length,arrayBuffer:async()=>bytes.buffer};};
-function fixture({stockUpdateAvailable=true,customUpdateAvailable=true,stock=status(),custom=status(),handler}={}){
+function fixture({stockUpdateAvailable=true,customUpdateAvailable=true,stock=status(),custom=status(),handler,mount=mountDesktopDevicesUi}={}){
   const backend={stock,custom,device:device(),customReview:customReview(),stockReview:stockReview(),chunks:[],manifest:null},nodes=new Map(),calls=[],signals=[],timers=new Map(),events=new Map(),documentEvents=new Map();let sequence=0;
   const el=key=>{if(!nodes.has(key))nodes.set(key,{textContent:'',disabled:false,hidden:false,open:false,className:'',onclick:null,onchange:null,showModal(){this.open=true;},close(){this.open=false;},addEventListener(){},removeEventListener(){},removeAttribute(name){delete this[name];}});return nodes.get(key);};
   const forbidden=()=>assert.fail('Native custom FWSC controls must not call browser device APIs');
@@ -40,7 +43,7 @@ function fixture({stockUpdateAvailable=true,customUpdateAvailable=true,stock=sta
     if(name==='start_fm1_stock_update'){backend.stock=status({writing:true,attempt:stockAttempt()});return {writing:true,attempt:backend.stock.attempt,review:null};}
     assert.fail('Unexpected native tool '+name);
   };
-  const controller=mountDesktopDevicesUi({el,call,runtime,signal:abort.signal,supportedTransports:['stock-midi'],stockUpdateAvailable,customUpdateAvailable});
+  const controller=mount({el,call,runtime,signal:abort.signal,supportedTransports:['stock-midi'],stockUpdateAvailable,customUpdateAvailable});
   return {el,calls,signals,backend,controller,runtime,abort,timers,events,documentEvents,async pair(){await controller.ready;await controller.connectMidi(user);const bytes=new Uint8Array(rawBytes).fill(7);await controller.custom.selectManifest(manifestFile(manifest()),user);await controller.custom.selectPackage(packageFile(bytes),user);return bytes;},async poll(){const row=timers.entries().next().value;assert.ok(row,'one shared status timer expected');timers.delete(row[0]);row[1].fn();await tick();}};
 }
 
@@ -327,4 +330,54 @@ test('failed tracker verification preserves the job; successful refresh clears i
   assert.equal(f.el('desktop-custom-verify').disabled,false);assert.equal(calls,2);
   assert.equal(f.calls.some(row=>row.name==='connect_fm1_device'||row.name==='start_fm1_custom_update'),false);
   f.controller.dispose();
+});
+
+function generatedDesktopMount(script){
+  const window={},context=vm.createContext({window,AbortController,TextEncoder,TextDecoder,ArrayBuffer,Uint8Array,
+    URL,console,crypto:globalThis.crypto,setTimeout,clearTimeout,queueMicrotask});
+  vm.runInContext(script,context,{timeout:10000});
+  assert.equal(typeof window.FM1DesktopDevicesUI?.mount,'function','delivered script must expose the desktop controller');
+  return window.FM1DesktopDevicesUI.mount;
+}
+async function generatedPackageManifest(){
+  if(process.env.FM1_CUSTOM_MANIFEST_JSON)return JSON.parse(await fs.readFile(process.env.FM1_CUSTOM_MANIFEST_JSON,'utf8'));
+  // Metadata captured from the actual tracker V15 package that exposed the stale
+  // generated-script bug. Full preservation proof remains the native validator's job.
+  return trackerManifest({package_sha256:'beeb2b58a698223a47916cd7cd3763b60eb60b74b3db4af99df1329676dc6940',
+    logical_sha256:'6e129e46c7862b4eda2a8974a72202878bf6ebb3d11eeda59a996137f4a55ab9',
+    target_build_sha256:'251763e12335d417fc6b3a370a9600f268c9d26b928be26a74be57d3575eb931',
+    application_sha256:'9ef399c21da34a71e83dfc99831b75c3b65beef5988500635ed42369c5f1e1fc',application_bytes:511760});
+}
+for(const mode of ['source','generated'])test(mode+' desktop controller accepts the generated tracker package manifest and binds CDC review',async()=>{
+  const selected=await generatedPackageManifest(),mount=mode==='source'?mountDesktopDevicesUi:generatedDesktopMount(MCP_APPS_SCRIPT);
+  const f=fixture({mount});
+  try{
+    await f.controller.ready;await f.controller.connectMidi(user);
+    await f.controller.custom.selectManifest(manifestFile(selected),user);
+    await f.controller.custom.selectPackage(packageFile(new Uint8Array(selected.raw_bytes)),user);
+    f.backend.customReview=trackerReview({sha256:selected.package_sha256,logical_sha256:selected.logical_sha256,
+      target_build_sha256:selected.target_build_sha256,raw_bytes:selected.raw_bytes,logical_bytes:selected.logical_bytes});
+    assert.equal(f.el('desktop-custom-review').disabled,false);
+    await f.controller.custom.stage(user);
+    assert.equal(f.el('desktop-custom-dialog').open,true);assert.equal(f.el('desktop-custom-confirm').disabled,false);
+    assert.match(f.el('desktop-custom-review-text').textContent,/CDC serial/);
+    assert.ok(f.el('desktop-custom-review-text').textContent.includes(selected.target_build_sha256));
+    assert.deepEqual(f.backend.manifest,selected);
+    assert.equal(f.calls.some(row=>row.name==='start_fm1_custom_update'),false);
+  }finally{f.controller.dispose();}
+});
+test('delivered native panel controller accepts the exact generated tracker manifest',{
+  skip:!process.env.FM1_DELIVERED_PANEL_HTML,
+},async()=>{
+  const html=await fs.readFile(process.env.FM1_DELIVERED_PANEL_HTML,'utf8');
+  const script=/<script>([\s\S]*?)<\/script>/.exec(html)?.[1];assert.ok(script,'native panel must deliver its controller script');
+  const f=fixture({mount:generatedDesktopMount(script)});
+  try{
+    await f.controller.ready;await f.controller.connectMidi(user);
+    const selected=await generatedPackageManifest();
+    await f.controller.custom.selectManifest(manifestFile(selected),user);
+    await f.controller.custom.selectPackage(packageFile(new Uint8Array(selected.raw_bytes)),user);
+    assert.equal(f.el('desktop-custom-review').disabled,false);
+    assert.ok(f.el('desktop-custom-summary').textContent.includes(selected.target_build_sha256));
+  }finally{f.controller.dispose();}
 });
