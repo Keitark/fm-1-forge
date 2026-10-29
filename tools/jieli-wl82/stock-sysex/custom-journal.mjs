@@ -4,11 +4,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { StockError, STOCK } from './protocol.mjs';
 import { validateSelectedPair } from './selection.mjs';
 import { absolutePath, checkPath, atomicJson, readJson } from './files.mjs';
+import { customProfilePolicy } from './custom-package.mjs';
 
 const jobPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/;
 const blocked = new Set(['active', 'unknown']);
 const phases = new Set(['prepared', 'entering_check', 'checking', 'waiting_loader', 'entering_write', 'writing', 'waiting_reboot', 'done', 'failed']);
 export function customRequestIdentity(config) {
+  const profile = customProfilePolicy(config.profile ?? 'forge-diag');
   if (!jobPattern.test(config.jobId ?? '') || !jobPattern.test(config.endpointReviewId ?? '') || config.kind !== 'custom-fwsc' ||
       config.product !== 'FM1_FORGE_001' || !['sha256', 'logicalSha256', 'targetBuildSha256', 'manifestSha256'].every(key => /^[a-f0-9]{64}$/.test(config[key] ?? '')) ||
       !Number.isSafeInteger(config.rawBytes) || config.rawBytes < 21 || config.rawBytes > 2097152 || !Number.isSafeInteger(config.logicalBytes) || config.logicalBytes < 1 || config.logicalBytes !== config.rawBytes - 20) {
@@ -17,7 +19,7 @@ export function customRequestIdentity(config) {
   const request = { kind: 'custom-fwsc', jobId: config.jobId, product: config.product, sha256: config.sha256,
     logicalSha256: config.logicalSha256, targetBuildSha256: config.targetBuildSha256, manifestSha256: config.manifestSha256,
     rawBytes: config.rawBytes, logicalBytes: config.logicalBytes, endpointReviewId: config.endpointReviewId,
-    expectedStockPair: validateSelectedPair(config.expectedStockPair) };
+    expectedStockPair: validateSelectedPair(config.expectedStockPair), ...(profile.profile === 'protracker' ? { profile: 'protracker' } : {}) };
   return { request, digest: createHash('sha256').update(JSON.stringify(request)).digest('hex') };
 }
 export function validateCustomJournal(record) {
@@ -29,7 +31,7 @@ export function validateCustomJournal(record) {
       (record.state === 'prepared' && (record.phase !== 'prepared' || record.transfer_finished)) ||
       typeof record.transfer_finished !== 'boolean' || typeof record.boot_identity_verified !== 'boolean' || typeof record.boot_build_verified !== 'boolean' ||
       ((record.boot_identity_verified || record.boot_build_verified) && (!record.transfer_finished || record.state !== 'succeeded' || !record.boot_identity_verified || !record.boot_build_verified)) ||
-      (record.state === 'succeeded' && (!record.transfer_finished || !record.boot_identity_verified || !record.boot_build_verified || record.phase !== 'done' || record.final_identity !== 'FM1_FORGE_001' || record.final_build_sha256 !== record.request.targetBuildSha256))) {
+      (record.state === 'succeeded' && (!record.transfer_finished || !record.boot_identity_verified || !record.boot_build_verified || record.phase !== 'done' || record.final_identity !== customProfilePolicy(record.request.profile ?? 'forge-diag').expected_boot_identity || record.final_build_sha256 !== record.request.targetBuildSha256))) {
     throw new StockError('corrupt_journal', 'Custom attempt journal failed integrity validation.');
   }
   return record;

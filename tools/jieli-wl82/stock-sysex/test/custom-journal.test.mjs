@@ -11,6 +11,18 @@ const config = overrides => ({ kind: 'custom-fwsc', jobId: 'job-custom-1', produ
   expectedStockPair: { inputName: 'FM-1 Midi', outputName: 'FM-1 Midi' }, ...overrides });
 async function fixture(t) { const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'forge-custom-journal-')); t.after(() => fs.rm(directory, { recursive: true, force: true })); return directory; }
 
+test('tracker profile is bound to the original request and cannot pass with a diagnostic identity', async t => {
+  const directory = await fixture(t), base = customRequestIdentity(config()), tracker = customRequestIdentity(config({ profile: 'protracker' }));
+  assert.notEqual(base.digest, tracker.digest); assert.equal(tracker.request.profile, 'protracker');
+  assert.throws(() => customRequestIdentity(config({ profile: 'anything' })));
+  const journal = await CustomAttemptJournal.open(directory, tracker);
+  await journal.transition('waiting_reboot', { state: 'active', transfer_finished: true });
+  await assert.rejects(journal.transition('done', { state: 'succeeded', boot_identity_verified: true, boot_build_verified: true, final_identity: 'FM1_FORGE_001', final_build_sha256: tracker.request.targetBuildSha256 }), { code: 'corrupt_journal' });
+  await journal.transition('done', { state: 'succeeded', boot_identity_verified: true, boot_build_verified: true, final_identity: 'MOD-EDITOR/1', final_build_sha256: tracker.request.targetBuildSha256 });
+  const changed = structuredClone(journal.record); delete changed.request.profile; assert.throws(() => validateCustomJournal(changed), { code: 'corrupt_journal' });
+  await journal.close();
+});
+
 test('custom journal binds every package, manifest, target and endpoint field without stock whitelist changes', () => {
   const base = customRequestIdentity(config());
   for (const [key, value] of Object.entries({ sha256: '1'.repeat(64), logicalSha256: '2'.repeat(64), targetBuildSha256: '3'.repeat(64), manifestSha256: '4'.repeat(64), rawBytes: 623220, logicalBytes: 623200, endpointReviewId: 'review-other', jobId: 'job-other' })) {

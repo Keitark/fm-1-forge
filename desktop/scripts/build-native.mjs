@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveDesktopPlatform } from '../lib/platform.mjs';
 
-export const PACKAGE_VERSION = '3.4.0-alpha.9';
+export const PACKAGE_VERSION = '3.4.0-alpha.10';
 export const WINDOWS_MCP_SERVER_NAME = 'fm1-forge-windows';
 export const MACOS_MCP_SERVER_NAME = 'fm1-forge-macos';
 export const NODE_VERSION = 'v22.22.2';
@@ -79,7 +79,7 @@ export function stageManifest(source, legacy = false, target = getPackageTarget(
   if (!presentation || typeof presentation !== 'object') throw new Error('Missing source plugin interface');
   presentation.displayName = target.name;
   presentation.shortDescription = `${target.label} MIDI and FWSC updates`;
-  presentation.longDescription = `A self-contained ${target.label} ${target.arch} preview with a bundled runtime and native MIDI component. Connect FM-1 through native MIDI, review the official V15 package or a validated custom FWSC with its target build, then explicitly confirm the SysEx update. Durable original-attempt recovery prevents automatic retries after an uncertain transfer. Configure and save firmware-project drafts and settings locally. Codex starts the packaged server; no separately started helper is needed. Custom FWSC starts from stock V15 and verifies the exact Forge identity and build after reboot; subsequent common-firmware self-updates remain disabled. Raw MIDI commands, USB serial, UBOOT writes and compiler setup remain unavailable. Physical update acceptance is pending.`;
+  presentation.longDescription = `A self-contained ${target.label} ${target.arch} preview with a bundled runtime and native MIDI component. Connect FM-1 through native MIDI, review the official V15 package or a validated custom FWSC with its target build, then explicitly confirm the SysEx update. Durable original-attempt recovery prevents automatic retries after an uncertain transfer. Configure and save firmware-project drafts and settings locally. Codex starts the packaged server; no separately started helper is needed. Custom FWSC starts from stock V15 and verifies the exact profile identity and build after reboot (Forge MIDI, or tracker CDC on Windows); subsequent common-firmware self-updates remain disabled. Raw MIDI commands, USB serial, UBOOT writes and compiler setup remain unavailable. Physical update acceptance is pending.`;
   return staged;
 }
 
@@ -301,7 +301,7 @@ export async function buildNativePackage(options, target) {
   await writeFile(path.join(output, 'mcp.json'), mcp, { flag: 'wx' });
   await writeFile(path.join(output, '.mcp.json'), mcp, { flag: 'wx' });
   await writeFile(path.join(output, 'server/panel.html'), UI_HTML, { flag: 'wx' });
-  if (target.platform === 'win32') await copyFile(path.join(root, 'tools/jieli-wl82/stock-sysex/windows-midi-inventory.ps1'), path.join(output, 'server/windows-midi-inventory.ps1'), constants.COPYFILE_EXCL);
+  if (target.platform === 'win32') for (const name of ['windows-midi-inventory.ps1', 'windows-tracker-cdc.ps1']) await copyFile(path.join(root, 'tools/jieli-wl82/stock-sysex', name), path.join(output, 'server', name), constants.COPYFILE_EXCL);
   await copyRuntimeExecutable(nodeExecutable, path.join(output, target.runtimeRelative), target);
   await copyFile(nodeLicense, path.join(output, 'LICENSES/Node.js-LICENSE'), constants.COPYFILE_EXCL);
   const commonUpdaterNotice = await copyCommonUpdaterNotices(root, output);
@@ -329,6 +329,7 @@ export async function buildNativePackage(options, target) {
   sourceFiles.push(...['plugin.json', '.codex-plugin/plugin.json', 'mcp.json'].map(name => path.join(sourcePlugin, name)));
   sourceFiles.push(...Object.values(DEPENDENCY_LICENSE_OVERRIDES).map(override => path.join(root, 'desktop/licenses', override.file)));
   sourceFiles.push(...['LICENSE', 'NOTICE'].map(name => path.join(root, 'site/lib/browser-common', name)));
+  if (target.platform === 'win32') sourceFiles.push(...['windows-midi-inventory.ps1', 'windows-tracker-cdc.ps1'].map(name => path.join(root, 'tools/jieli-wl82/stock-sysex', name)));
   const sources = [];
   for (const filename of [...new Set(sourceFiles)].sort()) {
     if (!isContained(root, filename)) throw new Error('Source path is outside the source checkout');

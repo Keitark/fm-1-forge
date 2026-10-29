@@ -29,9 +29,14 @@ remains unverified.
 
 The separate custom FWSC route starts from stock V15. Use only a generated
 `firmware.fwsc` and matching `firmware.json`; review both file digests and the
-embedded target MIDI build before the user's explicit Install confirmation.
-The final result must prove observed `FM1_FORGE_001` plus exact FMC1 build/family,
-not stock V15 identity. This leaves common-firmware ARM/self-updates disabled.
+embedded target build before the user's explicit Install confirmation.
+Diagnostic packages prove `FM1_FORGE_001` plus exact FMC1 build/family over MIDI.
+The separate `protracker` profile uses stock MIDI only for installation, then
+proves `MOD-EDITOR/1` and its exact immutable build over CDC with a fresh nonce.
+Its bounded packaged verifier sends only `FWINFO`; it exposes no serial writer.
+After a completed tracker transfer, use **Verify tracker boot** to observe the
+same original build without rewriting it. A missing or mismatched proof remains
+unresolved. This leaves common-firmware ARM/self-updates disabled.
 Preserve shared stock/custom uncertainty guards and original-attempt recovery.
 Offline public-template layout preservation is not a live unit baseline check
 or full flash readback; distinguish these from physical acceptance.

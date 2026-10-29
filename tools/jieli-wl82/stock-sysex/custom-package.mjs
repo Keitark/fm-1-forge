@@ -30,6 +30,10 @@ export const MAX_CUSTOM_FWSC_BYTES = 2 * 1024 * 1024;
 export const CUSTOM_POLICY_VERSION = 'customfwsc-v1';
 export const CUSTOM_IDENTITY = 'FM1_FORGE_001';
 export const CUSTOM_APPLICATION_MAX_BYTES = 581564;
+const PROFILE_POLICIES = Object.freeze({
+  'forge-diag': Object.freeze({ profile: 'forge-diag', expected_boot_identity: CUSTOM_IDENTITY, family: 8, verification_transport: 'midi' }),
+  protracker: Object.freeze({ profile: 'protracker', expected_boot_identity: 'MOD-EDITOR/1', family: 9, verification_transport: 'cdc' }),
+});
 const FLASH_BYTES = 0x93000, AREA = 0x4000, APP = 0x4120;
 const APP_END = 0x920dc, AREA_BYTES = 582235, PUBLIC_CODE = 0x980f;
 const OTA_BYTES = 19969, LOGICAL_BYTES = 623136, RAW_BYTES = LOGICAL_BYTES + 20;
@@ -43,6 +47,10 @@ const PIN = Object.freeze({
 });
 const fail = message => { throw new StockError('invalid_custom_package', message); };
 const require = (condition, message) => { if (!condition) fail(message); };
+export function customProfilePolicy(profile) {
+  require(typeof profile === 'string' && Object.hasOwn(PROFILE_POLICIES, profile), 'Unsupported custom firmware profile.');
+  return PROFILE_POLICIES[profile];
+}
 const sha = data => createHash('sha256').update(data).digest('hex');
 const hex = data => Buffer.from(data).toString('hex');
 const bytes = input => {
@@ -214,9 +222,10 @@ const MANIFEST_FIELDS = ['schemaVersion','policy_version','package_sha256','logi
   'expected_boot_identity','family','profile','source_stock_sha256','ota_sha256','application_sha256','application_bytes','preservation','hardware_qualified','stock_tail_proof'];
 export function validateCustomManifest(manifest) {
   require(exactKeys(manifest, MANIFEST_FIELDS), 'Custom manifest fields are invalid.');
+  const profile = customProfilePolicy(manifest.profile);
   require(manifest.schemaVersion === 1 && manifest.policy_version === CUSTOM_POLICY_VERSION &&
     manifest.raw_bytes === RAW_BYTES && manifest.logical_bytes === LOGICAL_BYTES &&
-    manifest.expected_boot_identity === CUSTOM_IDENTITY && manifest.family === 8 && manifest.profile === 'forge-diag' &&
+    manifest.expected_boot_identity === profile.expected_boot_identity && manifest.family === profile.family &&
     manifest.source_stock_sha256 === STOCK.sha256 && manifest.ota_sha256 === OTA_SHA &&
     manifest.preservation === 'public-v15-fixed-layout-app-only' && manifest.hardware_qualified === false,
   'Custom manifest policy or pinned source differs.');
@@ -233,8 +242,9 @@ export function validateCustomManifest(manifest) {
 }
 export async function buildCustomFwsc({ stockPackage, application, targetBuildSha256, profile = 'forge-diag' } = {}) {
   const stock = bytes(stockPackage), app = bytes(application);
+  const policy = customProfilePolicy(profile);
   require(stock.length === STOCK.rawBytes && sha(stock) === STOCK.sha256, 'Only the pinned public V15 FWSC template is accepted.');
-  require(app.length > 0 && app.length <= CUSTOM_APPLICATION_MAX_BYTES && digest(targetBuildSha256) && profile === 'forge-diag', 'Invalid custom application, build digest or profile.');
+  require(app.length > 0 && app.length <= CUSTOM_APPLICATION_MAX_BYTES && digest(targetBuildSha256), 'Invalid custom application or build digest.');
   require(Buffer.from(app).includes(Buffer.from(targetBuildSha256, 'hex')), 'Application does not contain the declared firmware MIDI build identity.');
   // Auxiliary stock entries use other encodings. Their exact bytes are pinned
   // by the package SHA; only the two retained raw resources need raw-data CRCs.
@@ -253,10 +263,12 @@ export async function buildCustomFwsc({ stockPackage, application, targetBuildSh
   for (const [begin, end] of [[AREA, AREA + 64], [APP, round32(APP + app.length)]]) {
     for (let at = begin; at < end; at += 32) candidate.set(cipher(plain.subarray(at, at + 32), PUBLIC_CODE ^ ((at - AREA) >>> 2)), at);
   }
+  // This is the fixed FWSC container product, not the post-install identity.
+  // Tracker packages retain the same stock-loader encoding and verify CDC.
   const image = makeUfw(candidate, ota), raw = wrapFwsc(image, CUSTOM_IDENTITY);
   const manifest = {
     schemaVersion: 1, policy_version: CUSTOM_POLICY_VERSION, package_sha256: sha(raw), logical_sha256: sha(image), raw_bytes: raw.length, logical_bytes: image.length,
-    target_build_sha256: targetBuildSha256, expected_boot_identity: CUSTOM_IDENTITY, family: 8, profile,
+    target_build_sha256: targetBuildSha256, expected_boot_identity: policy.expected_boot_identity, family: policy.family, profile,
     source_stock_sha256: STOCK.sha256, ota_sha256: OTA_SHA, application_sha256: sha(app), application_bytes: app.length,
     preservation: 'public-v15-fixed-layout-app-only', hardware_qualified: false, stock_tail_proof: proof,
   };
@@ -265,6 +277,7 @@ export async function buildCustomFwsc({ stockPackage, application, targetBuildSh
 }
 export async function inspectCustomFwsc(input, inputManifest) {
   const manifest = validateCustomManifest(inputManifest), raw = bytes(input);
+  const profile = customProfilePolicy(manifest.profile);
   require(raw.length === RAW_BYTES && sha(raw) === manifest.package_sha256, 'Custom package size or digest mismatch.');
   const image = unwrapFwsc(raw, CUSTOM_IDENTITY);
   require(sha(image) === manifest.logical_sha256, 'Custom logical-image digest mismatch.');
@@ -281,8 +294,9 @@ export async function inspectCustomFwsc(input, inputManifest) {
   require(tailDigest(manifest.stock_tail_proof, entries[0].data.subarray(APP, APP_END)) === MERKLE_ROOT,
     'Unused public-stock application tail was changed.');
   const metadata = Object.freeze({ product: CUSTOM_IDENTITY, sha256: manifest.package_sha256, raw_bytes: raw.length, logical_bytes: image.length,
-    logical_sha256: manifest.logical_sha256, target_build_sha256: manifest.target_build_sha256, expected_boot_identity: CUSTOM_IDENTITY,
-    application_sha256: manifest.application_sha256, application_bytes: length, family: 8, policy_version: CUSTOM_POLICY_VERSION });
+    logical_sha256: manifest.logical_sha256, target_build_sha256: manifest.target_build_sha256, expected_boot_identity: profile.expected_boot_identity,
+    application_sha256: manifest.application_sha256, application_bytes: length, family: profile.family, policy_version: CUSTOM_POLICY_VERSION,
+    ...(manifest.profile === 'protracker' ? { profile: manifest.profile, verification_transport: profile.verification_transport } : {}) });
   const policy = Object.freeze({ version: CUSTOM_POLICY_VERSION, preservation: manifest.preservation, source_stock_sha256: STOCK.sha256,
     ota_sha256: OTA_SHA, hardware_qualified: false, installation_guard_changed: false });
   return { metadata, image, policy };

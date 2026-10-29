@@ -10,6 +10,9 @@ const customReview=overrides=>({review_id:opaque('5'),job_id:opaque('6'),kind:'c
 const stockReview=()=>({review_id:opaque('1'),job_id:opaque('2'),operation:'install',product:'FM-1_015',identity:'FM-1_015',input_name:'FM-1 MIDI input',output_name:'FM-1 MIDI output',sha256:hash('3'),raw_bytes:699956,logical_bytes:699936,expires_at:'2099-10-19T00:00:00.000Z'});
 const stockAttempt=(state='active',overrides={})=>({job_id:opaque('2'),state,phase:'Serving stock package',progress:0.25,transfer_finished:false,boot_identity_verified:false,readback_verified:false,recovery_required:state==='unknown',...overrides});
 const customAttempt=(state='active',overrides={})=>({...stockAttempt(state),job_id:opaque('6'),kind:'custom-fwsc',phase:'Serving custom package',boot_build_verified:false,target_build_sha256:hash('c'),expected_boot_identity:'FM1_FORGE_001',observed_boot_identity:null,observed_build_sha256:null,...overrides});
+const trackerManifest=overrides=>manifest({profile:'protracker',family:9,expected_boot_identity:'MOD-EDITOR/1',...overrides});
+const trackerReview=overrides=>customReview({product:'FM-1 Tracker',profile:'protracker',verification_transport:'cdc',expected_boot_identity:'MOD-EDITOR/1',...overrides});
+const trackerAttempt=(state='unknown',overrides={})=>customAttempt(state,{profile:'protracker',verification_transport:'cdc',expected_boot_identity:'MOD-EDITOR/1',...overrides});
 const status=overrides=>({supported:true,writing:false,attempt:null,review:null,...overrides});
 const device=overrides=>({connected:true,transport:'stock-midi',identity:'FM-1_015',profile:null,loader:false,installationAvailable:false,supportedTransports:['stock-midi'],...overrides});
 const packageFile=bytes=>({name:'my-firmware.fwsc',size:bytes.byteLength,arrayBuffer:async()=>bytes.buffer});
@@ -208,4 +211,120 @@ test('reviewing either package clears the opposite dialog and server review with
   await f.controller.custom.stage(user);assert.equal(f.el('direct-stock-dialog').open,false);assert.equal(f.controller.state().review,null);assert.equal(f.el('desktop-custom-dialog').open,true);
   await f.controller.stage(user);assert.equal(f.el('desktop-custom-dialog').open,false);assert.equal(f.controller.custom.state().review,null);
   await f.controller.custom.stage(user);f.backend.custom={...f.backend.custom,review:null};await f.controller.refreshWriter();assert.equal(f.controller.custom.state().review,null);await f.controller.custom.confirm(user);assert.equal(f.calls.some(row=>row.name==='start_fm1_custom_update'||row.name==='start_fm1_stock_update'),false);f.controller.dispose();
+});
+
+test('tracker selection and review bind the closed CDC profile without changing diagnostics',async()=>{
+  const f=fixture({handler:(name,args,backend)=>{
+    if(name==='start_fm1_custom_update'){backend.custom=status({writing:true,attempt:trackerAttempt('active')});return {writing:true,attempt:backend.custom.attempt,review:null};}
+  }});
+  await f.controller.ready;await f.controller.connectMidi(user);f.backend.customReview=trackerReview();
+  await f.controller.custom.selectManifest(manifestFile(trackerManifest()),user);
+  await f.controller.custom.selectPackage(packageFile(new Uint8Array(rawBytes)),user);
+  assert.match(f.el('desktop-custom-summary').textContent,/Boot verification: CDC serial/);
+  await f.controller.custom.stage(user);
+  const text=f.el('desktop-custom-review-text').textContent;
+  assert.match(text,/Profile: ProTracker/);assert.match(text,/CDC serial \(FWINFO nonce and exact build identity\)/);
+  assert.match(text,/Expected boot identity: MOD-EDITOR\/1/);
+  await f.controller.custom.confirm(user);
+  assert.equal(f.controller.custom.state().attempt.profile,'protracker');
+  assert.equal(f.controller.custom.state().attempt.expected_boot_identity,'MOD-EDITOR/1');
+  f.backend.custom=status({attempt:trackerAttempt('succeeded',{transfer_finished:true,boot_identity_verified:true,boot_build_verified:true,
+    observed_boot_identity:'MOD-EDITOR/1',observed_build_sha256:hash('c'),recovery_required:false,progress:1})});
+  await f.poll();assert.equal(f.controller.custom.state().operationStatus,'succeeded');
+  assert.match(f.el('desktop-custom-transfer-status').textContent,/MOD-EDITOR\/1 CDC identity and reviewed build verified/);
+  assert.equal(f.el('desktop-custom-verify').hidden,true);f.controller.dispose();
+});
+
+test('tracker manifests and reviews reject mixed identity, family or verification tuples before install',async()=>{
+  for(const change of [{family:8},{family:'9'},{expected_boot_identity:'FM1_FORGE_001'},
+    {profile:'tracker'},{verification_transport:'midi'}]){
+    const f=fixture();await f.controller.ready;await f.controller.connectMidi(user);
+    await assert.rejects(f.controller.custom.selectManifest(manifestFile(trackerManifest(change)),user));
+    assert.equal(f.calls.some(row=>row.name==='begin_fm1_custom_upload'),false);f.controller.dispose();
+  }
+  for(const reply of [customReview(),trackerReview({verification_transport:'midi'}),trackerReview({family:8})]){
+    const f=fixture();await f.controller.ready;await f.controller.connectMidi(user);f.backend.customReview=reply;
+    await f.controller.custom.selectManifest(manifestFile(trackerManifest()),user);
+    await f.controller.custom.selectPackage(packageFile(new Uint8Array(rawBytes)),user);
+    await assert.rejects(f.controller.custom.stage(user));assert.equal(f.el('desktop-custom-dialog').open,false);
+    await f.controller.custom.confirm(user);assert.equal(f.calls.some(row=>row.name==='start_fm1_custom_update'),false);f.controller.dispose();
+  }
+});
+
+test('completed tracker transfer offers explicit CDC verification without a MIDI connection or resend',async()=>{
+  const original=trackerAttempt('unknown',{phase:'Awaiting tracker CDC proof',transfer_finished:true});
+  let release;
+  const f=fixture({custom:status({attempt:original}),handler:(name,args,backend)=>{
+    if(name==='verify_fm1_custom_boot')return new Promise(resolve=>{release=()=>{backend.custom=status({writing:true,attempt:trackerAttempt('active',{phase:'Verifying CDC boot',transfer_finished:true})});resolve({writing:true,attempt:backend.custom.attempt,review:null});};});
+  }});
+  await f.controller.ready;
+  assert.match(customFwscHtml,/Verify tracker boot/);assert.equal(f.controller.state().connected,false);
+  assert.equal(f.el('desktop-custom-verify').hidden,false);assert.equal(f.el('desktop-custom-verify').disabled,false);
+  assert.equal(f.el('desktop-custom-recovery').hidden,true);assert.match(f.el('desktop-custom-note').textContent,/no MIDI connection or firmware resend/);
+  await f.controller.custom.verifyBoot(synthetic);assert.equal(f.calls.filter(row=>row.name==='verify_fm1_custom_boot').length,0);
+  const pending=f.controller.custom.verifyBoot(user);await f.controller.custom.verifyBoot(user);
+  assert.equal(f.controller.custom.isWriting(),true);assert.equal(f.el('desktop-custom-verify').disabled,true);
+  release();await pending;assert.equal(f.calls.filter(row=>row.name==='verify_fm1_custom_boot').length,1);
+  assert.deepEqual(f.calls.find(row=>row.name==='verify_fm1_custom_boot').args,{job_id:opaque('6')});
+  assert.equal(f.signals[f.calls.findIndex(row=>row.name==='verify_fm1_custom_boot')],null);
+  assert.equal(f.calls.some(row=>/^(?:connect_fm1_device|review_fm1_custom_recovery|start_fm1_custom_update|begin_fm1_custom_upload)$/.test(row.name)),false);
+  assert.equal(f.timers.size,1);
+  f.backend.custom=status({attempt:trackerAttempt('succeeded',{phase:'CDC build verified',transfer_finished:true,boot_identity_verified:true,
+    boot_build_verified:true,observed_boot_identity:'MOD-EDITOR/1',observed_build_sha256:hash('c'),progress:1,recovery_required:false})});
+  await f.poll();assert.equal(f.controller.custom.state().operationStatus,'succeeded');
+  assert.match(f.el('desktop-custom-transfer-status').textContent,/full flash readback not performed/);f.controller.dispose();
+});
+
+test('CDC verify cannot switch the original job, target build or profile and never retries automatically',async()=>{
+  for(const wrong of [{job_id:opaque('8')},{target_build_sha256:hash('d')},
+    {profile:'forge-diag',verification_transport:'midi',expected_boot_identity:'FM1_FORGE_001'}]){
+    const f=fixture({custom:status({attempt:trackerAttempt('unknown',{transfer_finished:true})}),handler:name=>
+      name==='verify_fm1_custom_boot'?{writing:true,attempt:trackerAttempt('active',{transfer_finished:true,...wrong}),review:null}:undefined});
+    await f.controller.ready;await assert.rejects(f.controller.custom.verifyBoot(user),/original|profile/);
+    const result=f.controller.custom.state();assert.equal(result.operationStatus,'unknown');
+    assert.equal(result.attempt.job_id,opaque('6'));assert.equal(result.attempt.target_build_sha256,hash('c'));
+    assert.equal(result.attempt.profile,'protracker');assert.equal(result.attempt.transfer_finished,true);
+    await f.controller.custom.verifyBoot(user);assert.equal(f.calls.filter(row=>row.name==='verify_fm1_custom_boot').length,1);
+    assert.equal(f.calls.some(row=>row.name==='start_fm1_custom_update'),false);f.controller.dispose();
+  }
+});
+
+test('only completed unresolved tracker receipts enable CDC verify; mismatched boot proof stays unresolved',async()=>{
+  for(const attempt of [customAttempt('unknown',{transfer_finished:true}),trackerAttempt('unknown',{transfer_finished:false})]){
+    const f=fixture({custom:status({attempt})});await f.controller.ready;
+    assert.equal(f.el('desktop-custom-verify').hidden,true);await f.controller.custom.verifyBoot(user);
+    assert.equal(f.calls.some(row=>row.name==='verify_fm1_custom_boot'),false);f.controller.dispose();
+  }
+  const f=fixture({custom:status({attempt:trackerAttempt('succeeded',{transfer_finished:true,boot_identity_verified:true,boot_build_verified:true,
+    observed_boot_identity:'FM1_FORGE_001',observed_build_sha256:hash('c'),recovery_required:false})})});
+  await f.controller.ready;assert.equal(f.controller.custom.state().operationStatus,'unknown');
+  assert.equal(f.el('desktop-custom-verify').hidden,false);assert.equal(f.el('desktop-custom-recovery').hidden,true);
+  assert.doesNotMatch(f.el('desktop-custom-transfer-status').textContent,/Custom transfer finished/);f.controller.dispose();
+});
+
+test('failed tracker verification preserves the job; successful refresh clears its stale notice before an explicit retry',async()=>{
+  let calls=0;
+  const original=trackerAttempt('unknown',{transfer_finished:true,phase:'Awaiting tracker CDC proof'});
+  const f=fixture({custom:status({attempt:original}),handler:(name,_args,backend)=>{
+    if(name!=='verify_fm1_custom_boot')return;
+    if(++calls===1)throw new Error('Tracker CDC is temporarily busy.');
+    backend.custom=status({writing:true,attempt:trackerAttempt('unknown',{transfer_finished:true,phase:'Verifying tracker boot'})});
+    return {writing:true,attempt:backend.custom.attempt,review:null};
+  }});
+  await f.controller.ready;await assert.rejects(f.controller.custom.verifyBoot(user),/temporarily busy/);
+  assert.equal(f.controller.custom.state().attempt.job_id,original.job_id);
+  assert.equal(f.controller.custom.state().attempt.target_build_sha256,original.target_build_sha256);
+  assert.equal(f.controller.custom.state().attempt.state,'unknown');assert.equal(f.controller.custom.state().known,false);
+  assert.match(f.el('desktop-custom-note').textContent,/temporarily busy/);
+  assert.equal(f.el('desktop-custom-verify').disabled,true);assert.equal(f.timers.size,0);
+  await f.controller.refresh();assert.equal(f.controller.custom.state().known,true);
+  assert.doesNotMatch(f.el('desktop-custom-note').textContent,/temporarily busy/);
+  assert.match(f.el('desktop-custom-note').textContent,/no MIDI connection or firmware resend/);
+  assert.equal(f.el('desktop-custom-verify').disabled,false);assert.equal(calls,1);
+  await f.controller.custom.verifyBoot(user);assert.equal(calls,2);assert.equal(f.controller.custom.state().operationStatus,'unknown');
+  f.backend.custom=status({attempt:trackerAttempt('unknown',{transfer_finished:true,error_code:'boot_build_mismatch'})});
+  await f.poll();assert.equal(f.controller.custom.state().attempt.state,'unknown');
+  assert.equal(f.el('desktop-custom-verify').disabled,false);assert.equal(calls,2);
+  assert.equal(f.calls.some(row=>row.name==='connect_fm1_device'||row.name==='start_fm1_custom_update'),false);
+  f.controller.dispose();
 });

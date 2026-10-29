@@ -19,7 +19,7 @@ const marketplace=await fs.realpath(rootArg), root=await fs.realpath(path.join(m
 assert.equal(path.dirname(root),marketplace,'The plugin must be contained in the marketplace');
 const manifest=JSON.parse(await fs.readFile(path.join(root,'BUILD-MANIFEST.json'),'utf8'));
 assert.equal(manifest.format,'fm1-forge-universal-package-v1');
-assert.deepEqual(manifest.targets,targets);assert.equal(manifest.version,'3.4.0-alpha.9');
+assert.deepEqual(manifest.targets,targets);assert.equal(manifest.version,'3.4.0-alpha.10');
 assert.deepEqual(manifest.nativeInputs.map(input=>input.target).sort(),[...targets].sort());
 const hash=data=>createHash('sha256').update(data).digest('hex');
 const maximumGitFileBytes=100*1024*1024;
@@ -115,7 +115,7 @@ for(const revision of ['2026-07-28','2025-11-25','2024-11-05']){
   const client=new Client({name:'Forge universal passive acceptance',version:'1'},{capabilities:{},supportedProtocolVersions:[revision],versionNegotiation:{mode:revision==='2026-07-28'?{pin:revision}:'legacy'}});
   try{
     await client.connect(transport);assert.equal(client.getServerVersion().name,expectedName);assert.equal(client.getServerVersion().version,manifest.version);
-    const tools=(await client.listTools()).tools;assert.equal(tools.length,24);assert.equal(new Set(tools.map(tool=>tool.name)).size,24);
+    const tools=(await client.listTools()).tools;assert.equal(tools.length,25);assert.equal(new Set(tools.map(tool=>tool.name)).size,25);
     for(const name of ['start_fm1_stock_update','start_fm1_custom_update']){const tool=tools.find(item=>item.name===name);assert.deepEqual(tool._meta.ui.visibility,['app']);assert.equal(tool.annotations.destructiveHint,true);}
     const opened=await client.callTool({name:'open_fm1_library',arguments:{}});assert.ok(!opened.isError,'Passive library call failed');
     assert.equal(opened.structuredContent.desktop.platform,process.platform);assert.equal(opened.structuredContent.desktop.customUpdateAvailable,true);assert.equal(opened.structuredContent.desktop.installationAvailable,false);
@@ -152,7 +152,7 @@ async function codexStatus(){
     const initialized=await request('initialize',{clientInfo:{name:'forge-universal-passive-acceptance',version:'1.0.0'},capabilities:{experimentalApi:true}});
     assert.ok(initialized.userAgent);child.stdin.write(JSON.stringify({method:'initialized'})+'\n');
     const status=await request('mcpServerStatus/list',{});assert.equal(status.nextCursor,null);assert.equal(status.data.length,1,'One plugin installation must load one MCP server');
-    const server=status.data[0];assert.equal(server.name,'fm1-forge');assert.equal(server.pluginId,installed.pluginId);assert.equal(server.serverInfo.name,expectedName);assert.equal(server.serverInfo.version,manifest.version);assert.equal(server.toolsError,null);assert.equal(Object.keys(server.tools).length,24);
+    const server=status.data[0];assert.equal(server.name,'fm1-forge');assert.equal(server.pluginId,installed.pluginId);assert.equal(server.serverInfo.name,expectedName);assert.equal(server.serverInfo.version,manifest.version);assert.equal(server.toolsError,null);assert.equal(Object.keys(server.tools).length,25);
     assert.ok(server.tools.open_fm1_library,'Codex must load native Forge tools');
     return {version:codexVersion,marketplace:'fm1-forge',pluginId:installed.pluginId,installedPlugins:listed.installed.length,serverName:server.name,serverInfo:server.serverInfo.name,selectedTarget:target,tools:Object.keys(server.tools).length,commonManifestLauncher:true,isolatedHome:true,modelRequested:false,deviceOpened:false};
   }finally{

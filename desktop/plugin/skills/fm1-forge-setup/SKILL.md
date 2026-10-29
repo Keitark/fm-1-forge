@@ -20,7 +20,10 @@ recovery evidence across refreshes. Do not use a source install, package check
 or automatic status refresh as approval for a firmware write.
 
 
-For custom firmware, build with firmware MIDI enabled, export the audited build
+For diagnostic custom firmware, build with firmware MIDI enabled. The separate
+protracker profile keeps CDC, USB audio and video; its post-install proof uses
+the immutable build ID and a fresh CDC challenge instead of firmware MIDI.
+Export the audited build
 using `tools/jieli-wl82/stock-sysex/package-custom.mjs`, and let the user choose
 its `.fwsc` plus matching manifest in the separate custom FWSC panel section.
 A build/export request does not authorize a physical write. Do not substitute

@@ -1,3 +1,5 @@
+Tracker installation from stock V15 is added in the local alpha.10 Windows preview. It uses stock MIDI for OTA and exact CDC build proof after reboot, retaining tracker UAC/UVC without a MIDI endpoint. See [the tracker installer guide](../docs/TRACKER_V15_INSTALLER_20261030.md). Hardware acceptance remains pending.
+
 # FM-1 Forge Windows
 
 Version **3.4.0-alpha.7** keeps one custom firmware SysEx section, separates stock V15 restore, and keeps file selectors usable through routine connection checks. The alpha.6 edition added a separate stock V15-to-custom `.fwsc` SysEx path. It validates the generated package and matching manifest, preserves the pinned public V15 layout offline, and verifies `FM1_FORGE_001` plus the exact embedded MIDI build after reboot. The common self-update capability in the running custom firmware stays disabled. See [the custom FWSC guide](../docs/CUSTOM_FWSC_20261020.md).

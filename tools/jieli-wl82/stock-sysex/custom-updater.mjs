@@ -4,14 +4,17 @@ import { STOCK, StockError, CHECK_FINISH, WRITE_FINISH, identityQuery, upgradeCo
 import { selectPair, canonicalName } from './selection.mjs';
 import { createHash } from 'node:crypto';
 import { WIRE, identityQuery as commonIdentityQuery, capabilityQuery, parseIdentity as parseCommonIdentity, parseCapabilities, decodeFrame as decodeCommonFrame } from '../../../site/lib/browser-common/protocol.mjs';
+import { customProfilePolicy } from './custom-package.mjs';
 
 export const DEFAULT_TIMING = Object.freeze({ open: 300, start: 2000, reply: 10, terminal: 3000, handshake: 1000,
   poll: 1000, idleCheck: 8000, idleWrite: 180000, loader: 30000, reboot: 40000, enumerate: 1000 });
 export const realClock = Object.freeze({ now: () => performance.now(), sleep: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)) });
 
-export async function runCustomUpdate(config, { image: packageImage, backend, journal, onEvent = () => {}, clock = realClock, timing = DEFAULT_TIMING }) {
+export async function runCustomUpdate(config, { image: packageImage, backend, journal, verifyTracker, signal, onEvent = () => {}, clock = realClock, timing = DEFAULT_TIMING }) {
   // Snapshot approved bytes; neither a transport callback nor caller mutation can change replies.
   const image = Uint8Array.from(packageImage);
+  const profile = customProfilePolicy(config.profile ?? 'forge-diag');
+  if (profile.verification_transport === 'cdc' && typeof verifyTracker !== 'function') throw new StockError('cdc_unavailable', 'Tracker CDC verification is required before starting this installation.');
   const hex64 = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
   if (!Number.isSafeInteger(config.logicalBytes) || image.length !== config.logicalBytes || image.length < 1024 || image.length > 2 * 1024 * 1024 ||
       !hex64(config.reviewedSha256) || !hex64(config.logicalSha256) || !hex64(config.targetBuildSha256) ||
@@ -145,11 +148,14 @@ export async function runCustomUpdate(config, { image: packageImage, backend, jo
     await change('writing'); await clock.sleep(timing.start); await serve(WRITE_FINISH, timing.idleWrite);
     finished = true;
     await change('waiting_reboot', { transfer_finished: true }); await closeLink();
-    identity = await waitFor('normal', timing.reboot);
-    if (identity.text !== WIRE.commonIdentity || identity.buildSha256 !== config.targetBuildSha256) throw new StockError('boot_build_mismatch', 'Reboot proof does not match the reviewed Forge build.');
+    identity = profile.verification_transport === 'cdc'
+      ? await verifyTracker({ buildSha256: config.targetBuildSha256, timeoutMs: timing.reboot, signal })
+      : await waitFor('normal', timing.reboot);
+    if (identity?.text !== profile.expected_boot_identity || identity.buildSha256 !== config.targetBuildSha256 ||
+        (profile.verification_transport === 'cdc' && (identity.transport !== 'cdc' || identity.nonceVerified !== true))) throw new StockError('boot_build_mismatch', 'Reboot proof does not match the reviewed custom build.');
     await closeLink();
     await change('done', { state: 'succeeded', boot_identity_verified: true, boot_build_verified: true, final_identity: identity.text, final_build_sha256: identity.buildSha256 });
-    return Object.freeze({ jobId: config.jobId, state: 'succeeded', product: WIRE.commonIdentity, sha256: config.reviewedSha256, target_build_sha256: config.targetBuildSha256,
+    return Object.freeze({ jobId: config.jobId, state: 'succeeded', product: profile.expected_boot_identity, sha256: config.reviewedSha256, target_build_sha256: config.targetBuildSha256,
       transfer_finished: true, boot_identity_verified: true, boot_build_verified: true, identity: identity.text, build_sha256: identity.buildSha256, readback_verified: false });
   } catch (error) {
     const uncertain = destructiveStarted || resume;

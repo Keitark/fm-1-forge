@@ -18,7 +18,7 @@ function fixture({resume=false,identity='FM1_FORGE_001',caps={},noCaps=false,amb
   m.journal.transition=async(phase,extra)=>{if(phase==='waiting_reboot')reboot=true;return transition(phase,extra);};
   m.backend.enumerate=async(...args)=>{const inventory=await enumerate(...args);if(!reboot)return inventory;return {inputs:ambiguous?['FM-1 Forge 1','FM-1 Forge 2']:['FM-1 Forge 1'],outputs:ambiguous?['FM-1 Forge 3','FM-1 Forge 4']:['FM-1 Forge 2']};};
   m.backend.open=async pair=>{const link=await open(pair),pending=[],send=link.send.bind(link),read=link.read.bind(link);link.send=async packet=>{const result=await send(packet);if(equalBytes(packet,capabilityQuery())){queries++;if(!noCaps)pending.push(capabilities(caps));}return result;};link.read=ms=>pending.length?Promise.resolve(pending.shift()):read(ms);return link;};
-  return {...m,config,options:{...m.options,image,backend:m.backend,journal:m.journal},image,get capabilityQueries(){return queries;}};
+  return {...m,config,options:{...m.options,image,backend:m.backend,journal:m.journal},image,get capabilityQueries(){return queries;},get opens(){return m.opens;},get closed(){return m.closed;}};
 }
 const upgrades=m=>m.sent.filter(packet=>equalBytes(packet,upgradeCommand())).length;
 
@@ -59,4 +59,23 @@ test('missing capability or ambiguous final endpoints preserves uncertain origin
 test('durability failure before upgrade and send loss afterward retain their correct boundary',async()=>{
   const disk=fixture();disk.journal.transition=async()=>{throw new Error('full');};await assert.rejects(runCustomUpdate(disk.config,disk.options));assert.equal(upgrades(disk),0);
   const send=fixture({failSendAt:2});await assert.rejects(runCustomUpdate(send.config,send.options),error=>error.state==='unknown'&&error.recovery_required);assert.equal(upgrades(send),1);
+});
+
+test('tracker uses stock MIDI for both OTA phases then requires fresh exact CDC proof without postboot MIDI', async () => {
+  const m = fixture(); m.config.profile = 'protracker'; let calls = 0;
+  const result = await runCustomUpdate(m.config, { ...m.options, verifyTracker: async request => {
+    calls++; assert.equal(m.closed, 2); assert.equal(request.buildSha256, target);
+    return { text: 'MOD-EDITOR/1', buildSha256: target, transport: 'cdc', nonceVerified: true };
+  } });
+  assert.equal(result.identity, 'MOD-EDITOR/1'); assert.equal(result.boot_build_verified, true);
+  assert.equal(calls, 1); assert.equal(m.capabilityQueries, 0); assert.equal(m.opens, 2); assert.equal(upgrades(m), 2);
+});
+test('tracker missing verifier rejects before update; failed or mismatched CDC preserves completed original transfer', async () => {
+  const absent = fixture(); absent.config.profile = 'protracker';
+  await assert.rejects(runCustomUpdate(absent.config, absent.options), { code: 'cdc_unavailable' }); assert.equal(upgrades(absent), 0);
+  for (const proof of [null, { text: 'MOD-EDITOR/1', buildSha256: 'c'.repeat(64), transport: 'cdc', nonceVerified: true }, { text: 'MOD-EDITOR/1', buildSha256: target, transport: 'cdc', nonceVerified: false }]) {
+    const m = fixture(); m.config.profile = 'protracker';
+    await assert.rejects(runCustomUpdate(m.config, { ...m.options, verifyTracker: async () => proof }), error => error.state === 'unknown' && error.transfer_finished && error.recovery_required);
+    assert.equal(upgrades(m), 2); assert.equal(m.capabilityQueries, 0); assert.notEqual(m.journal.record.state, 'succeeded');
+  }
 });

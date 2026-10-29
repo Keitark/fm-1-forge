@@ -19,7 +19,8 @@ const deferred = () => { let resolve; const promise = new Promise(yes => { resol
 async function inspector(raw, input) {
   if (!(raw instanceof Uint8Array) || raw.length !== bytes.length || sha(raw) !== input.package_sha256 || !raw.every(value => value === 42)) throw new StockError('invalid_custom_package', 'Fake custom package rejected.');
   return { metadata: { product: 'FM1_FORGE_001', sha256: input.package_sha256, raw_bytes: raw.length, logical_bytes: image.length, logical_sha256: input.logical_sha256,
-    target_build_sha256: input.target_build_sha256, expected_boot_identity: 'FM1_FORGE_001', family: 8 }, image: Uint8Array.from(image) };
+    target_build_sha256: input.target_build_sha256, expected_boot_identity: input.expected_boot_identity, family: input.family,
+    ...(input.profile === 'protracker' ? { profile: 'protracker', verification_transport: 'cdc' } : {}) }, image: Uint8Array.from(image) };
 }
 async function success(config, { journal, onEvent }) {
   assert.equal(config.reviewedSha256, manifest.package_sha256); assert.equal(config.targetBuildSha256, target); assert.equal(config.logicalBytes, image.length);
@@ -63,6 +64,45 @@ async function stockActive(directory, { state = 'unknown' } = {}) {
 test('custom construction and passive status never connect, enumerate or send MIDI', async t => {
   const f = await fixture(t); assert.deepEqual(await f.service.status(), { supported: true, writing: false, attempt: null, review: null }); assert.deepEqual(f.calls, []);
   assert.equal(MAX_RAW_PACKAGE_BYTES, 2097152); assert.equal(MAX_CHUNK_BYTES, 65536);
+});
+
+const trackerManifest = { ...manifest, profile: 'protracker', family: 9, expected_boot_identity: 'MOD-EDITOR/1' };
+test('tracker review is bound to its CDC profile and unavailable CDC rejects before endpoint access', async t => {
+  const missing = await fixture(t);
+  await assert.rejects(upload(missing.service, bytes, trackerManifest), { code: 'cdc_unavailable' }); assert.deepEqual(missing.calls, []);
+  const f = await fixture(t, { trackerVerifier: async () => null });
+  const review = (await f.service.review({ upload_id: await upload(f.service, bytes, trackerManifest) })).review;
+  assert.equal(review.profile, 'protracker'); assert.equal(review.verification_transport, 'cdc'); assert.equal(review.expected_boot_identity, 'MOD-EDITOR/1');
+  const saved = JSON.parse(await fs.readFile(path.join(f.directory, 'custom-update/requests', review.job_id + '.json'), 'utf8'));
+  assert.equal(saved.request.profile, 'protracker'); assert.equal(saved.request.product, 'FM1_FORGE_001');
+});
+test('completed tracker transfer is reverified over CDC without acquiring MIDI or rewriting', async t => {
+  let proofs = 0;
+  const f = await fixture(t, { trackerVerifier: async () => { proofs++; return { text: 'MOD-EDITOR/1', buildSha256: target, transport: 'cdc', nonceVerified: true }; },
+    runner: async (_request, { journal }) => { await journal.transition('waiting_reboot', { state: 'active', transfer_finished: true }); throw new StockError('reboot_timeout', 'not ready'); } });
+  const review = (await f.service.review({ upload_id: await upload(f.service, bytes, trackerManifest) })).review;
+  await f.service.start({ review_id: review.review_id, confirmed: true }); const pending = await idle(f.service);
+  assert.equal(pending.attempt.state, 'unknown'); assert.equal(pending.attempt.transfer_finished, true); assert.equal(pending.attempt.expected_boot_identity, 'MOD-EDITOR/1');
+  await assert.rejects(f.service.reviewResume({ job_id: review.job_id }), { code: 'verification_required' });
+  await assert.rejects(f.service.verifyBoot({ job_id: '0'.repeat(32) }), { code: 'verification_required' });
+  const acquired = f.acquired, calls = f.calls.length;
+  await f.service.verifyBoot({ job_id: review.job_id }); const verified = await idle(f.service);
+  assert.equal(proofs, 1); assert.equal(f.acquired, acquired); assert.equal(f.calls.length, calls);
+  assert.equal(verified.attempt.state, 'succeeded'); assert.equal(verified.attempt.observed_boot_identity, 'MOD-EDITOR/1'); assert.equal(verified.attempt.observed_build_sha256, target);
+  const stock = await createStockUpdateService({ directory: f.directory, deviceService: f.deviceService }); t.after(() => stock.close());
+  assert.match((await stock.beginUpload({ raw_bytes: STOCK.rawBytes })).upload_id, /^[a-f0-9]{32}$/);
+});
+test('tracker verification failure or late proof after shutdown retains the original unresolved job', async t => {
+  const gate = deferred(); let verifying = false;
+  const f = await fixture(t, { trackerVerifier: async () => { verifying = true; await gate.promise; return { text: 'MOD-EDITOR/1', buildSha256: target, transport: 'cdc', nonceVerified: true }; },
+    runner: async (_request, { journal }) => { await journal.transition('waiting_reboot', { state: 'active', transfer_finished: true }); throw new StockError('reboot_timeout', 'not ready'); } });
+  const review = (await f.service.review({ upload_id: await upload(f.service, bytes, trackerManifest) })).review;
+  await f.service.start({ review_id: review.review_id, confirmed: true }); await idle(f.service);
+  await f.service.verifyBoot({ job_id: review.job_id }); while (!verifying) await new Promise(resolve => setImmediate(resolve));
+  await f.service.close(); gate.resolve(); await new Promise(resolve => setTimeout(resolve, 5));
+  const reopened = await fixture(t, { directory: f.directory, trackerVerifier: async () => ({ text: 'MOD-EDITOR/1', buildSha256: 'd'.repeat(64), transport: 'cdc', nonceVerified: true }) });
+  await reopened.service.verifyBoot({ job_id: review.job_id }); const failed = await idle(reopened.service);
+  assert.equal(failed.attempt.state, 'unknown'); assert.equal(failed.attempt.boot_build_verified, false); assert.equal(failed.attempt.job_id, review.job_id);
 });
 
 test('strict manifest and raw bounds reject unsupported input before allocation or endpoint access', async t => {
@@ -184,4 +224,21 @@ test('the production custom OTA engine establishes exact build proof through the
   assert.equal(mock.opens, 3); assert.equal(mock.closed, 3);
   const persisted = JSON.parse(await fs.readFile(path.join(f.directory, 'custom-update/attempt/attempt.json'), 'utf8'));
   assert.equal(persisted.request.sha256, manifest.package_sha256); assert.equal(persisted.request.logicalSha256, manifest.logical_sha256); assert.equal(persisted.final_build_sha256, target); assert.equal(persisted.boot_build_verified, true);
+});
+
+test('production stock OTA hands off to exact tracker CDC proof through the durable native service', async t => {
+  const mock = mockUpdater({ initialIdentity: 'FM-1_015', loaderIdentity: 'ota-FM-1_015' });
+  const pair = mock.config.expectedStockPair; let proofs = 0;
+  const deviceService = { async reviewStockEndpoint() { return { input_name: pair.inputName, output_name: pair.outputName, identity: 'FM-1_015', loader: false, expectedStockPair: pair }; },
+    async acquireStockWriter() { return { backend: mock.backend, async release() {} }; } };
+  const f = await fixture(t, { deviceService, trackerVerifier: async request => {
+    proofs++; assert.equal(mock.closed, 2); assert.equal(request.buildSha256, target);
+    return { text: 'MOD-EDITOR/1', buildSha256: target, nonceVerified: true, transport: 'cdc' };
+  }, runner: (request, context) => runCustomUpdate(request, { ...context, clock: mock.clock }) });
+  const review = (await f.service.review({ upload_id: await upload(f.service, bytes, trackerManifest) })).review;
+  await f.service.start({ review_id: review.review_id, confirmed: true }); const result = await idle(f.service);
+  assert.equal(result.attempt.state, 'succeeded'); assert.equal(result.attempt.verification_transport, 'cdc'); assert.equal(result.attempt.observed_boot_identity, 'MOD-EDITOR/1');
+  assert.equal(mock.opens, 2); assert.equal(proofs, 1);
+  const persisted = JSON.parse(await fs.readFile(path.join(f.directory, 'custom-update/attempt/attempt.json'), 'utf8'));
+  assert.equal(persisted.request.profile, 'protracker'); assert.equal(persisted.final_build_sha256, target);
 });
