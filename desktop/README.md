@@ -1,3 +1,5 @@
+Alpha.14 fixes Windows metadata names to match the pinned native MIDI addon: raw WinMM display names and separate numeric indices. The exact connected OTA USB tuple and both endpoints now pass passive correlation; fresh loader identity and physical flash acceptance remain pending.
+
 Alpha.13 adds separately reviewed CHECK-only preparation when an unresolved custom attempt returns to stock V15. It uses the original saved package, retains its phase and uncertainty, and stops in the pinned OTA loader before application programming. A second review and confirmation are required for WRITE. Source, delivered-panel and package checks pass; physical recovery remains pending. See [original-attempt recovery](../docs/STOCK_MIDI_OTA_RECOVERY_20261030.md).
 
 Alpha.12 contains native MIDI in an owned child process and recognizes only the physically correlated V15 USB-Midi OTA loader. The coordinator retains the original job if a driver fails.

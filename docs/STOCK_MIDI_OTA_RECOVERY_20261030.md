@@ -59,3 +59,19 @@ the freshly identified loader, and confirm that separate review before WRITE.
 There is no automatic continuation, replacement job or manual lock cleanup.
 Named MIDI endpoints provide a fresh identity and unique reviewed pair, not a
 persistent cryptographic identity for an individual physical unit.
+
+## Windows MIDI display names
+
+The first physical alpha13 preparation left the device exposing the pinned OTA
+USB interface, but loader discovery timed out. Passive enumeration showed equal
+port counts/order but different name strings: the PowerShell helper appended
+indices, while the pinned addon's `RTMIDI_DO_NOT_ENSURE_UNIQUE_PORTNAMES` build
+returns raw WinMM display names. Strict correlation correctly rejected them.
+
+Alpha14 exports the unchanged display name and keeps its numeric index in the
+separate field. Correlation still requires exact counts, index, full names and
+the same pinned USB instance/interface on both endpoints. Tests cover the loader
+at different input/output indices among unrelated ports and reject changed
+names, indices, counts and physical tuples. Passive comparison against the
+connected device selected the correct loader without opening or sending MIDI.
+This does not itself prove the loader handshake or any application programming.

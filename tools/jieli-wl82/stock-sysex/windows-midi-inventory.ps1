@@ -30,7 +30,8 @@ public static class FM1StockWindowsMetadata {
     if(input){InCaps c;error=midiInGetDevCapsW((UIntPtr)id,out c,(uint)Marshal.SizeOf(typeof(InCaps)));name=c.name;}
     else{OutCaps c;error=midiOutGetDevCapsW((UIntPtr)id,out c,(uint)Marshal.SizeOf(typeof(OutCaps)));name=c.name;}
     if(error!=0)throw new InvalidOperationException("MIDI caps unavailable");
-    var endpoint=new Endpoint{direction=input?"in":"out",index=id,name=name+" "+id,interfaceQueryOk=false};
+    // RtMidi exposes the exact WinMM caps name; the device index is separate.
+    var endpoint=new Endpoint{direction=input?"in":"out",index=id,name=name,interfaceQueryOk=false};
     string devicePath=null;
     IntPtr size=Marshal.AllocHGlobal(4);
     try {

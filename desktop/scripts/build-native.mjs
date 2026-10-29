@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveDesktopPlatform } from '../lib/platform.mjs';
 
-export const PACKAGE_VERSION = '3.4.0-alpha.13';
+export const PACKAGE_VERSION = '3.4.0-alpha.14';
 export const WINDOWS_MCP_SERVER_NAME = 'fm1-forge-windows';
 export const MACOS_MCP_SERVER_NAME = 'fm1-forge-macos';
 export const NODE_VERSION = 'v22.22.2';
