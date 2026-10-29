@@ -1,6 +1,6 @@
 {
   "name": "fm1-forge-windows-package",
-  "version": "3.4.0-alpha.12",
+  "version": "3.4.0-alpha.13",
   "private": true,
   "type": "module",
   "engines": {

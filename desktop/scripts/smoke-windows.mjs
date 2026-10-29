@@ -42,13 +42,13 @@ for (const revision of ['2026-07-28', '2025-11-25', '2024-11-05']) {
   try {
     await client.connect(transport); assert.equal(client.getServerVersion().version, manifest.version);
     assert.equal(client.getServerVersion().name, 'FM-1 Forge Windows');
-    const tools = (await client.listTools()).tools; assert.equal(tools.length, 25);
+    const tools = (await client.listTools()).tools; assert.equal(tools.length, 26);
     for (const name of ['start_fm1_custom_update', 'verify_fm1_custom_boot']) assert.deepEqual(tools.find(tool => tool.name === name)._meta.ui.visibility, ['app']);
     const opened = await client.callTool({ name: 'open_fm1_library', arguments: {} }); assert.ok(!opened.isError); assert.equal(opened.structuredContent.desktop.platform, 'win32');
     for (const name of ['get_fm1_stock_update_status', 'get_fm1_custom_update_status']) {
       const status = await client.callTool({ name, arguments: {} }); assert.deepEqual(status.structuredContent, { supported: true, writing: false, attempt: null, review: null });
     }
-    const panel = await client.readResource({ uri: 'ui://fm1/forge-windows-v6.html' });
+    const panel = await client.readResource({ uri: 'ui://fm1/forge-windows-v7.html' });
     assert.ok(panel.contents[0].text.includes('Verify tracker boot'));
     checks.push({ revision, tools: tools.length, emptyPath: true, passive: true });
   } finally { await client.close(); }

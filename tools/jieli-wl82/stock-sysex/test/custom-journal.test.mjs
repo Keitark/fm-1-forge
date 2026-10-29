@@ -11,6 +11,17 @@ const config = overrides => ({ kind: 'custom-fwsc', jobId: 'job-custom-1', produ
   expectedStockPair: { inputName: 'FM-1 Midi', outputName: 'FM-1 Midi' }, ...overrides });
 async function fixture(t) { const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'forge-custom-journal-')); t.after(() => fs.rm(directory, { recursive: true, force: true })); return directory; }
 
+test('loader preparation metadata cannot replace the original phase or contain arbitrary stages', async t => {
+  const directory = await fixture(t), identity = customRequestIdentity(config()), journal = await CustomAttemptJournal.open(directory, identity);
+  await journal.transition('writing', { state: 'unknown', error_code: 'disconnected' });
+  await journal.transition('writing', { loader_entry_stage: 'loader_ready' });
+  assert.equal(journal.record.phase, 'writing'); assert.equal(journal.record.state, 'unknown'); assert.equal(journal.record.error_code, 'disconnected');
+  for (const extra of [{ loader_entry_stage: 'writing' }, { loader_entry_stage: null }, { loader_entry_error_code: '../unsafe' }, { loader_entry_error_code: 42 }]) {
+    await assert.rejects(journal.transition('writing', extra), { code: 'corrupt_journal' });
+  }
+  await journal.close();
+});
+
 test('tracker profile is bound to the original request and cannot pass with a diagnostic identity', async t => {
   const directory = await fixture(t), base = customRequestIdentity(config()), tracker = customRequestIdentity(config({ profile: 'protracker' }));
   assert.notEqual(base.digest, tracker.digest); assert.equal(tracker.request.profile, 'protracker');

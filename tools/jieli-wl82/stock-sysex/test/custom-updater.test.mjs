@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { runCustomUpdate } from '../custom-updater.mjs';
-import { upgradeCommand, identityQuery, response } from '../protocol.mjs';
+import { upgradeCommand, identityQuery, response, WRITE_FINISH } from '../protocol.mjs';
 import { capabilityQuery, encodeFrame } from '../../../../site/lib/browser-common/protocol.mjs';
-import { mockUpdater, equalBytes } from './helpers.mjs';
+import { mockUpdater, equalBytes, request } from './helpers.mjs';
 
 const target='b'.repeat(64), sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 function capabilities({build=target,state=0,loader=0,error=3,family=8}={}){
@@ -21,6 +21,32 @@ function fixture({resume=false,identity='FM1_FORGE_001',caps={},noCaps=false,amb
   return {...m,config,options:{...m.options,image,backend:m.backend,journal:m.journal},image,get capabilityQueries(){return queries;},get opens(){return m.opens;},get closed(){return m.closed;}};
 }
 const upgrades=m=>m.sent.filter(packet=>equalBytes(packet,upgradeCommand())).length;
+
+test('explicit loader entry completes only CHECK and stops unresolved after exact OTA handshake', async () => {
+  const m = fixture(); m.config.operation = 'loader-entry'; m.config.profile = 'protracker'; let proofs = 0;
+  const result = await runCustomUpdate(m.config, { ...m.options, verifyTracker: async () => { proofs++; throw new Error('No boot proof during loader entry.'); } });
+  assert.equal(result.jobId, m.config.jobId); assert.equal(result.state, 'unknown'); assert.equal(result.recovery_required, true); assert.equal(result.loader_entry_stage, 'loader_ready');
+  assert.equal(result.transfer_finished, false); assert.equal(result.boot_identity_verified, false); assert.equal(result.boot_build_verified, false); assert.equal(result.readback_verified, false);
+  assert.equal(upgrades(m), 1); assert.equal(m.opens, 2); assert.equal(m.closed, 2); assert.equal(proofs, 0); assert.equal(m.capabilityQueries, 0);
+  assert.deepEqual(m.transitions.map(step => step.phase), ['entering_check', 'checking', 'waiting_loader', 'waiting_loader']);
+  assert.equal(m.journal.record.loader_entry_stage, 'loader_ready'); assert.equal(m.journal.record.state, 'unknown');
+  assert.equal(m.sent.some(packet => equalBytes(packet, response(512, m.image.subarray(512, 1024)))), false);
+});
+
+test('loader entry rejects a write terminal during CHECK and wrong loader without entering write', async () => {
+  for (const settings of [{ checkRequests: [request(0, 47), request(WRITE_FINISH, 8)] }, { loaderIdentity: 'ota-FM-1_009' }]) {
+    const m = fixture(settings); m.config.operation = 'loader-entry';
+    await assert.rejects(runCustomUpdate(m.config, m.options), error => error.state === 'unknown' && error.recovery_required && !error.transfer_finished);
+    assert.equal(upgrades(m), 1); assert.equal(m.transitions.some(step => ['entering_write', 'writing', 'waiting_reboot', 'done'].includes(step.phase)), false);
+    assert.notEqual(m.journal.record.state, 'succeeded'); assert.equal(m.capabilityQueries, 0);
+  }
+});
+
+test('loader entry identity failure preserves unresolved recovery before its first command', async () => {
+  const m = fixture({ initialIdentity: 'FM-1_014' }); m.config.operation = 'loader-entry';
+  await assert.rejects(runCustomUpdate(m.config, m.options), error => error.code === 'device_changed' && error.state === 'unknown' && error.recovery_required && !error.destructive_started);
+  assert.equal(upgrades(m), 0); assert.equal(m.sent.length, 1);
+});
 
 test('custom two-phase transfer verifies common identity and exact idle build with installation disabled',async()=>{
   const m=fixture(),result=await runCustomUpdate(m.config,m.options);

@@ -56,6 +56,7 @@ async function fixture(t,{updates=true,custom=true,platform='win32',arch='x64'}=
     async start(args){customCalls.push({method:'start',args});return {writing:true,attempt:customAttempt,review:null};},
     async close(){customCalls.push({method:'close'});},
     async verifyBoot(args){customCalls.push({method:'verifyBoot',args});return {writing:true,attempt:customAttempt,review:null};},
+    async reviewLoaderEntry(args){customCalls.push({method:'reviewLoaderEntry',args});return {review:{...customReview,operation:'loader-entry'}};},
   }:undefined;
   const server=await serverModule.createDesktopServer({deviceService,stockUpdateService,customUpdateService,uiHtml:panel,store,platform,arch});
   const revision='2025-11-25',client=new Client({name:'FM-1 desktop contract test',version:'1'},{capabilities:{},supportedProtocolVersions:[revision],versionNegotiation:{mode:'legacy'}});
@@ -78,7 +79,7 @@ test('official SDK discovery, panel open and resource read are passive over the 
 
 test('tool discovery separates app-only reviewed stock writes from connection tools and forbids raw MIDI',async t=>{
   const f=await fixture(t),listed=await f.client.listTools(),names=listed.tools.map(tool=>tool.name).sort();
-  assert.deepEqual(names,['verify_fm1_custom_boot','begin_fm1_custom_upload','append_fm1_custom_upload','review_fm1_custom_update','review_fm1_custom_recovery','start_fm1_custom_update','get_fm1_custom_update_status','begin_fm1_stock_upload','append_fm1_stock_upload','review_fm1_stock_update','review_fm1_stock_recovery','start_fm1_stock_update','get_fm1_stock_update_status','configure_fm1_project','connect_fm1_device','disconnect_fm1_device','get_fm1_device_status','get_fm1_project','list_fm1_projects','open_fm1_library','open_fm1_project','save_fm1_project','search_mentions','settings.read','settings.update'].sort());
+  assert.deepEqual(names,['verify_fm1_custom_boot','begin_fm1_custom_upload','append_fm1_custom_upload','review_fm1_custom_update','review_fm1_custom_recovery','review_fm1_custom_loader_entry','start_fm1_custom_update','get_fm1_custom_update_status','begin_fm1_stock_upload','append_fm1_stock_upload','review_fm1_stock_update','review_fm1_stock_recovery','start_fm1_stock_update','get_fm1_stock_update_status','configure_fm1_project','connect_fm1_device','disconnect_fm1_device','get_fm1_device_status','get_fm1_project','list_fm1_projects','open_fm1_library','open_fm1_project','save_fm1_project','search_mentions','settings.read','settings.update'].sort());
   for(const name of ['flash_fm1','send_sysex','send_midi','enter_uboot','reset_fm1','install_firmware'])await refused(f,name,{});
   const connection=listed.tools.find(tool=>tool.name==='connect_fm1_device');assert.deepEqual(connection.inputSchema.properties.transport.enum,transports);assert.equal(connection.annotations.destructiveHint,false);
   assert.deepEqual(listed.tools.find(tool=>tool.name==='open_fm1_project')._meta['openai/ui'].entrypoints,[{type:'file',extensions:['.fm1-forge.json']}]);
@@ -170,7 +171,7 @@ test('missing native writer capability fails closed and shutdown still closes MI
 
 test('custom FWSC tools are separately app-only with explicit destructive confirmation and bounded input',async t=>{
   const f=await fixture(t),tools=(await f.client.listTools()).tools;
-  for(const name of ['begin_fm1_custom_upload','append_fm1_custom_upload','review_fm1_custom_update','review_fm1_custom_recovery','start_fm1_custom_update','verify_fm1_custom_boot']){
+  for(const name of ['begin_fm1_custom_upload','append_fm1_custom_upload','review_fm1_custom_update','review_fm1_custom_recovery','review_fm1_custom_loader_entry','start_fm1_custom_update','verify_fm1_custom_boot']){
     const tool=tools.find(value=>value.name===name);assert.deepEqual(tool._meta.ui.visibility,['app']);assert.equal(tool.annotations.readOnlyHint,false);assert.equal(tool.annotations.destructiveHint,name==='start_fm1_custom_update');
   }
   assert.deepEqual(f.customCalls,[]);await f.tool('get_fm1_custom_update_status');assert.deepEqual(f.customCalls,[{method:'status'}]);assert.deepEqual(f.calls,[]);
@@ -184,6 +185,17 @@ test('custom review/start dispatch remains bound to the separate service and mis
   const started=await f.tool('start_fm1_custom_update',{review_id:'b'.repeat(32),confirmed:true});assert.equal(started.structuredContent.attempt.boot_build_verified,false);assert.equal(started.structuredContent.attempt.observed_build_sha256,null);
   await f.tool('review_fm1_custom_recovery',{job_id:'c'.repeat(32)});assert.deepEqual(f.customCalls.map(value=>value.method),['beginUpload','appendUpload','review','start','reviewResume']);assert.deepEqual(f.updateCalls,[]);assert.deepEqual(f.calls,[]);
   const absent=await fixture(t,{custom:false});assert.equal((await absent.tool('open_fm1_library')).structuredContent.desktop.customUpdateAvailable,false);await refused(absent,'begin_fm1_custom_upload',{raw_bytes:623156,manifest:{}});assert.deepEqual(absent.calls,[]);
+});
+
+test('original loader preparation is app-only, bounded to a job and never dispatched as a write',async t=>{
+  const f=await fixture(t);
+  for(const args of [{job_id:'../unsafe'},{job_id:'c'.repeat(32),confirmed:true},{job_id:'c'.repeat(32),image:'arbitrary'}])await refused(f,'review_fm1_custom_loader_entry',args);
+  assert.deepEqual(f.customCalls,[]);
+  const result=await f.tool('review_fm1_custom_loader_entry',{job_id:'c'.repeat(32)});
+  assert.equal(result.structuredContent.review.operation,'loader-entry');
+  assert.deepEqual(f.customCalls,[{method:'reviewLoaderEntry',args:{job_id:'c'.repeat(32)}}]);
+  assert.deepEqual(f.calls,[]);assert.deepEqual(f.updateCalls,[]);
+  const absent=await fixture(t,{custom:false});await refused(absent,'review_fm1_custom_loader_entry',{job_id:'c'.repeat(32)});
 });
 
 test('macOS editions advertise actual platform, native resource and passive tools for Apple Silicon and Intel',async t=>{

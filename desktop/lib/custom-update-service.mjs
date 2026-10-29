@@ -29,8 +29,10 @@ function publicAttempt(record, { recovered = false, progress = 0 } = {}) {
   const succeeded = record.state === 'succeeded' && record.transfer_finished === true && record.boot_identity_verified === true && record.boot_build_verified === true && record.final_identity === profile.expected_boot_identity && record.final_build_sha256 === record.request.targetBuildSha256;
   const state = recovered && record.state === 'active' ? 'unknown' : record.state;
   return { kind: 'custom-fwsc', expected_boot_identity: profile.expected_boot_identity, ...(profile.profile === 'protracker' ? { profile: profile.profile, verification_transport: 'cdc' } : {}), target_build_sha256: record.request.targetBuildSha256, job_id: record.jobId, state, phase: record.phase, progress: succeeded ? 1 : Math.min(0.99, Math.max(0, progress)),
+    sha256: record.request.sha256, logical_sha256: record.request.logicalSha256, manifest_sha256: record.request.manifestSha256, raw_bytes: record.request.rawBytes, logical_bytes: record.request.logicalBytes,
     transfer_finished: record.transfer_finished === true, boot_identity_verified: succeeded, boot_build_verified: succeeded,
     observed_boot_identity: record.final_identity ?? null, observed_build_sha256: record.final_build_sha256 ?? null, readback_verified: false,
+    ...(record.loader_entry_stage ? { loader_entry_stage: record.loader_entry_stage } : {}), ...(record.loader_entry_error_code ? { loader_entry_error_code: record.loader_entry_error_code } : {}),
     recovery_required: state === 'unknown' || state === 'active', ...(record.error_code ? { error_code: record.error_code } : {}) };
 }
 
@@ -151,32 +153,64 @@ export async function createCustomUpdateService({ directory, deviceService, pack
     const fields = reviewFields(request, endpoint, 'resume'); currentReview = { fields, request, endpoint }; upload = null;
     return { review: clone(fields) };
   });
+  const originalLoaderEntry = async jobId => {
+    const record = await loadRecord();
+    if (!blocked(record) || record.jobId !== jobId || record.transfer_finished) throw fail('loader_entry_rejected', 'Loader entry requires the identical unresolved custom job whose transfer has not finished.');
+    const saved = await readJson(path.join(requestsRoot, jobId + '.json'));
+    if (saved?.schema !== 1 || saved.digest !== record.requestDigest || JSON.stringify(saved.request) !== JSON.stringify(record.request)) throw fail('loader_entry_rejected', 'The original reviewed custom FWSC request is unavailable.');
+    await approvedSnapshot(record.request);
+    return record;
+  };
+  const reviewLoaderEntry = input => serial(async () => {
+    requireIdle(); await assertOtherFamilyResolved(directory, 'custom-fwsc');
+    if (!exact(input, ['job_id']) || !ID.test(input.job_id ?? '')) throw fail('loader_entry_rejected', 'Choose the original unresolved custom FWSC job.');
+    const record = await originalLoaderEntry(input.job_id);
+    if (record.request.profile === 'protracker' && typeof trackerVerifier !== 'function') throw fail('cdc_unavailable', 'Tracker recovery requires the Windows CDC verification component.');
+    const endpoint = await deviceService.reviewStockEndpoint();
+    if (endpoint.identity !== 'FM-1_015' || endpoint.loader !== false) throw fail('wrong_model', 'Original recovery preparation requires freshly identified stock FM-1 V15.');
+    if (JSON.stringify(canonical(endpoint.expectedStockPair)) !== JSON.stringify(canonical(record.request.expectedStockPair))) throw fail('device_changed', 'The stock MIDI pair differs from the original reviewed attempt.');
+    const request = { ...record.request, operation: 'loader-entry' };
+    const fields = reviewFields(request, endpoint, 'loader-entry'); currentReview = { fields, request, endpoint }; upload = null;
+    return { review: clone(fields) };
+  });
   const start = input => serial(async () => {
     requireIdle(); await assertOtherFamilyResolved(directory, 'custom-fwsc');
     if (!exact(input, ['review_id', 'confirmed']) || input.confirmed !== true || !currentReview || input.review_id !== currentReview.fields.review_id) throw fail('review_required', 'Explicitly confirm the current custom FWSC package and endpoint review.');
     if (now() >= Date.parse(currentReview.fields.expires_at)) { currentReview = null; throw fail('review_expired', 'Review the custom FWSC package and connection again.'); }
     const approved = currentReview; currentReview = null;
+    const loaderEntry = approved.request.operation === 'loader-entry';
     const controller = new AbortController();
     const image = Uint8Array.from((await approvedSnapshot(approved.request)).image);
-    const journal = await journalFactory(journalRoot, customRequestIdentity(approved.request), { resume: approved.request.operation === 'resume' });
+    const journal = await journalFactory(journalRoot, customRequestIdentity(approved.request), { resume: approved.request.operation === 'resume' || loaderEntry });
     let session;
-    try { session = await deviceService.acquireStockWriter(approved.endpoint); await assertOtherFamilyResolved(directory, 'custom-fwsc'); }
+    try {
+      if (loaderEntry) {
+        // Revalidate the original closure after taking its recovery lock too.
+        const record = await originalLoaderEntry(approved.request.jobId);
+        if (record.requestDigest !== customRequestIdentity(approved.request).digest || journal.record.transfer_finished || journal.record.requestDigest !== record.requestDigest) throw fail('loader_entry_rejected', 'The original recovery record changed after review.');
+      }
+      session = await deviceService.acquireStockWriter(approved.endpoint); await assertOtherFamilyResolved(directory, 'custom-fwsc');
+    }
     catch (caught) { try { await session?.release(); } finally { await journal.close(); } throw caught; }
     writing = true;
     attempt = publicAttempt(journal.record); let stopped = false, journalQueue = Promise.resolve(), journalClosePromise = null;
     const closeJournal = () => journalClosePromise ??= journal.close();
     const journalAction = action => { const result = journalQueue.then(action); journalQueue = result.catch(() => {}); return result; };
+    const change = (phase, extra = {}) => loaderEntry ? journal.transition(journal.record.phase, {
+      state: 'unknown', loader_entry_stage: extra.loader_entry_stage ?? phase,
+      ...(extra.error_code ? { loader_entry_error_code: extra.error_code } : phase === 'entering_check' ? { loader_entry_error_code: null } : {}),
+    }) : journal.transition(phase, extra);
     const journalView = { transition: async (phase, extra) => {
       await journalAction(async () => {
         if (stopped) throw fail('service_closed', 'The custom writer was interrupted.');
-        await journal.transition(phase, extra); attempt = publicAttempt(journal.record, { progress: attempt?.progress ?? 0 });
+        await change(phase, extra); attempt = publicAttempt(journal.record, { progress: attempt?.progress ?? 0 });
       });
     } };
     const transaction = { journal, session, async stop() {
       if (stopped) return; stopped = true; controller.abort();
       // Conservatively preserve interruption as unknown before releasing handles.
       try {
-        await journalAction(async () => { await journal.transition(journal.record.phase, { state: 'unknown', boot_identity_verified: false, boot_build_verified: false, error_code: 'service_closed' }); });
+        await journalAction(async () => { await change(loaderEntry ? 'failed' : journal.record.phase, { state: 'unknown', boot_identity_verified: false, boot_build_verified: false, error_code: 'service_closed' }); });
         attempt = publicAttempt(journal.record);
       } finally { await session.release(); await closeJournal(); writing = false; }
     } };
@@ -190,18 +224,18 @@ export async function createCustomUpdateService({ directory, deviceService, pack
         if (!stopped) attempt = publicAttempt(journal.record);
       } catch (caught) {
         if (!stopped) {
-          const uncertain = journal.record.state === 'active' || journal.record.state === 'unknown' || caught.recovery_required === true || approved.request.operation === 'resume';
-          try { await journalAction(() => journal.transition(journal.record.phase, { state: uncertain ? 'unknown' : 'failed', boot_identity_verified: false, boot_build_verified: false, error_code: codeOf(caught) })); }
-          catch { attempt = { ...attempt, state: 'unknown', recovery_required: true, boot_identity_verified: false, boot_build_verified: false, progress: Math.min(0.99, attempt.progress), error_code: 'journal_write_failed' }; }
-          if (journal.record.error_code === codeOf(caught)) attempt = publicAttempt(journal.record, { progress: attempt.progress });
+          const uncertain = journal.record.state === 'active' || journal.record.state === 'unknown' || caught.recovery_required === true || approved.request.operation === 'resume' || loaderEntry;
+          try { await journalAction(() => change(loaderEntry ? 'failed' : journal.record.phase, { state: uncertain ? 'unknown' : 'failed', boot_identity_verified: false, boot_build_verified: false, error_code: codeOf(caught) })); }
+          catch { attempt = { ...attempt, state: 'unknown', recovery_required: true, boot_identity_verified: false, boot_build_verified: false, progress: Math.min(0.99, attempt.progress), ...(loaderEntry ? { loader_entry_error_code: 'journal_write_failed' } : { error_code: 'journal_write_failed' }) }; }
+          if ((loaderEntry ? journal.record.loader_entry_error_code : journal.record.error_code) === codeOf(caught)) attempt = publicAttempt(journal.record, { progress: attempt.progress });
         }
       } finally {
         image.fill(0);
         if (!stopped) {
           try { await session.release(); await closeJournal(); }
           catch {
-            try { await journalAction(() => journal.transition(journal.record.phase, { state: 'unknown', boot_identity_verified: false, boot_build_verified: false, error_code: 'close_failed' })); } catch { /* Existing active evidence remains unresolved. */ }
-            attempt = { ...attempt, state: 'unknown', recovery_required: true, boot_identity_verified: false, boot_build_verified: false, progress: Math.min(0.99, attempt.progress), error_code: 'close_failed' };
+            try { await journalAction(() => change(loaderEntry ? 'failed' : journal.record.phase, { state: 'unknown', boot_identity_verified: false, boot_build_verified: false, error_code: 'close_failed' })); } catch { /* Existing active evidence remains unresolved. */ }
+            attempt = { ...attempt, state: 'unknown', recovery_required: true, boot_identity_verified: false, boot_build_verified: false, progress: Math.min(0.99, attempt.progress), ...(loaderEntry ? { loader_entry_error_code: 'close_failed' } : { error_code: 'close_failed' }) };
           }
         }
         if (active === transaction) { active = null; writing = false; }
@@ -268,5 +302,5 @@ export async function createCustomUpdateService({ directory, deviceService, pack
     if (upload) upload.bytes.fill(0); upload = null; currentReview = null;
     if (active) await active.stop();
   };
-  return Object.freeze({ beginUpload, appendUpload, review, reviewResume, start, verifyBoot, status, close });
+  return Object.freeze({ beginUpload, appendUpload, review, reviewResume, reviewLoaderEntry, start, verifyBoot, status, close });
 }

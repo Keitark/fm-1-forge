@@ -9,6 +9,7 @@ import { customProfilePolicy } from './custom-package.mjs';
 const jobPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/;
 const blocked = new Set(['active', 'unknown']);
 const phases = new Set(['prepared', 'entering_check', 'checking', 'waiting_loader', 'entering_write', 'writing', 'waiting_reboot', 'done', 'failed']);
+const loaderEntryStages = new Set(['entering_check', 'checking', 'waiting_loader', 'loader_ready', 'failed']);
 export function customRequestIdentity(config) {
   const profile = customProfilePolicy(config.profile ?? 'forge-diag');
   if (!jobPattern.test(config.jobId ?? '') || !jobPattern.test(config.endpointReviewId ?? '') || config.kind !== 'custom-fwsc' ||
@@ -30,6 +31,8 @@ export function validateCustomJournal(record) {
       !['prepared', 'active', 'unknown', 'succeeded', 'failed'].includes(record.state) || !phases.has(record.phase) ||
       (record.state === 'prepared' && (record.phase !== 'prepared' || record.transfer_finished)) ||
       typeof record.transfer_finished !== 'boolean' || typeof record.boot_identity_verified !== 'boolean' || typeof record.boot_build_verified !== 'boolean' ||
+      (record.loader_entry_stage !== undefined && !loaderEntryStages.has(record.loader_entry_stage)) ||
+      (record.loader_entry_error_code !== undefined && record.loader_entry_error_code !== null && (typeof record.loader_entry_error_code !== 'string' || !/^[a-z][a-z0-9_]{0,63}$/.test(record.loader_entry_error_code))) ||
       ((record.boot_identity_verified || record.boot_build_verified) && (!record.transfer_finished || record.state !== 'succeeded' || !record.boot_identity_verified || !record.boot_build_verified)) ||
       (record.state === 'succeeded' && (!record.transfer_finished || !record.boot_identity_verified || !record.boot_build_verified || record.phase !== 'done' || record.final_identity !== customProfilePolicy(record.request.profile ?? 'forge-diag').expected_boot_identity || record.final_build_sha256 !== record.request.targetBuildSha256))) {
     throw new StockError('corrupt_journal', 'Custom attempt journal failed integrity validation.');

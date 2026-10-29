@@ -1,4 +1,6 @@
-Alpha.12 contains native MIDI in an owned child process and recognizes only the physically correlated V15 USB-Midi OTA loader. See [original-attempt recovery](../docs/STOCK_MIDI_OTA_RECOVERY_20261030.md). The coordinator retains the original job if a driver fails.
+Alpha.13 adds separately reviewed CHECK-only preparation when an unresolved custom attempt returns to stock V15. It uses the original saved package, retains its phase and uncertainty, and stops in the pinned OTA loader before application programming. A second review and confirmation are required for WRITE. Source, delivered-panel and package checks pass; physical recovery remains pending. See [original-attempt recovery](../docs/STOCK_MIDI_OTA_RECOVERY_20261030.md).
+
+Alpha.12 contains native MIDI in an owned child process and recognizes only the physically correlated V15 USB-Midi OTA loader. The coordinator retains the original job if a driver fails.
 
 Tracker installation from stock V15 is added in the local alpha.10 Windows preview. It uses stock MIDI for OTA and exact CDC build proof after reboot, retaining tracker UAC/UVC without a MIDI endpoint. See [the tracker installer guide](../docs/TRACKER_V15_INSTALLER_20261030.md). Hardware acceptance remains pending.
 

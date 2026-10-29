@@ -35,6 +35,7 @@ function fixture({stockUpdateAvailable=true,customUpdateAvailable=true,stock=sta
     if(name==='begin_fm1_custom_upload'){backend.manifest=structuredClone(args.manifest);backend.chunks=[];return {upload_id:opaque('7'),max_chunk_bytes:65536};}
     if(name==='append_fm1_custom_upload'){const bytes=Buffer.from(args.data_base64,'base64');backend.chunks.push({offset:args.offset,bytes});return {upload_id:args.upload_id,received_bytes:args.offset+bytes.length};}
     if(name==='review_fm1_custom_update'){backend.custom={...backend.custom,review:backend.customReview};return {review:backend.customReview};}
+    if(name==='review_fm1_custom_loader_entry'){backend.customReview=customReview({operation:'loader-entry',identity:backend.device.identity,job_id:args.job_id});backend.custom={...backend.custom,review:backend.customReview};return {review:backend.customReview};}
     if(name==='review_fm1_custom_recovery'){backend.customReview=customReview({operation:'resume',identity:backend.device.identity,job_id:args.job_id});backend.custom={...backend.custom,review:backend.customReview};return {review:backend.customReview};}
     if(name==='start_fm1_custom_update'){backend.custom=status({writing:true,attempt:customAttempt()});return {writing:true,attempt:backend.custom.attempt,review:null};}
     if(name==='begin_fm1_stock_upload')return {upload_id:opaque('4'),max_chunk_bytes:65536};
@@ -380,4 +381,97 @@ test('delivered native panel controller accepts the exact generated tracker mani
     assert.equal(f.el('desktop-custom-review').disabled,false);
     assert.ok(f.el('desktop-custom-summary').textContent.includes(selected.target_build_sha256));
   }finally{f.controller.dispose();}
+});
+
+
+const originalMetadata={sha256:hash('a'),logical_sha256:hash('b'),manifest_sha256:hash('d'),raw_bytes:rawBytes,logical_bytes:623136};
+test('original loader entry uses the saved job with a separate trusted check-only confirmation and no file upload',async()=>{
+  const original=customAttempt('unknown',{...originalMetadata,phase:'writing',error_code:'native_worker_exit'});
+  const f=fixture({custom:status({attempt:original}),handler:(name,args,backend)=>{
+    if(name==='start_fm1_custom_update'){backend.custom=status({writing:true,attempt:{...original,loader_entry_stage:'checking'}});return {writing:true,attempt:backend.custom.attempt,review:null};}
+  }});
+  await f.controller.ready;assert.match(customFwscHtml,/Prepare original recovery/);
+  assert.equal(f.el('desktop-custom-loader-entry').disabled,true);await f.controller.connectMidi(user);
+  assert.equal(f.el('desktop-custom-loader-entry').disabled,false);assert.equal(f.el('desktop-custom-review').disabled,true);
+  await f.controller.custom.stage(synthetic,{loaderEntry:true});assert.equal(f.calls.some(row=>row.name==='review_fm1_custom_loader_entry'),false);
+  await f.controller.custom.stage(user,{loaderEntry:true});
+  assert.deepEqual(f.calls.filter(row=>row.name==='review_fm1_custom_loader_entry'),[{name:'review_fm1_custom_loader_entry',args:{job_id:opaque('6')}}]);
+  assert.equal(f.el('desktop-custom-dialog').open,true);assert.equal(f.el('desktop-custom-confirm').textContent,'Enter recovery loader');
+  assert.match(f.el('desktop-custom-review-note').textContent,/stops before application programming/);
+  assert.match(f.el('desktop-custom-review-text').textContent,/stop before application programming/);
+  assert.equal(f.calls.some(row=>/upload|start_fm1_custom_update/.test(row.name)),false);
+  await f.controller.custom.confirm(synthetic);assert.equal(f.calls.some(row=>row.name==='start_fm1_custom_update'),false);
+  await f.controller.custom.confirm(user);await f.controller.custom.confirm(user);
+  assert.equal(f.calls.filter(row=>row.name==='start_fm1_custom_update').length,1);
+  assert.equal(f.controller.custom.state().attempt.phase,'writing');assert.equal(f.controller.custom.state().attempt.error_code,'native_worker_exit');
+  assert.match(f.el('desktop-custom-transfer-status').textContent,/Preparing original recovery loader/);
+  f.backend.custom=status({attempt:{...original,loader_entry_stage:'loader_ready'}});await f.poll();
+  assert.equal(f.controller.custom.state().attempt.state,'unknown');assert.equal(f.controller.custom.state().attempt.phase,'writing');
+  assert.match(f.el('desktop-custom-transfer-status').textContent,/original transfer still unresolved/);
+  assert.doesNotMatch(f.el('desktop-custom-transfer-status').textContent,/Custom transfer finished/);
+  assert.equal(f.calls.some(row=>row.name==='review_fm1_custom_recovery'),false);
+  assert.equal(f.calls.filter(row=>row.name==='start_fm1_custom_update').length,1);
+  f.backend.device=device({loader:true,identity:'ota-FM-1_015'});await f.controller.connectMidi(user);
+  assert.equal(f.el('desktop-custom-loader-entry').disabled,true);assert.equal(f.el('desktop-custom-recovery').disabled,false);
+  assert.equal(f.calls.filter(row=>row.name==='start_fm1_custom_update').length,1);f.controller.dispose();
+});
+
+test('loader preparation rejects changed original job, profile, build and every immutable package field',async()=>{
+  for(const wrong of [{job_id:opaque('8')},{target_build_sha256:hash('d')},{sha256:hash('b')},{logical_sha256:hash('c')},
+    {manifest_sha256:hash('a')},{raw_bytes:rawBytes-1},{logical_bytes:623135},{operation:'resume'},{identity:'ota-FM-1_015'},
+    {expires_at:'2000-01-01T00:00:00.000Z'},{profile:'protracker',verification_transport:'cdc',expected_boot_identity:'MOD-EDITOR/1'}]){
+    const f=fixture({custom:status({attempt:customAttempt('unknown',originalMetadata)}),handler:name=>name==='review_fm1_custom_loader_entry'?{review:customReview({operation:'loader-entry',...wrong})}:undefined});
+    await f.controller.ready;await f.controller.connectMidi(user);await assert.rejects(f.controller.custom.stage(user,{loaderEntry:true}));
+    assert.equal(f.el('desktop-custom-dialog').open,false);await f.controller.custom.confirm(user);
+    assert.equal(f.calls.some(row=>row.name==='start_fm1_custom_update'||row.name==='begin_fm1_custom_upload'),false);f.controller.dispose();
+  }
+  const resume=fixture({custom:status({attempt:customAttempt('unknown')}),handler:name=>name==='review_fm1_custom_recovery'?{review:customReview({operation:'resume',identity:'ota-FM-1_015',target_build_sha256:hash('a')})}:undefined});
+  await resume.controller.ready;resume.backend.device=device({loader:true,identity:'ota-FM-1_015'});await resume.controller.connectMidi(user);
+  await assert.rejects(resume.controller.custom.stage(user,{resume:true}));assert.equal(resume.el('desktop-custom-dialog').open,false);resume.controller.dispose();
+});
+
+test('loader preparation stays blocked for complete transfers, missing metadata, other writer and stale status',async()=>{
+  for(const custom of [status({attempt:customAttempt('unknown',{...originalMetadata,transfer_finished:true})}),
+    status({attempt:trackerAttempt('unknown',{...originalMetadata,transfer_finished:true})}),status({attempt:customAttempt('unknown')}),
+    status({writing:true,attempt:customAttempt('active',originalMetadata)})]){
+    const f=fixture({custom});await f.controller.ready;if(!custom.writing)await f.controller.connectMidi(user);
+    assert.equal(f.el('desktop-custom-loader-entry').disabled,true);await f.controller.custom.stage(user,{loaderEntry:true});
+    assert.equal(f.calls.some(row=>row.name==='review_fm1_custom_loader_entry'),false);f.controller.dispose();
+  }
+  for(const stock of [status({attempt:stockAttempt('unknown')}),status({writing:true,attempt:stockAttempt()})]){
+    const f=fixture({stock,custom:status({attempt:customAttempt('unknown',originalMetadata)})});await f.controller.ready;await f.controller.connectMidi(user);
+    assert.equal(f.el('desktop-custom-loader-entry').disabled,true);await f.controller.custom.stage(user,{loaderEntry:true});
+    assert.equal(f.calls.some(row=>row.name==='review_fm1_custom_loader_entry'),false);f.controller.dispose();
+  }
+  let fail=false;const f=fixture({custom:status({attempt:customAttempt('unknown',originalMetadata)}),handler:name=>{if(fail&&name==='get_fm1_custom_update_status')throw new Error('status unavailable');}});
+  await f.controller.ready;await f.controller.connectMidi(user);fail=true;await assert.rejects(f.controller.refresh());
+  assert.equal(f.el('desktop-custom-loader-entry').disabled,true);await f.controller.custom.stage(user,{loaderEntry:true});
+  assert.equal(f.calls.some(row=>row.name==='review_fm1_custom_loader_entry'),false);f.controller.dispose();
+  const partial=fixture({custom:status({attempt:customAttempt('unknown',{sha256:hash('a')})})});await partial.controller.ready;
+  assert.equal(partial.controller.custom.state().known,false);partial.controller.dispose();
+});
+
+test('loader preparation review becomes unusable after device change and failed start retains original history',async()=>{
+  const original=customAttempt('unknown',{...originalMetadata,phase:'writing',error_code:'prior_failure'});
+  const changed=fixture({custom:status({attempt:original})});await changed.controller.ready;await changed.controller.connectMidi(user);
+  await changed.controller.custom.stage(user,{loaderEntry:true});changed.backend.device=device({identity:'FM-1_009'});await changed.controller.refresh();
+  await changed.controller.custom.confirm(user);assert.equal(changed.calls.some(row=>row.name==='start_fm1_custom_update'),false);changed.controller.dispose();
+  const f=fixture({custom:status({attempt:original}),handler:name=>{if(name==='start_fm1_custom_update')throw new Error('worker unavailable');}});
+  await f.controller.ready;await f.controller.connectMidi(user);await f.controller.custom.stage(user,{loaderEntry:true});
+  await assert.rejects(f.controller.custom.confirm(user),/worker unavailable/);
+  const result=f.controller.custom.state();assert.equal(result.attempt.phase,'writing');assert.equal(result.attempt.error_code,'prior_failure');
+  assert.equal(result.attempt.loader_entry_stage,'failed');assert.equal(result.attempt.state,'unknown');assert.equal(result.known,false);
+  await f.controller.custom.confirm(user);assert.equal(f.calls.filter(row=>row.name==='start_fm1_custom_update').length,1);f.controller.dispose();
+});
+
+
+test('fresh status cannot replace a retained original package tuple or assert an unknown preparation stage',async()=>{
+  for(const wrong of [{sha256:hash('b')},{logical_sha256:hash('c')},{manifest_sha256:hash('a')},{raw_bytes:rawBytes-1},
+    {logical_bytes:623135},{loader_entry_stage:'programming'}]){
+    const original=customAttempt('unknown',originalMetadata),f=fixture({custom:status({attempt:original})});
+    await f.controller.ready;await f.controller.connectMidi(user);f.backend.custom=status({attempt:{...original,...wrong}});
+    await assert.rejects(f.controller.refresh());assert.equal(f.controller.custom.state().known,false);
+    assert.equal(f.el('desktop-custom-loader-entry').disabled,true);assert.equal(f.controller.custom.state().attempt.sha256,hash('a'));
+    assert.equal(f.calls.some(row=>row.name==='review_fm1_custom_loader_entry'||row.name==='start_fm1_custom_update'),false);f.controller.dispose();
+  }
 });

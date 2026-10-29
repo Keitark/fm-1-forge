@@ -8,7 +8,7 @@ import { createCustomUpdateService, MAX_RAW_PACKAGE_BYTES, MAX_CHUNK_BYTES } fro
 import { createStockUpdateService } from '../lib/stock-update-service.mjs';
 import { CustomAttemptJournal, customRequestIdentity } from '../../tools/jieli-wl82/stock-sysex/custom-journal.mjs';
 import { AttemptJournal, requestIdentity } from '../../tools/jieli-wl82/stock-sysex/journal.mjs';
-import { STOCK, StockError } from '../../tools/jieli-wl82/stock-sysex/protocol.mjs';
+import { STOCK, StockError, upgradeCommand } from '../../tools/jieli-wl82/stock-sysex/protocol.mjs';
 const sha = value => createHash('sha256').update(value).digest('hex');
 const bytes = Buffer.alloc(623156, 42), image = new Uint8Array(623136), target = 'c'.repeat(64);
 const manifest = { schemaVersion: 1, policy_version: 'customfwsc-v1', package_sha256: sha(bytes), logical_sha256: sha(image), raw_bytes: bytes.length, logical_bytes: image.length,
@@ -60,6 +60,89 @@ async function stockActive(directory, { state = 'unknown' } = {}) {
   const journal = await AttemptJournal.open(path.join(directory, 'stock-update/attempt'), requestIdentity({ jobId: 'stock-peer', endpointReviewId: 'stock-review', reviewedSha256: STOCK.sha256, expectedStockPair: { inputName: 'FM-1 Midi', outputName: 'FM-1 Midi' } }));
   await journal.transition('entering_write', { state }); await journal.close();
 }
+async function unresolvedOriginal(t, { phase = 'writing', ...options } = {}) {
+  const f = await fixture(t, { ...options, runner: async (_config, { journal }) => { await journal.transition(phase, { state: 'active' }); throw new StockError('disconnected', 'Original interrupted attempt.'); } });
+  const review = await reviewed(f); await f.service.start({ review_id: review.review_id, confirmed: true }); await idle(f.service); await f.service.close();
+  return { f, review };
+}
+
+test('original loader entry preserves phase and errors with all immutable review hashes and requires separate OTA review', async t => {
+  const { f, review } = await unresolvedOriginal(t);
+  const before = JSON.parse(await fs.readFile(path.join(f.directory, 'custom-update/attempt/attempt.json'), 'utf8'));
+  const recovered = await fixture(t, { directory: f.directory, runner: async (request, { journal }) => {
+    assert.equal(request.operation, 'loader-entry'); assert.equal(request.expectedInitialIdentity, 'FM-1_015');
+    assert.equal(request.jobId, review.job_id); assert.equal(request.sha256, review.sha256); assert.equal(request.targetBuildSha256, review.target_build_sha256);
+    for (const phase of ['entering_check', 'checking', 'waiting_loader']) await journal.transition(phase, { state: 'active' });
+    await journal.transition('waiting_loader', { state: 'unknown', loader_entry_stage: 'loader_ready' });
+  } });
+  const prepared = (await recovered.service.reviewLoaderEntry({ job_id: review.job_id })).review;
+  for (const key of ['job_id', 'sha256', 'logical_sha256', 'manifest_sha256', 'raw_bytes', 'logical_bytes', 'target_build_sha256']) assert.equal(prepared[key], review[key]);
+  assert.equal(prepared.operation, 'loader-entry'); assert.equal(prepared.identity, 'FM-1_015');
+  assert.equal((await recovered.service.status()).writing, false); assert.equal(recovered.acquired, 0);
+  await assert.rejects(recovered.service.start({ review_id: prepared.review_id, confirmed: false }), { code: 'review_required' });
+  await recovered.service.start({ review_id: prepared.review_id, confirmed: true }); const ready = await idle(recovered.service);
+  assert.equal(ready.attempt.job_id, review.job_id); assert.equal(ready.attempt.state, 'unknown'); assert.equal(ready.attempt.phase, 'writing'); assert.equal(ready.attempt.loader_entry_stage, 'loader_ready');
+  assert.equal(ready.attempt.error_code, 'disconnected'); assert.equal(ready.attempt.recovery_required, true); assert.equal(ready.attempt.transfer_finished, false); assert.equal(ready.attempt.boot_build_verified, false);
+  for (const key of ['sha256', 'logical_sha256', 'manifest_sha256', 'raw_bytes', 'logical_bytes']) assert.equal(ready.attempt[key], review[key]);
+  const after = JSON.parse(await fs.readFile(path.join(f.directory, 'custom-update/attempt/attempt.json'), 'utf8'));
+  for (const key of ['jobId', 'request', 'requestDigest', 'phase', 'transfer_finished', 'boot_identity_verified', 'boot_build_verified', 'error_code', 'startedAt']) assert.deepEqual(after[key], before[key]);
+  await assert.rejects(recovered.service.beginUpload({ raw_bytes: bytes.length, manifest }), { code: 'recovery_required' });
+  await assert.rejects(recovered.service.reviewResume({ job_id: review.job_id }), { code: 'resume_requires_loader' });
+  recovered.setMode('ota-FM-1_015'); assert.equal((await recovered.service.reviewResume({ job_id: review.job_id })).review.operation, 'resume');
+});
+
+test('loader entry recovery rejects wrong job changed original pair expiry and changed endpoint before runner', async t => {
+  const { f, review } = await unresolvedOriginal(t, { phase: 'checking' }); let now = 0, runs = 0;
+  const recovered = await fixture(t, { directory: f.directory, now: () => now, runner: async () => { runs++; } });
+  await assert.rejects(recovered.service.reviewLoaderEntry({ job_id: '0'.repeat(32) }), { code: 'loader_entry_rejected' });
+  await assert.rejects(recovered.service.reviewLoaderEntry({ job_id: review.job_id, force: true }), { code: 'loader_entry_rejected' });
+  const endpointReview = recovered.deviceService.reviewStockEndpoint;
+  recovered.deviceService.reviewStockEndpoint = async () => ({ ...(await endpointReview()), expectedStockPair: { inputName: 'FM-1 Midi 9', outputName: 'FM-1 Midi 10' } });
+  await assert.rejects(recovered.service.reviewLoaderEntry({ job_id: review.job_id }), { code: 'device_changed' });
+  recovered.deviceService.reviewStockEndpoint = endpointReview;
+  const expired = (await recovered.service.reviewLoaderEntry({ job_id: review.job_id })).review;
+  now = 120001; await assert.rejects(recovered.service.start({ review_id: expired.review_id, confirmed: true }), { code: 'review_expired' });
+  const changed = (await recovered.service.reviewLoaderEntry({ job_id: review.job_id })).review; recovered.changeDevice();
+  await assert.rejects(recovered.service.start({ review_id: changed.review_id, confirmed: true }), { code: 'device_changed' });
+  assert.equal(runs, 0); assert.equal(recovered.acquired, 0); assert.equal((await recovered.service.status()).attempt.phase, 'checking');
+});
+
+test('loader entry rejects finished transfer and rechecks the locked original closure at start', async t => {
+  const { f, review } = await unresolvedOriginal(t); let runs = 0;
+  const recovered = await fixture(t, { directory: f.directory, runner: async () => { runs++; } });
+  const approved = (await recovered.service.reviewLoaderEntry({ job_id: review.job_id })).review;
+  const journalPath = path.join(f.directory, 'custom-update/attempt/attempt.json'), record = JSON.parse(await fs.readFile(journalPath, 'utf8'));
+  await fs.writeFile(journalPath, JSON.stringify({ ...record, transfer_finished: true }));
+  await assert.rejects(recovered.service.start({ review_id: approved.review_id, confirmed: true }), { code: 'loader_entry_rejected' });
+  await assert.rejects(recovered.service.reviewLoaderEntry({ job_id: review.job_id }), { code: 'loader_entry_rejected' });
+  assert.equal(runs, 0); assert.equal(recovered.acquired, 0);
+});
+
+test('loader entry failure and shutdown preserve original write phase flags and error evidence', async t => {
+  for (const shutdown of [false, true]) {
+    const { f, review } = await unresolvedOriginal(t); const gate = deferred(); let running = false;
+    const recovered = await fixture(t, { directory: f.directory, runner: async (_request, { journal }) => {
+      await journal.transition('entering_check', { state: 'active', initial_identity: 'FM-1_015' }); running = true;
+      if (shutdown) await gate.promise;
+      throw new StockError('identity_timeout', 'Recovery loader query failed.');
+    } });
+    const approved = (await recovered.service.reviewLoaderEntry({ job_id: review.job_id })).review;
+    await recovered.service.start({ review_id: approved.review_id, confirmed: true }); while (!running) await new Promise(resolve => setImmediate(resolve));
+    if (shutdown) { await recovered.service.close(); gate.resolve(); await new Promise(resolve => setImmediate(resolve)); }
+    else await idle(recovered.service);
+    const after = JSON.parse(await fs.readFile(path.join(f.directory, 'custom-update/attempt/attempt.json'), 'utf8'));
+    assert.equal(after.phase, 'writing'); assert.equal(after.state, 'unknown'); assert.equal(after.transfer_finished, false); assert.equal(after.boot_build_verified, false); assert.equal(after.error_code, 'disconnected');
+    assert.equal(after.loader_entry_stage, 'failed'); assert.equal(after.loader_entry_error_code, shutdown ? 'service_closed' : 'identity_timeout');
+  }
+});
+
+test('original loader entry keeps peer stock guard and rejects corrupt snapshot before endpoint access', async t => {
+  const { f, review } = await unresolvedOriginal(t);
+  const recovered = await fixture(t, { directory: f.directory });
+  await fs.writeFile(path.join(f.directory, 'custom-update/packages', review.sha256 + '.fwsc'), Buffer.alloc(bytes.length));
+  await assert.rejects(recovered.service.reviewLoaderEntry({ job_id: review.job_id }), { code: 'invalid_custom_package' }); assert.deepEqual(recovered.calls, []);
+  await stockActive(f.directory); await assert.rejects(recovered.service.reviewLoaderEntry({ job_id: review.job_id }), { code: 'recovery_required' }); assert.deepEqual(recovered.calls, []);
+});
 
 test('custom construction and passive status never connect, enumerate or send MIDI', async t => {
   const f = await fixture(t); assert.deepEqual(await f.service.status(), { supported: true, writing: false, attempt: null, review: null }); assert.deepEqual(f.calls, []);
@@ -241,4 +324,20 @@ test('production stock OTA hands off to exact tracker CDC proof through the dura
   assert.equal(mock.opens, 2); assert.equal(proofs, 1);
   const persisted = JSON.parse(await fs.readFile(path.join(f.directory, 'custom-update/attempt/attempt.json'), 'utf8'));
   assert.equal(persisted.request.profile, 'protracker'); assert.equal(persisted.final_build_sha256, target);
+});
+
+test('production CHECK-only recovery retains durable original phase and request without a write command', async t => {
+  const mock = mockUpdater({ initialIdentity: 'FM-1_015', loaderIdentity: 'ota-FM-1_015' }), pair = mock.config.expectedStockPair;
+  const deviceService = { async reviewStockEndpoint() { return { token: 'original-stock', input_name: pair.inputName, output_name: pair.outputName, identity: 'FM-1_015', loader: false, expectedStockPair: pair }; },
+    async acquireStockWriter() { return { backend: mock.backend, async release() {} }; } };
+  const { f, review } = await unresolvedOriginal(t, { deviceService, phase: 'writing' });
+  const original = JSON.parse(await fs.readFile(path.join(f.directory, 'custom-update/attempt/attempt.json'), 'utf8'));
+  const recovered = await fixture(t, { directory: f.directory, deviceService, runner: (request, context) => runCustomUpdate(request, { ...context, clock: mock.clock }) });
+  const prepared = (await recovered.service.reviewLoaderEntry({ job_id: review.job_id })).review;
+  await recovered.service.start({ review_id: prepared.review_id, confirmed: true }); const ready = await idle(recovered.service);
+  assert.equal(mock.sent.filter(packet => equalBytes(packet, upgradeCommand())).length, 1); assert.equal(mock.opens, 2); assert.equal(mock.closed, 2);
+  assert.equal(ready.attempt.state, 'unknown'); assert.equal(ready.attempt.phase, 'writing'); assert.equal(ready.attempt.transfer_finished, false); assert.equal(ready.attempt.loader_entry_stage, 'loader_ready');
+  assert.equal(ready.attempt.error_code, 'disconnected'); assert.equal(ready.attempt.boot_build_verified, false);
+  const final = JSON.parse(await fs.readFile(path.join(f.directory, 'custom-update/attempt/attempt.json'), 'utf8'));
+  assert.deepEqual(final.request, original.request); assert.equal(final.requestDigest, original.requestDigest); assert.equal(final.phase, original.phase); assert.equal(final.startedAt, original.startedAt);
 });

@@ -19,11 +19,11 @@ export async function runCustomUpdate(config, { image: packageImage, backend, jo
   if (!Number.isSafeInteger(config.logicalBytes) || image.length !== config.logicalBytes || image.length < 1024 || image.length > 2 * 1024 * 1024 ||
       !hex64(config.reviewedSha256) || !hex64(config.logicalSha256) || !hex64(config.targetBuildSha256) ||
       createHash('sha256').update(image).digest('hex') !== config.logicalSha256 ||
-      !['install', 'resume'].includes(config.operation) || config.expectedInitialIdentity !== (config.operation === 'resume' ? WIRE.loaderIdentity : STOCK.product)) {
+      !['install', 'resume', 'loader-entry'].includes(config.operation) || config.expectedInitialIdentity !== (config.operation === 'resume' ? WIRE.loaderIdentity : STOCK.product)) {
     throw new StockError('invalid_package', 'A reviewed custom FWSC image, target build and source identity are required.');
   }
   let link = null, destructiveStarted = false, finished = false;
-  const resume = config.operation === 'resume';
+  const resume = config.operation === 'resume', loaderEntry = config.operation === 'loader-entry';
   let phase = 'prepared', eventCount = 0, lastEventAt = -Infinity;
   const emit = (details = {}, force = false) => {
     if (++eventCount > 100000) throw new StockError('too_many_requests', 'OTA request limit exceeded.');
@@ -33,7 +33,7 @@ export async function runCustomUpdate(config, { image: packageImage, backend, jo
   };
   const change = async (next, extra = {}) => { phase = next; await journal.transition(next, extra); emit({}, true); };
   const closeLink = async () => { if (link) { const closing = link; link = null; await closing.close(); } };
-  const send = async packet => { if (await link.send(packet) === false) throw new StockError('send_failed', 'MIDI send failed.'); };
+  const send = async packet => { if (signal?.aborted) throw new StockError('aborted', 'The reviewed operation was interrupted.'); if (await link.send(packet) === false) throw new StockError('send_failed', 'MIDI send failed.'); };
   const finalPair = inventory => {
     if (!inventory || !Array.isArray(inventory.inputs) || !Array.isArray(inventory.outputs) || inventory.inputs.length > 256 || inventory.outputs.length > 256) throw new StockError('invalid_inventory', 'Custom firmware MIDI inventory is invalid.');
     const accepted = new Set(['fm-1', 'fm-1 midi', 'fm-1 forge', 'fm1_forge_001']);
@@ -143,6 +143,14 @@ export async function runCustomUpdate(config, { image: packageImage, backend, jo
       await change('waiting_loader'); identity = await waitFor('loader', timing.loader);
     }
     if (!identity.loader || identity.text !== WIRE.loaderIdentity) throw new StockError('wrong_loader', 'The pinned FM-1 OTA loader identity is required.');
+    if (loaderEntry) {
+      // Re-entering the loader never authorizes the second upgrade command.
+      // The original unresolved attempt still needs a separate fresh OTA review.
+      await closeLink();
+      await change('waiting_loader', { state: 'unknown', loader_entry_stage: 'loader_ready' });
+      return Object.freeze({ jobId: config.jobId, state: 'unknown', recovery_required: true, loader_entry_stage: 'loader_ready',
+        transfer_finished: false, boot_identity_verified: false, boot_build_verified: false, readback_verified: false });
+    }
     await change('entering_write', { state: 'active', loader_identity: identity.text });
     destructiveStarted = true; await send(upgradeCommand());
     await change('writing'); await clock.sleep(timing.start); await serve(WRITE_FINISH, timing.idleWrite);
@@ -158,7 +166,7 @@ export async function runCustomUpdate(config, { image: packageImage, backend, jo
     return Object.freeze({ jobId: config.jobId, state: 'succeeded', product: profile.expected_boot_identity, sha256: config.reviewedSha256, target_build_sha256: config.targetBuildSha256,
       transfer_finished: true, boot_identity_verified: true, boot_build_verified: true, identity: identity.text, build_sha256: identity.buildSha256, readback_verified: false });
   } catch (error) {
-    const uncertain = destructiveStarted || resume;
+    const uncertain = destructiveStarted || resume || loaderEntry;
     error.destructive_started = destructiveStarted; error.state = uncertain ? 'unknown' : 'failed';
     error.recovery_required = uncertain; error.transfer_finished = finished; error.boot_identity_verified = false; error.boot_build_verified = false;
     try { await journal.transition(phase === 'prepared' ? 'failed' : phase, { state: error.state, error_code: error.code ?? 'worker_failed', transfer_finished: finished, boot_identity_verified: false, boot_build_verified: false }); }
@@ -167,7 +175,7 @@ export async function runCustomUpdate(config, { image: packageImage, backend, jo
   } finally {
     try { await closeLink(); }
     catch (error) {
-      error.destructive_started = destructiveStarted; error.recovery_required = destructiveStarted || resume;
+      error.destructive_started = destructiveStarted; error.recovery_required = destructiveStarted || resume || loaderEntry;
       error.state = error.recovery_required ? 'unknown' : 'failed'; error.transfer_finished = finished; error.boot_identity_verified = false; error.boot_build_verified = false;
       try { await journal.transition(phase, { state: error.state, transfer_finished: finished, boot_identity_verified: false, boot_build_verified: false, error_code: 'close_failed' }); } catch { error.recovery_required = true; }
       throw error;

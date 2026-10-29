@@ -18,8 +18,8 @@ import { ICONS } from '../site/lib/fm1-icon.mjs';
 import { PRESETS, PATTERNS } from '../site/lib/fm1-appearance.mjs';
 import { normalizeProjectConfig } from '../site/lib/fm1-forge-project.mjs';
 
-export const RESOURCE_URI='ui://fm1/forge-windows-v6.html';
-export const VERSION='3.4.0-alpha.12';
+export const RESOURCE_URI='ui://fm1/forge-windows-v7.html';
+export const VERSION='3.4.0-alpha.13';
 const supportedTransports=['stock-midi','firmware-midi'];
 const projectGate=label=>({diagnostics_verified:false,can_start_project:false,message:'Configure and build a project with Codex, then review the generated custom FWSC and exact target build in the '+label+' panel. A build request does not authorize installation.'});
 const result=data=>({content:[{type:'text',text:JSON.stringify(data)}],structuredContent:data});
@@ -61,7 +61,8 @@ export async function createDesktopServer({deviceService,stockUpdateService,cust
   register('append_fm1_custom_upload','Append a bounded sequential custom FWSC chunk. Does not contact a device.',z.object({upload_id:updateId,offset:z.number().int().min(0).max(MAX_CUSTOM_FWSC_BYTES),data_base64:z.string().min(4).max(Math.ceil(MAX_CHUNK_BYTES/3)*4).regex(/^[A-Za-z0-9+/]+={0,2}$/)}).strict(),args=>customService().appendUpload(args),{readOnly:false,appOnly:true});
   register('review_fm1_custom_update','Validate a custom FWSC, target build and freshly connected stock V15 device for human review. Does not install firmware.',z.object({upload_id:updateId}).strict(),args=>customService().review(args),{readOnly:false,appOnly:true});
   register('review_fm1_custom_recovery','Review the identical unresolved custom FWSC attempt using its original package and pinned OTA loader. Does not resume automatically.',z.object({job_id:updateId}).strict(),args=>customService().reviewResume(args),{readOnly:false,appOnly:true});
-  register('start_fm1_custom_update','Install only the reviewed custom FWSC after explicit confirmation in the panel. Destructive: enters stock OTA and replaces application firmware. Requires the validated package, target build and original recovery record.',z.object({review_id:updateId,confirmed:z.literal(true)}).strict(),args=>customService().start(args),{readOnly:false,appOnly:true,destructive:true});
+  register('review_fm1_custom_loader_entry','Review loader preparation for the identical unresolved custom job from stock V15. Confirmation runs only CHECK and stops in the pinned OTA loader; application-write recovery requires a separate review.',z.object({job_id:updateId}).strict(),args=>customService().reviewLoaderEntry(args),{readOnly:false,appOnly:true});
+  register('start_fm1_custom_update','Execute only the explicitly confirmed custom review. Install/resume replaces application firmware; loader-entry runs only original-package CHECK and stops before WRITE. Requires the validated package, target build and original recovery record.',z.object({review_id:updateId,confirmed:z.literal(true)}).strict(),args=>customService().start(args),{readOnly:false,appOnly:true,destructive:true});
 
 
   register('list_fm1_projects','List locally saved configuration drafts.',empty,async()=>({projects:await store.listProjects(),gate}));

@@ -44,5 +44,14 @@ After a completed tracker transfer, use **Verify tracker boot** to observe the
 same original build without rewriting it. A missing or mismatched proof remains
 unresolved. This leaves common-firmware ARM/self-updates disabled.
 Preserve shared stock/custom uncertainty guards and original-attempt recovery.
+If the original unresolved custom attempt has returned to freshly identified
+stock V15 before transfer completion, use **Prepare original recovery**. Review
+the original saved hashes and explicitly confirm **Enter recovery loader**.
+This state-changing preparation serves CHECK only and stops after identifying
+the pinned OTA loader. It preserves the original job, phase and uncertainty.
+Then reconnect stock MIDI, use **Review original custom recovery**, and require
+a separate explicit confirmation before the application-write phase. Never
+clear the original journal, substitute selected files or automatically continue
+from loader preparation into WRITE.
 Offline public-template layout preservation is not a live unit baseline check
 or full flash readback; distinguish these from physical acceptance.

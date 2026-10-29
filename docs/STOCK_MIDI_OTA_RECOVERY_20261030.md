@@ -36,3 +36,26 @@ uses the read-only **Verify tracker boot** path.
 
 Mock/native-boundary and package checks remain separate from a successful
 physical recovery and running tracker proof. Do not infer those from this fix.
+
+## Original attempt returned to stock V15
+
+Alpha 13 adds **Prepare original recovery** for an unresolved custom attempt
+whose transfer has not finished and whose device freshly identifies as stock
+`FM-1_015`. File selection does not create a new attempt or unlock normal Review.
+Preparation uses only the original saved job, request digest, package, manifest,
+profile and target build. The panel compares these original hashes and lengths
+against the review. The server revalidates them under the original journal lock
+at confirmation and binds the current stock endpoint to the original pair.
+
+After **Enter recovery loader**, the runner sends one upgrade command and serves
+only CHECK requests. It rejects WRITE_FINISH, requires exact `ota-FM-1_015`, and
+stops before `entering_write` or a second upgrade command. CHECK changes device
+state; this is not a read-only observation. The original journal phase and
+uncertainty remain intact, with preparation progress in `loader_entry_stage`.
+Failure, shutdown or a late result never reports installation success.
+
+Reconnect with **Connect stock MIDI**, review the original custom recovery in
+the freshly identified loader, and confirm that separate review before WRITE.
+There is no automatic continuation, replacement job or manual lock cleanup.
+Named MIDI endpoints provide a fresh identity and unique reviewed pair, not a
+persistent cryptographic identity for an individual physical unit.

@@ -19,7 +19,7 @@ const marketplace=await fs.realpath(rootArg), root=await fs.realpath(path.join(m
 assert.equal(path.dirname(root),marketplace,'The plugin must be contained in the marketplace');
 const manifest=JSON.parse(await fs.readFile(path.join(root,'BUILD-MANIFEST.json'),'utf8'));
 assert.equal(manifest.format,'fm1-forge-universal-package-v1');
-assert.deepEqual(manifest.targets,targets);assert.equal(manifest.version,'3.4.0-alpha.12');
+assert.deepEqual(manifest.targets,targets);assert.equal(manifest.version,'3.4.0-alpha.13');
 assert.deepEqual(manifest.nativeInputs.map(input=>input.target).sort(),[...targets].sort());
 const hash=data=>createHash('sha256').update(data).digest('hex');
 const maximumGitFileBytes=100*1024*1024;
@@ -107,7 +107,7 @@ const nativeAddon=JSON.parse(await run(node,['--input-type=module','--eval',nati
 assert.deepEqual(nativeAddon,{platform:process.platform,arch:process.arch,loaded:true,enumeratedPorts:false,openedDevice:false});
 
 const expectedName=process.platform==='darwin'?'FM-1 Forge macOS':'FM-1 Forge Windows';
-const resourceUri=process.platform==='darwin'?'ui://fm1/forge-macos-v1.html':'ui://fm1/forge-windows-v6.html';
+const resourceUri=process.platform==='darwin'?'ui://fm1/forge-macos-v1.html':'ui://fm1/forge-windows-v7.html';
 const checks=[];
 for(const revision of ['2026-07-28','2025-11-25','2024-11-05']){
   const data=path.join(temporary,revision);await fs.mkdir(data);
@@ -115,7 +115,7 @@ for(const revision of ['2026-07-28','2025-11-25','2024-11-05']){
   const client=new Client({name:'Forge universal passive acceptance',version:'1'},{capabilities:{},supportedProtocolVersions:[revision],versionNegotiation:{mode:revision==='2026-07-28'?{pin:revision}:'legacy'}});
   try{
     await client.connect(transport);assert.equal(client.getServerVersion().name,expectedName);assert.equal(client.getServerVersion().version,manifest.version);
-    const tools=(await client.listTools()).tools;assert.equal(tools.length,25);assert.equal(new Set(tools.map(tool=>tool.name)).size,25);
+    const tools=(await client.listTools()).tools;assert.equal(tools.length,26);assert.equal(new Set(tools.map(tool=>tool.name)).size,26);
     for(const name of ['start_fm1_stock_update','start_fm1_custom_update']){const tool=tools.find(item=>item.name===name);assert.deepEqual(tool._meta.ui.visibility,['app']);assert.equal(tool.annotations.destructiveHint,true);}
     const opened=await client.callTool({name:'open_fm1_library',arguments:{}});assert.ok(!opened.isError,'Passive library call failed');
     assert.equal(opened.structuredContent.desktop.platform,process.platform);assert.equal(opened.structuredContent.desktop.customUpdateAvailable,true);assert.equal(opened.structuredContent.desktop.installationAvailable,false);

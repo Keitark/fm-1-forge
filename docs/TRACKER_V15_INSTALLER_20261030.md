@@ -35,6 +35,11 @@ If the transfer completed but the CDC check failed, **Verify tracker boot**
 checks the identical original package/build again without any firmware write
 or MIDI upgrade command. Partial transfers retain the existing explicit
 original-attempt OTA recovery. Stock/custom unresolved guards remain shared.
+If the device has returned to stock V15 before completion, use **Prepare
+original recovery**, review the original saved hashes, and confirm **Enter
+recovery loader**. This CHECK-only step stops before application programming.
+Reconnect stock MIDI and separately review/confirm the original OTA recovery.
+Selecting files again does not replace an unresolved original attempt.
 Closing the process aborts verification and preserves uncertainty; a late reply
 cannot overwrite it with success.
 
