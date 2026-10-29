@@ -33,3 +33,23 @@ test('explicit selection is exact and does not fall back to sole unrelated outpu
   assert.throws(() => validateSelectedPair({ inputName: 'FM-1\n', outputName: 'FM-1' }));
   assert.throws(() => validateSelectedPair({ ...standardPair, message: [240, 247] }));
 });
+
+const loaderPhysical = { vid: '4d4a', pid: '4155', mi: '00', instanceHash: 'a'.repeat(64) };
+const loaderInventory = (input = loaderPhysical, output = loaderPhysical) => inventory([{ name: 'USB-Midi 0', physical: input }], [{ name: 'USB-Midi 1', physical: output }]);
+test('generic OTA loader requires exact correlated USB identity and remains loader-only', () => {
+  const selected = selectPair(loaderInventory(), standardPair, 'loader');
+  assert.equal(selected.kind, 'loader'); assert.equal(selected.inputName, 'USB-Midi 0'); assert.equal(selected.physical.userSelected, false);
+  assert.doesNotThrow(() => validateSelectedPair({ inputName: selected.inputName, outputName: selected.outputName, physical: selected.physical }));
+  assert.equal(selectPair(loaderInventory(), standardPair, 'normal'), null);
+  assert.equal(selectPair(loaderInventory(), standardPair), null);
+  for (const changes of [{ vid: '1234' }, { pid: 'c755' }, { mi: '01' }, { instanceHash: 'bad' }]) assert.equal(selectPair(loaderInventory({ ...loaderPhysical, ...changes }), standardPair, 'loader'), null);
+  for (const changes of [{ vid: '1234' }, { pid: 'c755' }, { mi: '01' }, { instanceHash: 'b'.repeat(64) }]) assert.throws(() => selectPair(loaderInventory(loaderPhysical, { ...loaderPhysical, ...changes }), standardPair, 'loader'), { code: 'physical_correlation_failed' });
+  assert.equal(selectPair(inventory(['USB-Midi 0'], ['USB-Midi 1']), standardPair, 'loader'), null);
+});
+test('multiple loader endpoints or mixed named and generic loaders remain ambiguous', () => {
+  const duplicate = loaderInventory(); duplicate.inputs.push({ name: 'USB-Midi 2', physical: loaderPhysical });
+  assert.throws(() => selectPair(duplicate, standardPair, 'loader'), { code: 'ambiguous_device' });
+  const mixed = loaderInventory(); mixed.inputs.push('ota-FM-1'); mixed.outputs.push('ota-FM-1');
+  assert.throws(() => selectPair(mixed, standardPair, 'loader'), { code: 'ambiguous_device' });
+  assert.throws(() => validateSelectedPair({ inputName: 'USB-Midi', outputName: 'USB-Midi', physical: { ...loaderPhysical, correlated: true, userSelected: true } }), { code: 'invalid_endpoint' });
+});

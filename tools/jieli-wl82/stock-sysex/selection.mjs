@@ -1,5 +1,5 @@
 import { StockError } from './protocol.mjs';
-import { assertPhysicalPair } from './physical.mjs';
+import { assertPhysicalPair, isPinnedLoaderPhysical } from './physical.mjs';
 
 const portName = value => typeof value === 'string' && value.length > 0 && value.length <= 128 && !/[\x00-\x1f\x7f]/.test(value);
 export function canonicalName(name) {
@@ -19,9 +19,11 @@ export function validateSelectedPair(pair) {
   }
   if (!pairKind(pair.inputName)) {
     const physical = pair.physical;
-    if (!/^usb composite device(?: midi(?: \d+)?)?$/i.test(canonicalName(pair.inputName)) || !physical ||
+    const pinnedLoader = canonicalName(pair.inputName) === 'usb-midi' && isPinnedLoaderPhysical(physical) &&
+      physical.correlated === true && physical.userSelected === false;
+    if ((!pinnedLoader && (!/^usb composite device(?: midi(?: \d+)?)?$/i.test(canonicalName(pair.inputName)) || !physical ||
         physical.vid !== '4c4a' || physical.pid !== 'c755' || !/^[a-f0-9]{2}$/.test(physical.mi ?? '') ||
-        !/^[a-f0-9]{64}$/.test(physical.instanceHash ?? '') || physical.correlated !== true || physical.userSelected !== true ||
+        !/^[a-f0-9]{64}$/.test(physical.instanceHash ?? '') || physical.correlated !== true || physical.userSelected !== true)) ||
         Object.keys(physical).some(key => !['vid', 'pid', 'mi', 'instanceHash', 'correlated', 'userSelected'].includes(key))) {
       throw new StockError('invalid_endpoint', 'Generic MIDI endpoints require explicit FM-1 USB correlation and user selection.');
     }
@@ -46,9 +48,21 @@ export function candidatePairs(inventory, selectedPair) {
     if (!sameOutputs.length) continue;
     pairs.push({ inputName, outputName: sameOutputs[0], kind });
   }
+  // The pinned V15 OTA loader re-enumerates as USB-Midi on Windows. The name
+  // alone is never sufficient: both WinMM endpoints must prove the exact
+  // loader VID/PID/interface and same current USB instance before any query.
+  for (let index = 0; index < inputs.length; index++) {
+    if (canonicalName(inputs[index]) !== 'usb-midi' || !isPinnedLoaderPhysical(inventory.inputs[index]?.physical)) continue;
+    const sameInputs = inputs.filter(name => canonicalName(name) === 'usb-midi');
+    const sameOutputs = outputs.filter(name => canonicalName(name) === 'usb-midi');
+    if (sameInputs.length > 1 || sameOutputs.length > 1) throw new StockError('ambiguous_device', 'Pinned OTA loader endpoints are ambiguous.');
+    if (sameOutputs.length !== 1) continue;
+    const pair = { inputName: inputs[index], outputName: sameOutputs[0], physical: { ...inventory.inputs[index].physical, correlated: true, userSelected: false } };
+    validateSelectedPair(pair); assertPhysicalPair(inventory, pair); pairs.push({ ...pair, kind: 'loader' });
+  }
   if (selectedPair) {
     const chosen = validateSelectedPair(selectedPair);
-    if (!pairKind(chosen.inputName)) {
+    if (!pairKind(chosen.inputName) && canonicalName(chosen.inputName) !== 'usb-midi') {
       const sameInputs = inputs.filter(name => canonicalName(name) === canonicalName(chosen.inputName));
       const sameOutputs = outputs.filter(name => canonicalName(name) === canonicalName(chosen.outputName));
       if (sameInputs.length > 1 || sameOutputs.length > 1) throw new StockError('ambiguous_device', 'Generic MIDI endpoints are ambiguous.');

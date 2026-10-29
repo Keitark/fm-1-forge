@@ -11,9 +11,10 @@ function capabilities({ install = false } = {}) {
   return encodeFrame(0x31, bytes);
 }
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
-function fixture({ name = 'FM-1 Midi', packets = [identity('FM-1_015')], inventory, factoryDelay, openDelay } = {}) {
+function fixture({ name = 'FM-1 Midi', packets = [identity('FM-1_015')], inventory, factoryDelay, openDelay, backendClose = false } = {}) {
   const calls = [], sent = [], reads = [...packets]; let time = 0, present = true, closing = false, readGate = null, sendError = null;
   const backend = {
+    ...(backendClose ? { async close() { calls.push('backend:close'); } } : {}),
     async enumerate() { calls.push('enumerate'); return inventory ?? { inputs: [{ name }], outputs: [{ name }] }; },
     async open(pair) { calls.push({ open: pair }); if (openDelay) await openDelay.promise; return link; },
   };
@@ -34,6 +35,55 @@ test('construction and initial status never import a MIDI backend or send a pack
   assert.deepEqual(status, { connected: false, transport: null, identity: null, loader: false, installationAvailable: false, lastError: null, supportedTransports: ['stock-midi', 'firmware-midi'] });
   assert.deepEqual(f.calls, []); assert.deepEqual(Object.keys(f.service).sort(), ['close', 'connect', 'disconnect', 'getStatus']);
   await f.service.close();
+});
+
+test('failed endpoint selection closes its enumeration-only backend before releasing the connection', async () => {
+  const f = fixture({ name: 'Another synthesizer', backendClose: true });
+  await assert.rejects(f.service.connect({ transport: 'stock-midi' }), { code: 'endpoint_unavailable' });
+  assert.equal(f.calls.filter(call => call === 'backend:close').length, 1);
+  assert.equal(f.calls.some(call => typeof call === 'object' && call.open), false);
+  await f.service.close();
+  assert.equal(f.calls.filter(call => call === 'backend:close').length, 1);
+});
+
+test('disconnect closes both the native link and its owning backend once', async () => {
+  const f = fixture({ backendClose: true });
+  await f.service.connect({ transport: 'stock-midi' });
+  await f.service.disconnect();
+  assert.equal(f.calls.filter(call => call === 'close').length, 1);
+  assert.equal(f.calls.filter(call => call === 'backend:close').length, 1);
+  await f.service.close();
+  assert.equal(f.calls.filter(call => call === 'backend:close').length, 1);
+});
+
+test('writer release closes an enumeration-only backend before releasing the device lease', async () => {
+  let backendClosed = false, leaseReleased = false;
+  const backend = {
+    async enumerate() { return { inputs: ['FM-1 Midi'], outputs: ['FM-1 Midi'] }; },
+    async open() { return { async drain() {}, async send() { return true; }, async read() { return identity('FM-1_015'); }, async isConnected() { return true; }, async close() {} }; },
+    async close() { backendClosed = true; },
+  };
+  const service = createDeviceService({ backendFactory: async () => backend, clock: { now: () => 0, sleep: async () => {} },
+    ownerFactory: () => ({ async acquire() {}, async release() { assert.equal(backendClosed, true); leaseReleased = true; } }) });
+  await service.connect({ transport: 'stock-midi' });
+  const reviewed = await service.reviewStockEndpoint(), writer = await service.acquireStockWriter(reviewed);
+  assert.equal(backendClosed, false);
+  await writer.release();assert.equal(backendClosed, true);assert.equal(leaseReleased, true);
+  await service.close();
+});
+
+test('failed worker termination retains the backend and device lease instead of claiming release', async () => {
+  let releases = 0, closeCalls = 0;
+  const backend = {
+    async enumerate() { return { inputs: ['FM-1 Midi'], outputs: ['FM-1 Midi'] }; },
+    async open() { return { async drain() {}, async send() { return true; }, async read() { return identity('FM-1_015'); }, async isConnected() { return true; }, async close() {} }; },
+    async close() { closeCalls++;throw Object.assign(new Error('owned process has not exited'), { code: 'close_failed' }); },
+  };
+  const service = createDeviceService({ backendFactory: async () => backend, clock: { now: () => 0, sleep: async () => {} },
+    ownerFactory: () => ({ async acquire() {}, async release() { releases++; } }) });
+  await service.connect({ transport: 'stock-midi' });
+  await assert.rejects(service.disconnect(), { code: 'close_failed' });assert.equal(releases, 0);
+  await assert.rejects(service.close(), { code: 'close_failed' });assert.equal(releases, 0);assert.equal(closeCalls, 2);
 });
 
 test('explicit stock connection sends only the fixed identity query and retains its native link', async () => {
@@ -217,4 +267,102 @@ test('writer release waits for late opens and coalesces every concurrent cleanup
   const first = writer.release(), second = writer.release(); assert.equal(first, second);
   gate.resolve(); await new Promise(resolve => setImmediate(resolve)); assert.equal(leasesReleased, 0);
   lateClose.resolve(); await checked; await Promise.all([first, second]); assert.equal(lateClosed, true); assert.equal(leasesReleased, 1); await service.close();
+});
+
+const otaPhysical = Object.freeze({ vid: '4d4a', pid: '4155', mi: '00', instanceHash: 'a'.repeat(64) });
+const genericOtaInventory = () => ({
+  inputs: [{ name: 'USB-Midi 0', physical: { ...otaPhysical } }],
+  outputs: [{ name: 'USB-Midi 1', physical: { ...otaPhysical } }],
+});
+
+test('pinned generic USB-Midi loader needs fresh V15 OTA proof at connect, review and writer handoff', async () => {
+  const inventory = genericOtaInventory(), f = fixture({ inventory, packets: Array.from({ length: 3 }, () => identity('ota-FM-1_015')) });
+  try {
+    const connected = await f.service.connect({ transport: 'stock-midi' });
+    assert.equal(connected.identity, 'ota-FM-1_015'); assert.equal(connected.loader, true);
+    const review = await f.service.reviewStockEndpoint({ loader: true });
+    assert.deepEqual(review.expectedStockPair, { inputName: 'USB-Midi 0', outputName: 'USB-Midi 1', physical: { ...otaPhysical, correlated: true, userSelected: false } });
+    assert.equal(review.identity, 'ota-FM-1_015'); assert.equal(review.loader, true);
+    const writer = await f.service.acquireStockWriter(review);
+    assert.deepEqual(f.sent, [stockQuery(), stockQuery(), stockQuery()]);
+    assert.equal(f.calls.filter(call => typeof call === 'object' && call.open).length, 1);
+    assert.equal(f.calls.filter(call => call === 'close').length, 1);
+    assert.deepEqual(await writer.backend.enumerate(), inventory);
+    await writer.release();
+  } finally { await f.service.close(); }
+});
+
+test('a generic physical OTA endpoint cannot claim an older loader or a normal stock identity', async () => {
+  for (const value of ['ota-FM-1_009', 'ota-FM-1_014', 'FM-1_015', 'FM1_FORGE_001']) {
+    const f = fixture({ inventory: genericOtaInventory(), packets: [identity(value)] });
+    try {
+      await assert.rejects(f.service.connect({ transport: 'stock-midi' }), { code: 'wrong_model' });
+      assert.deepEqual(f.sent, [stockQuery()]); assert.equal((await f.service.getStatus({ refresh: false })).connected, false);
+      await assert.rejects(f.service.reviewStockEndpoint({ loader: true }), { code: 'resume_requires_loader' });
+      await assert.rejects(f.service.acquireStockWriter({ token: 'unreviewed' }), { code: 'device_changed' });
+    } finally { await f.service.close(); }
+  }
+});
+
+test('missing or mismatched generic loader USB metadata rejects before any native open or identity query', async () => {
+  const mutations = [
+    value => { delete value.inputs[0].physical; delete value.outputs[0].physical; },
+    value => { value.inputs[0].physical.vid = '4c4a'; },
+    value => { value.inputs[0].physical.pid = 'c755'; },
+    value => { value.inputs[0].physical.mi = '01'; },
+    value => { value.inputs[0].physical.instanceHash = 'invalid'; },
+    value => { delete value.outputs[0].physical; },
+    value => { value.outputs[0].physical.instanceHash = 'b'.repeat(64); },
+  ];
+  for (const mutate of mutations) {
+    const inventory = genericOtaInventory(); mutate(inventory); const f = fixture({ inventory });
+    try {
+      await assert.rejects(f.service.connect({ transport: 'stock-midi' }));
+      assert.deepEqual(f.sent, []); assert.equal(f.calls.some(call => typeof call === 'object' && call.open), false);
+      await assert.rejects(f.service.acquireStockWriter({ token: 'unreviewed' }), { code: 'device_changed' });
+    } finally { await f.service.close(); }
+  }
+});
+
+test('duplicate or mixed named and generic OTA loaders cannot reach a writer', async () => {
+  for (const direction of ['inputs', 'outputs', 'named']) {
+    const inventory = genericOtaInventory();
+    if (direction === 'named') { inventory.inputs.push({ name: 'ota-FM-1' }); inventory.outputs.push({ name: 'ota-FM-1' }); }
+    else inventory[direction].push({ name: 'USB-Midi 2', physical: { ...otaPhysical } });
+    const f = fixture({ inventory });
+    try {
+      await assert.rejects(f.service.connect({ transport: 'stock-midi' }), { code: 'ambiguous_device' });
+      assert.deepEqual(f.sent, []); assert.equal(f.calls.some(call => typeof call === 'object' && call.open), false);
+      await assert.rejects(f.service.acquireStockWriter({ token: 'unreviewed' }), { code: 'device_changed' });
+    } finally { await f.service.close(); }
+  }
+});
+
+test('generic normal stock endpoint names retain their explicit selection requirement', async () => {
+  const inventory = { inputs: [{ name: 'USB Composite Device 0', physical: { ...otaPhysical, vid: '4c4a', pid: 'c755' } }], outputs: [{ name: 'USB Composite Device 1', physical: { ...otaPhysical, vid: '4c4a', pid: 'c755' } }] };
+  const f = fixture({ inventory });
+  try {
+    await assert.rejects(f.service.connect({ transport: 'stock-midi' }), { code: 'endpoint_unavailable' });
+    assert.deepEqual(f.sent, []); assert.equal(f.calls.some(call => typeof call === 'object' && call.open), false);
+  } finally { await f.service.close(); }
+});
+
+test('a different generic USB instance after review cannot reuse the reviewed writer approval', async () => {
+  const inventory = genericOtaInventory(), f = fixture({ inventory, packets: Array.from({ length: 3 }, () => identity('ota-FM-1_015')) });
+  try {
+    await f.service.connect({ transport: 'stock-midi' }); const review = await f.service.reviewStockEndpoint({ loader: true });
+    inventory.inputs[0].physical.instanceHash = inventory.outputs[0].physical.instanceHash = 'b'.repeat(64);
+    await assert.rejects(f.service.acquireStockWriter(review), { code: 'device_changed' });
+    assert.equal(f.calls.filter(call => typeof call === 'object' && call.open).length, 1);
+  } finally { await f.service.close(); }
+});
+
+test('generic loader identity is rechecked immediately before writer handoff', async () => {
+  const f = fixture({ inventory: genericOtaInventory(), packets: [identity('ota-FM-1_015'), identity('ota-FM-1_015'), identity('ota-FM-1_009')] });
+  try {
+    await f.service.connect({ transport: 'stock-midi' }); const review = await f.service.reviewStockEndpoint({ loader: true });
+    await assert.rejects(f.service.acquireStockWriter(review));
+    assert.deepEqual(f.sent, [stockQuery(), stockQuery(), stockQuery()]);
+    assert.equal(f.calls.filter(call => typeof call === 'object' && call.open).length, 1);
+  } finally { await f.service.close(); }
 });

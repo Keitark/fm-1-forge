@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveDesktopPlatform } from '../lib/platform.mjs';
 
-export const PACKAGE_VERSION = '3.4.0-alpha.11';
+export const PACKAGE_VERSION = '3.4.0-alpha.12';
 export const WINDOWS_MCP_SERVER_NAME = 'fm1-forge-windows';
 export const MACOS_MCP_SERVER_NAME = 'fm1-forge-macos';
 export const NODE_VERSION = 'v22.22.2';
@@ -320,15 +320,22 @@ export async function buildNativePackage(options, target) {
     legalComments: 'linked', banner: { js: "import { createRequire as __fm1CreateRequire } from 'node:module'; const require = __fm1CreateRequire(import.meta.url);" },
     logLevel: 'silent',
   });
+  const workerBundle = await build({
+    absWorkingDir: root, entryPoints: ['desktop/lib/midi-worker.mjs'], outfile: path.join(output, 'server/midi-worker.mjs'),
+    bundle: true, format: 'esm', platform: 'node', target: 'node22.22',
+    nodePaths: [siteModules, nativeModules], external: [NATIVE_PACKAGE], metafile: true,
+    legalComments: 'linked', banner: { js: "import { createRequire as __fm1CreateRequire } from 'node:module'; const require = __fm1CreateRequire(import.meta.url);" },
+    logLevel: 'silent',
+  });
   const dependencies = new Map();
-  for (const dependency of [...await bundledPackages(bundled.metafile, root), ...nativePackages]) dependencies.set(`${dependency.name}@${dependency.version}`, dependency);
+  for (const dependency of [...await bundledPackages(bundled.metafile, root), ...await bundledPackages(workerBundle.metafile, root), ...nativePackages]) dependencies.set(`${dependency.name}@${dependency.version}`, dependency);
   const notices = await writeDependencyNotices([...dependencies.values()], output, path.join(root, 'desktop/licenses'), [commonUpdaterNotice]);
   const packagedNode = path.join(output, target.runtimeRelative);
   const loaded = runNode(packagedNode, ['--input-type=module', '-e', "const m=await import('@julusian/midi');const a=m.default??m;if(typeof a.Input!=='function'||typeof a.Output!=='function')throw Error('MIDI native addon failed to load');console.log(JSON.stringify({loaded:true,version:process.version,platform:process.platform,arch:process.arch,napi:process.versions.napi}));"], output);
   assertRuntimeDescription(loaded, target);
   if (loaded.loaded !== true || Number(loaded.napi) < 7) throw new Error('Native MIDI N-API verification failed');
   const panelInputs = await build({ absWorkingDir: root, entryPoints: ['site/lib/fm1-ui.mjs'], bundle: true, write: false, format: 'esm', platform: 'browser', metafile: true, logLevel: 'silent' });
-  const sourceFiles = Object.keys({ ...bundled.metafile.inputs, ...panelInputs.metafile.inputs }).filter(input => !slash(input).includes('node_modules/')).map(input => path.resolve(root, input));
+  const sourceFiles = Object.keys({ ...bundled.metafile.inputs, ...workerBundle.metafile.inputs, ...panelInputs.metafile.inputs }).filter(input => !slash(input).includes('node_modules/')).map(input => path.resolve(root, input));
   sourceFiles.push(path.join(root, 'site/lib/fm1-ui.mjs'), scriptPath, ...['build-windows.mjs', 'build-macos.mjs'].map(name => path.join(root, 'desktop/scripts', name)), path.join(root, 'desktop/package.json'));
   sourceFiles.push(...await sourceTreeFiles(path.join(sourcePlugin, 'assets')), ...await sourceTreeFiles(path.join(sourcePlugin, 'skills')), ...await sourceTreeFiles(skillOverrides));
   sourceFiles.push(...['plugin.json', '.codex-plugin/plugin.json', 'mcp.json'].map(name => path.join(sourcePlugin, name)));

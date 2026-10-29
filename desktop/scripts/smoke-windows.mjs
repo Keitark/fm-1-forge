@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { fork } from 'node:child_process';
 import { Client } from '../../site/node_modules/@modelcontextprotocol/client/dist/index.mjs';
 import { StdioClientTransport } from '../../site/node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
 
@@ -18,6 +19,19 @@ for (const record of manifest.files) {
   assert.equal(bytes.length, record.bytes); assert.equal(createHash('sha256').update(bytes).digest('hex'), record.sha256);
 }
 assert.ok(manifest.files.some(file => file.path === 'server/windows-tracker-cdc.ps1'));
+assert.ok(manifest.files.some(file => file.path === 'server/midi-worker.mjs'));
+// Exercise the real packaged IPC entrypoint without creating its lazy MIDI
+// backend: a close-only request must acknowledge and exit with no device I/O.
+await new Promise((resolve, reject) => {
+  let acknowledged = false;
+  const child = fork(path.join(root, 'server/midi-worker.mjs'), [], { execPath: path.join(root, 'runtime/win32-x64/node.exe'), windowsHide: true,
+    execArgv: [], stdio: ['ignore','ignore','ignore','ipc'], env: { PATH: '', SystemRoot: process.env.SystemRoot } });
+  const timer = setTimeout(() => { child.kill(); reject(new Error('Packaged MIDI worker did not exit.')); }, 5000);
+  child.on('error', error => { clearTimeout(timer); reject(error); });
+  child.on('message', reply => { try { assert.deepEqual(reply, { id: 1, ok: true, result: null }); acknowledged = true; } catch (error) { child.kill(); reject(error); } });
+  child.on('exit', code => { clearTimeout(timer); if (code === 0 && acknowledged) resolve(); else reject(new Error('Packaged MIDI IPC close failed.')); });
+  child.send({ id: 1, op: 'close', args: {} });
+});
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'fm1-windows-passive-'));
 const checks = [];
 for (const revision of ['2026-07-28', '2025-11-25', '2024-11-05']) {
@@ -34,7 +48,7 @@ for (const revision of ['2026-07-28', '2025-11-25', '2024-11-05']) {
     for (const name of ['get_fm1_stock_update_status', 'get_fm1_custom_update_status']) {
       const status = await client.callTool({ name, arguments: {} }); assert.deepEqual(status.structuredContent, { supported: true, writing: false, attempt: null, review: null });
     }
-    const panel = await client.readResource({ uri: 'ui://fm1/forge-windows-v5.html' });
+    const panel = await client.readResource({ uri: 'ui://fm1/forge-windows-v6.html' });
     assert.ok(panel.contents[0].text.includes('Verify tracker boot'));
     checks.push({ revision, tools: tools.length, emptyPath: true, passive: true });
   } finally { await client.close(); }

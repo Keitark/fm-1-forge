@@ -25,3 +25,12 @@ test('caller-correlated boolean is insufficient without actual local identity me
   assert.throws(() => assertPhysicalPair(inventory, { ...pair, physical: { ...pair.physical, instanceHash: 'b'.repeat(64) } }));
   assert.throws(() => assertPhysicalPair({ inputs: [{ name: pair.inputName }], outputs: [{ name: pair.outputName }] }, pair));
 });
+
+test('pinned USB-Midi loader never borrows normal stock or unrelated USB metadata', () => {
+  const physical = { vid: '4d4a', pid: '4155', mi: '00', instanceHash: 'a'.repeat(64) };
+  const pair = { inputName: 'USB-Midi 0', outputName: 'USB-Midi 1', physical: { ...physical, correlated: true, userSelected: false } };
+  const inventory = { inputs: [{ name: pair.inputName, physical }], outputs: [{ name: pair.outputName, physical }] };
+  assert.doesNotThrow(() => assertPhysicalPair(inventory, pair));
+  for (const changes of [{ pid: 'c755' }, { mi: '01' }, { userSelected: true }, { correlated: false }]) assert.throws(() => assertPhysicalPair(inventory, { ...pair, physical: { ...pair.physical, ...changes } }));
+  assert.throws(() => assertPhysicalPair(inventory, { ...pair, inputName: 'Other synth' }));
+});

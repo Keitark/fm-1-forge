@@ -1,3 +1,5 @@
+Alpha.12 contains native MIDI in an owned child process and recognizes only the physically correlated V15 USB-Midi OTA loader. See [original-attempt recovery](../docs/STOCK_MIDI_OTA_RECOVERY_20261030.md). The coordinator retains the original job if a driver fails.
+
 Tracker installation from stock V15 is added in the local alpha.10 Windows preview. It uses stock MIDI for OTA and exact CDC build proof after reboot, retaining tracker UAC/UVC without a MIDI endpoint. See [the tracker installer guide](../docs/TRACKER_V15_INSTALLER_20261030.md). Hardware acceptance remains pending.
 
 # FM-1 Forge Windows
@@ -71,7 +73,7 @@ Close other software holding the FM-1 MIDI ports if Windows cannot open them. Mu
 
 The generated `mcp.json` and `.mcp.json` declare a stdio MCP server. Codex launches the packaged `runtime/win32-x64/node.exe` with `${PLUGIN_ROOT}/server/index.mjs` and the plugin directory as its working directory. The package pins **Node.js v22.22.2** and **@julusian/midi 3.8.1**, including its Windows x64 N-API native prebuild and dependency closure. Startup does not run npm, download dependencies or rely on a user-managed runtime on PATH.
 
-The native component is part of that Codex-managed MCP process. It is not a separately installed Windows service or an independently started background helper. It uses WinMM for MIDI access. A bounded, hidden invocation of the built-in Windows PowerShell executable obtains passive device-interface metadata from the packaged `server/windows-midi-inventory.ps1`; it does not open MIDI ports or send device commands. No administrator prompt is required by the MIDI connection code.
+The native MIDI component runs in a bounded child owned by the Codex-managed MCP coordinator. It uses the packaged runtime; it is not a separately installed Windows service or an independently started background helper. It uses WinMM for MIDI access. A bounded, hidden invocation of the built-in Windows PowerShell executable obtains passive device-interface metadata from the packaged `server/windows-midi-inventory.ps1`; it does not open MIDI ports or send device commands. No administrator prompt is required by the MIDI connection code.
 
 Settings, drafts and original stock-update recovery records live in the host-provided `PLUGIN_DATA` directory. When that variable is absent, the Windows preview uses `%LOCALAPPDATA%\FM1Forge\Windows`. The metadata file is `forge-store.json`; it contains settings and validated configuration drafts. The stock updater separately persists the selected, validated official package and its attempt evidence for explicit recovery; it does not store device dumps or credentials. The installed package remains an input, not a writable state directory. Cloud drafts are not automatically imported or modified.
 

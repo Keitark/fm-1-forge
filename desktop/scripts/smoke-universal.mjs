@@ -19,7 +19,7 @@ const marketplace=await fs.realpath(rootArg), root=await fs.realpath(path.join(m
 assert.equal(path.dirname(root),marketplace,'The plugin must be contained in the marketplace');
 const manifest=JSON.parse(await fs.readFile(path.join(root,'BUILD-MANIFEST.json'),'utf8'));
 assert.equal(manifest.format,'fm1-forge-universal-package-v1');
-assert.deepEqual(manifest.targets,targets);assert.equal(manifest.version,'3.4.0-alpha.11');
+assert.deepEqual(manifest.targets,targets);assert.equal(manifest.version,'3.4.0-alpha.12');
 assert.deepEqual(manifest.nativeInputs.map(input=>input.target).sort(),[...targets].sort());
 const hash=data=>createHash('sha256').update(data).digest('hex');
 const maximumGitFileBytes=100*1024*1024;
@@ -107,7 +107,7 @@ const nativeAddon=JSON.parse(await run(node,['--input-type=module','--eval',nati
 assert.deepEqual(nativeAddon,{platform:process.platform,arch:process.arch,loaded:true,enumeratedPorts:false,openedDevice:false});
 
 const expectedName=process.platform==='darwin'?'FM-1 Forge macOS':'FM-1 Forge Windows';
-const resourceUri=process.platform==='darwin'?'ui://fm1/forge-macos-v1.html':'ui://fm1/forge-windows-v5.html';
+const resourceUri=process.platform==='darwin'?'ui://fm1/forge-macos-v1.html':'ui://fm1/forge-windows-v6.html';
 const checks=[];
 for(const revision of ['2026-07-28','2025-11-25','2024-11-05']){
   const data=path.join(temporary,revision);await fs.mkdir(data);
