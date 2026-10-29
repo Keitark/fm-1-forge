@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
 import { createHash } from 'node:crypto';
-import { validateCustomBuild } from '../package-custom.mjs';
+import { validateCustomBuild, readBuildSource, packageCustom } from '../package-custom.mjs';
 import { buildCustomFwsc, inspectCustomFwsc, validateCustomManifest, customProfilePolicy,
   customPackageFormat as format, CUSTOM_IDENTITY } from '../custom-package.mjs';
 
@@ -118,6 +120,44 @@ test('tracker packaging refuses stale or malformed vendor overlay closure', asyn
   }
   const build = trackerBuild(app);
   await assert.rejects(validateCustomBuild(app, build, { readSource: async name => name === 'generated-usb.c' ? Buffer.from('changed overlay') : readSource(name) }), /changed/);
+});
+
+async function sourceAliasFixture(t) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'fm1-source-alias-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const first = path.join(root, 'sdk-a'), second = path.join(root, 'sdk-b'), alias = path.join(root, 'sdk');
+  for (const folder of [first, second]) {
+    await fs.mkdir(folder);
+    await fs.writeFile(path.join(folder, 'source.c'), 'unchanged SDK source');
+  }
+  await fs.symlink(first, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  return { root, first, second, alias, file: path.join(alias, 'source.c') };
+}
+
+test('source closure resolves a stable SDK junction while package inputs still reject junctions', async t => {
+  const f = await sourceAliasFixture(t), contents = Buffer.from('unchanged SDK source');
+  assert.deepEqual(await readBuildSource(f.file, 1024), contents);
+  const app = application(), build = trackerBuild(app);
+  for (const name of ['source_sha256', 'archive_sha256', 'vendor_overlay_sources']) build[name] = { [f.file]: sha(contents) };
+  assert.equal(await validateCustomBuild(app, build), buildId);
+  await assert.rejects(readBuildSource(f.file, contents.length - 1), /bounded regular/);
+  await assert.rejects(readBuildSource(f.alias, 1024), /bounded regular/);
+  await assert.rejects(packageCustom(['--stock', f.file, '--application', f.file, '--build-manifest', f.file,
+    '--out', path.join(f.root, 'output')]), /Symbolic links and junctions/);
+  await fs.writeFile(path.join(f.first, 'source.c'), 'changed SDK source');
+  await assert.rejects(validateCustomBuild(app, build), /source or linked archive changed/);
+});
+
+test('source read rejects a retargeted SDK alias even when both targets contain identical bytes', async t => {
+  const f = await sourceAliasFixture(t); let resolutions = 0;
+  await assert.rejects(readBuildSource(f.file, 1024, { realpath: async file => {
+    if (++resolutions === 2) {
+      await fs.unlink(f.alias);
+      await fs.symlink(f.second, f.alias, process.platform === 'win32' ? 'junction' : 'dir');
+    }
+    return fs.realpath(file);
+  } }), /source alias changed/);
+  assert.equal(resolutions, 2);
 });
 
 test('tracker stock fixture retains wrapper identity, preserved bytes and CDC metadata', { skip: !process.env.FM1_PUBLIC_V15_FWSC }, async () => {

@@ -29,7 +29,15 @@ async function readLocal(file, limit) {
     return data;
   } finally { await handle.close(); }
 }
-export async function validateCustomBuild(application, build, { readSource = readLocal } = {}) {
+// SDK source trees may be reached through checkout junctions. Only source-hash
+// inputs resolve aliases; package inputs and output paths remain link-free.
+export async function readBuildSource(file, limit, { realpath = fs.realpath } = {}) {
+  const alias = absolutePath(file), resolved = absolutePath(await realpath(alias));
+  const data = await readLocal(resolved, limit);
+  require(absolutePath(await realpath(alias)) === resolved, 'Build source alias changed while it was read.');
+  return data;
+}
+export async function validateCustomBuild(application, build, { readSource = readBuildSource } = {}) {
   require(build !== null && typeof build === 'object' && !Array.isArray(build), 'Invalid build manifest.');
   const profile = buildProfile(build), audit = build.static_audit;
   require(build.status === 'LINKED_USB_DIAGNOSTIC_UNTESTED' && build.flashable === false && build.device_operations_performed === false &&
