@@ -19,7 +19,7 @@ import { PRESETS, PATTERNS } from '../site/lib/fm1-appearance.mjs';
 import { normalizeProjectConfig } from '../site/lib/fm1-forge-project.mjs';
 
 export const RESOURCE_URI='ui://fm1/forge-windows-v7.html';
-export const VERSION='3.4.0-alpha.14';
+export const VERSION='3.4.0-alpha.15';
 const supportedTransports=['stock-midi','firmware-midi'];
 const projectGate=label=>({diagnostics_verified:false,can_start_project:false,message:'Configure and build a project with Codex, then review the generated custom FWSC and exact target build in the '+label+' panel. A build request does not authorize installation.'});
 const result=data=>({content:[{type:'text',text:JSON.stringify(data)}],structuredContent:data});
@@ -56,7 +56,7 @@ export async function createDesktopServer({deviceService,stockUpdateService,cust
   register('start_fm1_stock_update','Install only the reviewed official V15 package after explicit confirmation in the panel. Destructive: may enter OTA and replace firmware. Never accepts custom images or raw MIDI.',z.object({review_id:updateId,confirmed:z.literal(true)}).strict(),args=>updateService().start(args),{readOnly:false,appOnly:true,destructive:true});
   const customService=()=>{if(!customUpdateService)throw Object.assign(new Error('The native custom FWSC updater is unavailable.'),{code:'custom_update_unavailable'});return customUpdateService;};
   register('get_fm1_custom_update_status','Read the original custom FWSC transfer progress and recovery evidence. Does not query MIDI or start an update.',empty,()=>customUpdateService?customUpdateService.status():({supported:false,writing:false,attempt:null,review:null}));
-  register('verify_fm1_custom_boot','Verify the original completed tracker transfer over CDC without sending firmware again.',z.object({job_id:updateId}).strict(),args=>customService().verifyBoot(args),{readOnly:false,appOnly:true});
+  register('verify_fm1_custom_boot','Verify the original completed tracker transfer using a fresh fixed CDC identity/build challenge and record its receipt. No firmware write or MIDI command. Accepts only the original job ID.',z.object({job_id:updateId}).strict(),args=>customService().verifyBoot(args),{readOnly:false});
   register('begin_fm1_custom_upload','Stage a bounded custom FWSC and its reviewed build manifest. Does not contact a device.',z.object({raw_bytes:z.number().int().min(1024).max(MAX_CUSTOM_FWSC_BYTES),manifest:z.record(z.string(),z.unknown())}).strict(),args=>customService().beginUpload(args),{readOnly:false,appOnly:true});
   register('append_fm1_custom_upload','Append a bounded sequential custom FWSC chunk. Does not contact a device.',z.object({upload_id:updateId,offset:z.number().int().min(0).max(MAX_CUSTOM_FWSC_BYTES),data_base64:z.string().min(4).max(Math.ceil(MAX_CHUNK_BYTES/3)*4).regex(/^[A-Za-z0-9+/]+={0,2}$/)}).strict(),args=>customService().appendUpload(args),{readOnly:false,appOnly:true});
   register('review_fm1_custom_update','Validate a custom FWSC, target build and freshly connected stock V15 device for human review. Does not install firmware.',z.object({upload_id:updateId}).strict(),args=>customService().review(args),{readOnly:false,appOnly:true});

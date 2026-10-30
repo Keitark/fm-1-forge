@@ -20,11 +20,18 @@ try {
             $port.ReadTimeout = 150; $port.WriteTimeout = 500; $port.NewLine = "`n"
             try {
                 try { $port.Open() } catch [UnauthorizedAccessException] { throw 'cdc_busy' }
-                $port.DiscardInBuffer(); $port.DiscardOutBuffer()
+                # Assert the virtual CDC host-open state after Open, then allow
+                # its control request to settle. This is not a physical reset pin.
+                $port.DtrEnable = $true
+                if (($TimeoutMs - $watch.ElapsedMilliseconds) -le 300) { break }
+                Start-Sleep -Milliseconds 300
+                if ($watch.ElapsedMilliseconds -ge $TimeoutMs) { break }
+                # Do not purge the live USB pipes. Fresh nonce matching and the
+                # bounded line parser reject older bytes without a buffer reset.
                 $port.Write("FWINFO $Nonce`n")
                 $line = ''; $received = 0
                 $queryStart = $watch.ElapsedMilliseconds
-                while ($watch.ElapsedMilliseconds -lt $TimeoutMs -and ($watch.ElapsedMilliseconds - $queryStart) -lt 1500) {
+                while ($watch.ElapsedMilliseconds -lt $TimeoutMs -and ($watch.ElapsedMilliseconds - $queryStart) -lt 2500) {
                     try { $byte = $port.ReadByte() } catch [TimeoutException] { continue }
                     $received++
                     if ($received -gt 4096) { throw 'boot_identity_mismatch' }

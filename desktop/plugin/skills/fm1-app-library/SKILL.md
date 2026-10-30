@@ -40,8 +40,12 @@ Diagnostic packages prove `FM1_FORGE_001` plus exact FMC1 build/family over MIDI
 The separate `protracker` profile uses stock MIDI only for installation, then
 proves `MOD-EDITOR/1` and its exact immutable build over CDC with a fresh nonce.
 Its bounded packaged verifier sends only `FWINFO`; it exposes no serial writer.
-After a completed tracker transfer, use **Verify tracker boot** to observe the
-same original build without rewriting it. A missing or mismatched proof remains
+After a completed tracker transfer, use `verify_fm1_custom_boot` with the original
+job ID, or **Verify tracker boot** in the panel, to observe the same original
+build without rewriting it. This bounded observation can run without another
+Install confirmation. It records the original receipt, sends only a fresh
+`FWINFO` challenge, and accepts no port, command or replacement build input.
+A missing or mismatched proof remains
 unresolved. This leaves common-firmware ARM/self-updates disabled.
 Preserve shared stock/custom uncertainty guards and original-attempt recovery.
 If the original unresolved custom attempt has returned to freshly identified

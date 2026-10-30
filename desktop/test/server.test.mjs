@@ -171,12 +171,21 @@ test('missing native writer capability fails closed and shutdown still closes MI
 
 test('custom FWSC tools are separately app-only with explicit destructive confirmation and bounded input',async t=>{
   const f=await fixture(t),tools=(await f.client.listTools()).tools;
-  for(const name of ['begin_fm1_custom_upload','append_fm1_custom_upload','review_fm1_custom_update','review_fm1_custom_recovery','review_fm1_custom_loader_entry','start_fm1_custom_update','verify_fm1_custom_boot']){
+  for(const name of ['begin_fm1_custom_upload','append_fm1_custom_upload','review_fm1_custom_update','review_fm1_custom_recovery','review_fm1_custom_loader_entry','start_fm1_custom_update']){
     const tool=tools.find(value=>value.name===name);assert.deepEqual(tool._meta.ui.visibility,['app']);assert.equal(tool.annotations.readOnlyHint,false);assert.equal(tool.annotations.destructiveHint,name==='start_fm1_custom_update');
   }
   assert.deepEqual(f.customCalls,[]);await f.tool('get_fm1_custom_update_status');assert.deepEqual(f.customCalls,[{method:'status'}]);assert.deepEqual(f.calls,[]);
   for(const [name,args] of [['begin_fm1_custom_upload',{raw_bytes:2097153,manifest:{}}],['begin_fm1_custom_upload',{raw_bytes:623156}],['begin_fm1_custom_upload',{raw_bytes:623156,manifest:{},path:'C:/private'}],['append_fm1_custom_upload',{upload_id:'a'.repeat(32),offset:0,data_base64:'A'.repeat(87388)}],['start_fm1_custom_update',{review_id:'b'.repeat(32),confirmed:false}],['start_fm1_custom_update',{review_id:'b'.repeat(32),confirmed:true,skip_review:true}],['review_fm1_custom_recovery',{job_id:'../private'}]])await refused(f,name,args);
   assert.equal(f.customCalls.length,1);assert.deepEqual(f.calls,[]);assert.deepEqual(f.updateCalls,[]);
+});
+
+test('completed tracker verification is model-visible and accepts only an original job ID',async t=>{
+  const f=await fixture(t),tool=(await f.client.listTools()).tools.find(value=>value.name==='verify_fm1_custom_boot');
+  assert.equal(tool._meta?.ui?.visibility,undefined);assert.equal(tool.annotations.readOnlyHint,false);assert.equal(tool.annotations.destructiveHint,false);
+  for(const args of [{job_id:'../unsafe'},{job_id:'c'.repeat(32),port:'COM5'},{job_id:'c'.repeat(32),command:'arbitrary'},{job_id:'c'.repeat(32),build_sha256:'a'.repeat(64)}])await refused(f,'verify_fm1_custom_boot',args);
+  assert.deepEqual(f.customCalls,[]);
+  await f.tool('verify_fm1_custom_boot',{job_id:'c'.repeat(32)});
+  assert.deepEqual(f.customCalls,[{method:'verifyBoot',args:{job_id:'c'.repeat(32)}}]);assert.deepEqual(f.calls,[]);assert.deepEqual(f.updateCalls,[]);
 });
 
 test('custom review/start dispatch remains bound to the separate service and missing capability fails closed',async t=>{

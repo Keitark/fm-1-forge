@@ -19,7 +19,7 @@ const marketplace=await fs.realpath(rootArg), root=await fs.realpath(path.join(m
 assert.equal(path.dirname(root),marketplace,'The plugin must be contained in the marketplace');
 const manifest=JSON.parse(await fs.readFile(path.join(root,'BUILD-MANIFEST.json'),'utf8'));
 assert.equal(manifest.format,'fm1-forge-universal-package-v1');
-assert.deepEqual(manifest.targets,targets);assert.equal(manifest.version,'3.4.0-alpha.14');
+assert.deepEqual(manifest.targets,targets);assert.equal(manifest.version,'3.4.0-alpha.15');
 assert.deepEqual(manifest.nativeInputs.map(input=>input.target).sort(),[...targets].sort());
 const hash=data=>createHash('sha256').update(data).digest('hex');
 const maximumGitFileBytes=100*1024*1024;

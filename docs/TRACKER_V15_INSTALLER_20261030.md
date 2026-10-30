@@ -45,3 +45,28 @@ cannot overwrite it with success.
 
 This is a local Windows preview. Offline package checks and mock transport
 tests do not establish physical flash, audio, display or control acceptance.
+
+## Physical boot and host verification correction
+
+The original tracker WRITE has completed on hardware. The user observed the
+tracker screen, and Windows enumerated CDC, duplex audio and UVC interfaces.
+The first automated proof timed out; its script incorrectly disabled DTR.
+The firmware requires the virtual CDC host-open bit before receiving or sending.
+
+Alpha15 opens the port with DTR/RTS false, asserts DTR after Open, waits300ms
+within the bounded deadline, and sends the fixed FWINFO challenge. It does not
+purge the USB buffers; fresh nonce matching rejects stale replies. The corrected
+production verifier returned MOD-EDITOR/1, the exact reviewed build251763e1,
+and a matching fresh nonce without sending firmware again.
+
+`verify_fm1_custom_boot` is available to Codex as well as the panel. It accepts
+only the original job ID and can verify only its completed unresolved tracker
+transfer. It rechecks the original package/manifest closure, takes its journal
+lock and records success only after exact CDC proof. It cannot select a serial
+port, send an arbitrary command, choose a replacement build or start any writer.
+The tool is annotated as non-destructive but not read-only because it updates
+the local receipt. All firmware-changing operations remain app-only and require
+their existing explicit confirmation.
+
+No full flash readback is claimed. Audio, controls, display performance and
+other hardware usability checks remain separate acceptance work.
