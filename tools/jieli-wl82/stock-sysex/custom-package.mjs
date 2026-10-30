@@ -302,6 +302,16 @@ export async function inspectCustomFwsc(input, inputManifest) {
   return { metadata, image, policy };
 }
 
+// Closed CDC/UBOOT input: validate the complete original container first, then
+// return only the tracker application. The logical UFW image is never NOR data.
+export async function extractTrackerApplication(input, inputManifest) {
+  const approved = await inspectCustomFwsc(input, inputManifest);
+  require(approved.metadata.profile === 'protracker' && approved.metadata.verification_transport === 'cdc', 'CDC/UBOOT accepts only the tracker profile.');
+  const { entries } = parseUfw(approved.image);
+  const { application } = checkFlash(entries[0].data);
+  return { metadata: approved.metadata, application: Uint8Array.from(application) };
+}
+
 // Pure format primitives are exported for deterministic synthetic vectors. They
 // cannot change the pins or relax buildCustomFwsc/inspectCustomFwsc policy.
 export const customPackageFormat = Object.freeze({ crc16, cipher, unwrapFwsc, wrapFwsc, parseUfw, makeUfw, makeTailProof, tailDigest });

@@ -27,7 +27,7 @@ for(const revision of ['2026-07-28','2025-11-25','2024-11-05']){
   const client=new Client({name:'Forge macOS passive acceptance',version:'1'},{capabilities:{},supportedProtocolVersions:[revision],versionNegotiation:{mode:revision==='2026-07-28'?{pin:revision}:'legacy'}});
   try{
     await client.connect(transport);assert.equal(client.getServerVersion().name,'FM-1 Forge macOS');assert.equal(client.getServerVersion().version,manifest.version);
-    const tools=(await client.listTools()).tools;assert.equal(tools.length,26);
+    const tools=(await client.listTools()).tools;assert.equal(tools.length,35);
     for(const name of ['start_fm1_stock_update','start_fm1_custom_update']){const tool=tools.find(item=>item.name===name);assert.deepEqual(tool._meta.ui.visibility,['app']);assert.equal(tool.annotations.destructiveHint,true);}
     const opened=await client.callTool({name:'open_fm1_library',arguments:{}});assert.ok(!opened.isError,JSON.stringify(opened));
     assert.equal(opened.structuredContent.desktop.platform,'darwin');assert.equal(opened.structuredContent.desktop.customUpdateAvailable,true);assert.equal(opened.structuredContent.desktop.installationAvailable,false);

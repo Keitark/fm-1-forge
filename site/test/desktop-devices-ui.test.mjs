@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mountDesktopDevicesUi} from '../lib/fm1-desktop-devices-ui.mjs';
 
-const user={isTrusted:true},synthetic={isTrusted:false},all=['stock-midi','firmware-midi','serial'];
+const user={isTrusted:true},synthetic={isTrusted:false},all=['stock-midi','firmware-midi','usb-serial'];
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 const disconnected=(supportedTransports=all)=>({connected:false,transport:null,identity:null,installationAvailable:false,supportedTransports});
-const connected=transport=>({connected:true,transport,identity:transport==='stock-midi'?'FM-1_015':transport==='firmware-midi'?'FM1_FORGE_001':'FM1DIAG/1 MOD-EDITOR/1 RAM-TRANSFER UBOOT=SERIAL COMMIT=BLOCKED',...(transport==='serial'?{profile:'MOD-EDITOR/1'}:{}),loader:false,installationAvailable:false,supportedTransports:all});
+const connected=transport=>({connected:true,transport,identity:transport==='stock-midi'?'FM-1_015':transport==='firmware-midi'?'FM1_FORGE_001':'FM1DIAG/1 MOD-EDITOR/1 RAM-TRANSFER UBOOT=SERIAL COMMIT=BLOCKED',...(transport==='usb-serial'?{profile:'MOD-EDITOR/1'}:{}),loader:false,installationAvailable:false,supportedTransports:all});
 function fixture({supportedTransports=all,stockUpdateAvailable=false,desktopPlatform='win32',handler}={}){
   const nodes=new Map(),calls=[],signals=[],timers=new Map(),events=new Map(),documentEvents=new Map(),changes=[];let sequence=0;
   const el=id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',disabled:false,hidden:false,className:'',onclick:null,onchange:null,open:false,showModal(){this.open=true;},close(){this.open=false;},addEventListener(){},removeEventListener(){},removeAttribute(name){delete this[name];}});return nodes.get(id);};
@@ -26,7 +26,7 @@ test('mount is passive, missing capabilities fail closed and every firmware writ
 });
 
 test('each trusted connect button calls its fixed local tool and never uses browser permissions',async()=>{
-  for(const [transport,method] of [['stock-midi','connectMidi'],['firmware-midi','connectCommon'],['serial','connectSerial']]){
+  for(const [transport,method] of [['stock-midi','connectMidi'],['firmware-midi','connectCommon'],['usb-serial','connectSerial']]){
     const f=fixture();await f.controller[method](synthetic);assert.equal(f.calls.length,0);
     await f.controller[method](user);assert.deepEqual(f.calls,[{name:'connect_fm1_device',args:{transport}}]);assert.equal(f.controller.state().connected,true);assert.equal(f.controller.state().installationAvailable,false);
     assert.match(f.el('device-heading').textContent,/FM-1 via/);assert.equal(f.el('connection-label').textContent,'Device connected');assert.equal(f.timers.size,1);

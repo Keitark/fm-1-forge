@@ -32,7 +32,7 @@ function fixture({ name = 'FM-1 Midi', packets = [identity('FM-1_015')], invento
 
 test('construction and initial status never import a MIDI backend or send a packet', async () => {
   const f = fixture(), status = await f.service.getStatus();
-  assert.deepEqual(status, { connected: false, transport: null, identity: null, loader: false, installationAvailable: false, lastError: null, supportedTransports: ['stock-midi', 'firmware-midi'] });
+  assert.deepEqual(status, { connected: false, transport: null, identity: null, loader: false, installationAvailable: false, lastError: null, supportedTransports: ['stock-midi', 'firmware-midi', 'usb-serial'] });
   assert.deepEqual(f.calls, []); assert.deepEqual(Object.keys(f.service).sort(), ['close', 'connect', 'disconnect', 'getStatus']);
   await f.service.close();
 });
@@ -205,7 +205,7 @@ test('shutdown cancels an in-flight read and rejects queued status without retur
 test('returned status snapshots cannot mutate internal device evidence', async () => {
   const f = fixture(), result = await f.service.connect({ transport: 'stock-midi' });
   result.identity = 'mutated'; result.supportedTransports.push('raw-sysex');
-  const fresh = await f.service.getStatus({ refresh: false }); assert.equal(fresh.identity, 'FM-1_015'); assert.deepEqual(fresh.supportedTransports, ['stock-midi', 'firmware-midi']); await f.service.close();
+  const fresh = await f.service.getStatus({ refresh: false }); assert.equal(fresh.identity, 'FM-1_015'); assert.deepEqual(fresh.supportedTransports, ['stock-midi', 'firmware-midi', 'usb-serial']); await f.service.close();
 });
 
 

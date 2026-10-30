@@ -19,6 +19,10 @@ for (const record of manifest.files) {
   assert.equal(bytes.length, record.bytes); assert.equal(createHash('sha256').update(bytes).digest('hex'), record.sha256);
 }
 assert.ok(manifest.files.some(file => file.path === 'server/windows-tracker-cdc.ps1'));
+for(const name of ['windows-cdc-link.ps1','windows-cdc-server.ps1','windows-cdc-relay.ps1','FlashPolicy.cs','FlashEngine.cs','wl82loader.bin','LICENSE.jl-uboot-tool','PROVENANCE.md']){
+  assert.ok(manifest.files.some(file=>file.path==='server/cdc-uboot/'+name));
+  assert.ok(manifest.sources.some(file=>file.path==='tools/jieli-wl82/cdc-uboot/'+name));
+}
 assert.ok(manifest.files.some(file => file.path === 'server/midi-worker.mjs'));
 // Exercise the real packaged IPC entrypoint without creating its lazy MIDI
 // backend: a close-only request must acknowledge and exit with no device I/O.
@@ -42,15 +46,19 @@ for (const revision of ['2026-07-28', '2025-11-25', '2024-11-05']) {
   try {
     await client.connect(transport); assert.equal(client.getServerVersion().version, manifest.version);
     assert.equal(client.getServerVersion().name, 'FM-1 Forge Windows');
-    const tools = (await client.listTools()).tools; assert.equal(tools.length, 26);
+    const tools = (await client.listTools()).tools; assert.equal(tools.length, 35);
     assert.deepEqual(tools.find(tool => tool.name === 'start_fm1_custom_update')._meta.ui.visibility, ['app']);
+    for(const name of ['prepare_fm1_cdc_update','start_fm1_cdc_update'])assert.deepEqual(tools.find(tool=>tool.name===name)._meta.ui.visibility,['app']);
     assert.equal(tools.find(tool => tool.name === 'verify_fm1_custom_boot')._meta?.ui?.visibility, undefined);
     const opened = await client.callTool({ name: 'open_fm1_library', arguments: {} }); assert.ok(!opened.isError); assert.equal(opened.structuredContent.desktop.platform, 'win32');
-    for (const name of ['get_fm1_stock_update_status', 'get_fm1_custom_update_status']) {
+    assert.equal(opened.structuredContent.desktop.cdcUpdateAvailable,true);
+    assert.deepEqual(opened.structuredContent.desktop.supportedTransports,['stock-midi','firmware-midi','usb-serial']);
+    for (const name of ['get_fm1_stock_update_status', 'get_fm1_custom_update_status','get_fm1_cdc_update_status']) {
       const status = await client.callTool({ name, arguments: {} }); assert.deepEqual(status.structuredContent, { supported: true, writing: false, attempt: null, review: null });
     }
-    const panel = await client.readResource({ uri: 'ui://fm1/forge-windows-v7.html' });
+    const panel = await client.readResource({ uri: 'ui://fm1/forge-windows-v8.html' });
     assert.ok(panel.contents[0].text.includes('Verify tracker boot'));
+    assert.ok(panel.contents[0].text.includes('Review application sector plan'));
     checks.push({ revision, tools: tools.length, emptyPath: true, passive: true });
   } finally { await client.close(); }
 }

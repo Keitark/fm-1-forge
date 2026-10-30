@@ -28,3 +28,12 @@ using `tools/jieli-wl82/stock-sysex/package-custom.mjs`, and let the user choose
 its `.fwsc` plus matching manifest in the separate custom FWSC panel section.
 A build/export request does not authorize a physical write. Do not substitute
 this package into the pinned stock V15 restoration selector.
+
+For an already installed tracker, **Connect USB serial** performs only the fixed
+fresh tracker identity/build challenge. **Tracker update · USB serial** accepts
+the matching tracker FWSC/JSON pair and separates explicit recovery preparation
+from the final live application-sector-plan confirmation. Windows elevation is
+requested by the plugin-owned worker; do not start a helper manually or install
+a replacement USB driver. Preserve the original job and protected session after
+interruption. A package check or connection is not authorization to enter UBOOT
+or program firmware; use the panel's reviewed operations.

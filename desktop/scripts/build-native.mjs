@@ -7,11 +7,12 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveDesktopPlatform } from '../lib/platform.mjs';
 
-export const PACKAGE_VERSION = '3.4.0-alpha.15';
+export const PACKAGE_VERSION = '3.4.0-alpha.16';
 export const WINDOWS_MCP_SERVER_NAME = 'fm1-forge-windows';
 export const MACOS_MCP_SERVER_NAME = 'fm1-forge-macos';
 export const NODE_VERSION = 'v22.22.2';
 export const NODE_LICENSE_SHA256 = 'c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4';
+export const CDC_UBOOT_SIDECARS=Object.freeze(['windows-cdc-link.ps1','windows-cdc-server.ps1','windows-cdc-relay.ps1','FlashPolicy.cs','FlashEngine.cs','wl82loader.bin','LICENSE.jl-uboot-tool','PROVENANCE.md']);
 export const PINNED_BUILD_DEPENDENCIES = Object.freeze({
   '@modelcontextprotocol/server': '2.3.1', '@openai/mcp-extensions': '0.2.0',
   '@cfworker/json-schema': '4.1.1', zod: '4.2.0', esbuild: '0.28.0',
@@ -74,12 +75,13 @@ export function stageManifest(source, legacy = false, target = getPackageTarget(
   const staged = structuredClone(source);
   if (staged.name !== 'fm1-app-library') throw new Error('Unexpected source plugin identity');
   staged.version = PACKAGE_VERSION;
-  staged.description = `Native ${target.label} MIDI, reviewed stock and custom FWSC SysEx updates, and local firmware-project configuration. USB serial and UBOOT writes remain unavailable.`;
+  staged.description = `Native ${target.label} MIDI, reviewed stock and custom FWSC SysEx updates, and local firmware-project configuration. ${target.platform==='win32'?'Tracker USB serial updates use a separately reviewed live UBOOT application-sector plan.':'USB serial and UBOOT writes remain unavailable.'}`;
   const presentation = legacy ? staged.interface : staged.extensions?.['com.openai']?.interface;
   if (!presentation || typeof presentation !== 'object') throw new Error('Missing source plugin interface');
   presentation.displayName = target.name;
   presentation.shortDescription = `${target.label} MIDI and FWSC updates`;
   presentation.longDescription = `A self-contained ${target.label} ${target.arch} preview with a bundled runtime and native MIDI component. Connect FM-1 through native MIDI, review the official V15 package or a validated custom FWSC with its target build, then explicitly confirm the SysEx update. Durable original-attempt recovery prevents automatic retries after an uncertain transfer. Configure and save firmware-project drafts and settings locally. Codex starts the packaged server; no separately started helper is needed. Custom FWSC starts from stock V15 and verifies the exact profile identity and build after reboot (Forge MIDI, or tracker CDC on Windows); subsequent common-firmware self-updates remain disabled. Raw MIDI commands, USB serial, UBOOT writes and compiler setup remain unavailable. Physical update acceptance is pending.`;
+  if(target.platform==='win32')presentation.longDescription=presentation.longDescription.replace('Raw MIDI commands, USB serial, UBOOT writes and compiler setup remain unavailable.','An installed tracker can connect through USB serial. Its app-only updater requires explicit recovery preparation, a Windows administrator prompt and two live flash reads before a second application-sector-plan confirmation. The plugin-owned worker preserves boot/configuration/reserved data, verifies complete readback and the exact reboot build, and retains original-job uncertainty after interruption. Raw MIDI, arbitrary serial/SCSI commands and compiler setup remain unavailable.');
   return staged;
 }
 
@@ -204,6 +206,16 @@ export async function copyCommonUpdaterNotices(root, output) {
     sourceFiles: sources.map(({ source }) => slash(path.relative(root, source))) };
 }
 
+export async function copyCdcUbootSidecars(root,output){
+  const source=path.join(root,'tools/jieli-wl82/cdc-uboot');
+  for(const name of CDC_UBOOT_SIDECARS)await regularFile(path.join(source,name));
+  const helper=await readFile(path.join(source,'wl82loader.bin'));
+  if(helper.length!==24064||hash(helper)!=='d41da6126760c9d66660bcc0cac8d27d221806c5e369a8036921efe68dca5376')throw new Error('Pinned WL82 RAM helper changed');
+  await mkdir(path.join(output,'server/cdc-uboot'),{recursive:true});
+  for(const name of CDC_UBOOT_SIDECARS)await copyFile(path.join(source,name),path.join(output,'server/cdc-uboot',name),constants.COPYFILE_EXCL);
+  return {name:'jl-uboot-tool-wl82',version:'pinned-source',license:'MIT',files:['server/cdc-uboot/LICENSE.jl-uboot-tool','server/cdc-uboot/PROVENANCE.md'],sourceFiles:CDC_UBOOT_SIDECARS.map(name=>`tools/jieli-wl82/cdc-uboot/${name}`)};
+}
+
 async function writeDependencyNotices(packages, output, overridesDirectory, additionalNotices = []) {
   const notices = [...additionalNotices];
   for (const dependency of packages) {
@@ -231,7 +243,7 @@ export async function packageFileHashes(directory, relative = '', { includeModes
     if (entry.isDirectory()) result.push(...await packageFileHashes(directory, name, { includeModes }));
     else if (entry.isFile()) {
       const bytes = await readFile(path.join(directory, name));
-      if (/\.(?:json|mjs|js|md|html|ps1|txt|svg)$/i.test(name)) {
+      if (/\.(?:json|mjs|js|md|html|ps1|cs|txt|svg)$/i.test(name)) {
         const text = bytes.toString('utf8');
         if (/(?:[A-Z]:[\\/]+(?:Users|dev)[\\/]+)|(?:ghp_[A-Za-z0-9]{30,})|(?:sk-(?:proj-)?[A-Za-z0-9_-]{35,})/.test(text) || /\/(?:Users|home)\/[^/\s"'\\]+[\/]/.test(text)) {
           throw new Error(`Package contains a local path or credential-shaped value: ${name}`);
@@ -310,6 +322,7 @@ export async function buildNativePackage(options, target) {
   await copyRuntimeExecutable(nodeExecutable, path.join(output, target.runtimeRelative), target);
   await copyFile(nodeLicense, path.join(output, 'LICENSES/Node.js-LICENSE'), constants.COPYFILE_EXCL);
   const commonUpdaterNotice = await copyCommonUpdaterNotices(root, output);
+  const cdcNotice=target.platform==='win32'?await copyCdcUbootSidecars(root,output):null;
   for (const dependency of nativePackages) {
     await copyTree(dependency.root, path.join(output, 'node_modules', dependency.name), relative => includeNativePackageFile(dependency.name, relative, target));
   }
@@ -329,7 +342,7 @@ export async function buildNativePackage(options, target) {
   });
   const dependencies = new Map();
   for (const dependency of [...await bundledPackages(bundled.metafile, root), ...await bundledPackages(workerBundle.metafile, root), ...nativePackages]) dependencies.set(`${dependency.name}@${dependency.version}`, dependency);
-  const notices = await writeDependencyNotices([...dependencies.values()], output, path.join(root, 'desktop/licenses'), [commonUpdaterNotice]);
+  const notices = await writeDependencyNotices([...dependencies.values()], output, path.join(root, 'desktop/licenses'), [commonUpdaterNotice,...(cdcNotice?[cdcNotice]:[])]);
   const packagedNode = path.join(output, target.runtimeRelative);
   const loaded = runNode(packagedNode, ['--input-type=module', '-e', "const m=await import('@julusian/midi');const a=m.default??m;if(typeof a.Input!=='function'||typeof a.Output!=='function')throw Error('MIDI native addon failed to load');console.log(JSON.stringify({loaded:true,version:process.version,platform:process.platform,arch:process.arch,napi:process.versions.napi}));"], output);
   assertRuntimeDescription(loaded, target);
@@ -343,6 +356,7 @@ export async function buildNativePackage(options, target) {
   sourceFiles.push(...['LICENSE', 'NOTICE'].map(name => path.join(root, 'site/lib/browser-common', name)));
   sourceFiles.push(panelGenerator);
   if (target.platform === 'win32') sourceFiles.push(...['windows-midi-inventory.ps1', 'windows-tracker-cdc.ps1'].map(name => path.join(root, 'tools/jieli-wl82/stock-sysex', name)));
+  if (target.platform === 'win32') sourceFiles.push(...CDC_UBOOT_SIDECARS.map(name=>path.join(root,'tools/jieli-wl82/cdc-uboot',name)));
   const sources = [];
   for (const filename of [...new Set(sourceFiles)].sort()) {
     if (!isContained(root, filename)) throw new Error('Source path is outside the source checkout');

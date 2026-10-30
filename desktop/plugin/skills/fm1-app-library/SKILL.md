@@ -59,3 +59,34 @@ clear the original journal, substitute selected files or automatically continue
 from loader preparation into WRITE.
 Offline public-template layout preservation is not a live unit baseline check
 or full flash readback; distinguish these from physical acceptance.
+
+For an FM-1 already running the tracker, the Windows edition also provides the
+separate **Tracker update · USB serial** route. Connect USB serial for a fixed
+fresh `FWINFO` challenge; connection does not stop playback or enter recovery.
+Select the generated tracker FWSC and matching JSON, then review the source and
+target build digests. **Prepare recovery and read flash** requires an explicit
+panel confirmation. It requests Windows administrator access for a plugin-owned,
+hash-frozen worker, then stops playback and enters UBOOT. This uploads only
+the pinned RAM helper and reads the complete live flash twice. Initialization
+can change flash status/protection; this phase does not erase/program the array.
+
+Use **Review application sector plan** next. Review the original job, live
+baseline/candidate hashes and exact ordered sectors. A separate explicit
+**Install reviewed application sectors** confirmation authorizes programming.
+The protected worker preserves boot/configuration/reserved bytes, writes the
+application directory sector last, and verifies per-operation and full final
+readback before restart. A zero-change plan explicitly returns to the same
+verified tracker without erase/program. Completion additionally requires its
+exact target build over a fresh CDC challenge; physical screen/audio/control
+acceptance remains separate.
+
+Stock, custom SysEx and CDC routes share device ownership and unresolved-job
+guards. Never clear a journal, substitute selected files, retry a write, choose
+another transport or reset automatically. CDC recovery reuses only the original
+job and existing protected worker session. If that session cannot be proven,
+retain the blocked original record and report the required recovery handoff.
+`get_fm1_cdc_update_status` is passive. `verify_fm1_cdc_boot` accepts only the
+original completed/readback-verified job; it cannot program firmware. Prepare,
+review and install tools are app-only and cannot accept a caller-selected port,
+disk, sector, serial command or SCSI operation. No new USB driver, global runtime
+or separately started helper is required. macOS does not expose this route.

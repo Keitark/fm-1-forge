@@ -14,7 +14,7 @@ const checkout=fileURLToPath(new URL('../../',import.meta.url)),require=createRe
 const {build}=require('esbuild');let serverModule,bundleRoot;
 const panel='<!doctype html><html><body>FM-1 Forge<script>const desktopMode=true;</script></body></html>';
 const config=()=>projectConfig({slug:'desktop-instrument',displayName:'Desktop instrument',clockPreset:'sdk-default',clockOptIn:false,lcdPreset:'stock-dma',module:'user',usbAudio:true});
-const transports=['stock-midi','firmware-midi'];
+const transports=['stock-midi','firmware-midi','usb-serial'];
 const idle=()=>({connected:false,transport:null,identity:null,loader:false,installationAvailable:false,lastError:null,supportedTransports:transports});
 before(async()=>{
   bundleRoot=await fs.mkdtemp(path.join(os.tmpdir(),'fm1-server-contract-bundle-'));
@@ -24,7 +24,7 @@ before(async()=>{
 });
 after(async()=>{if(bundleRoot){assert.ok(path.basename(bundleRoot).startsWith('fm1-server-contract-bundle-'));assert.equal(path.dirname(bundleRoot),os.tmpdir());await fs.rm(bundleRoot,{recursive:true,force:true});}});
 
-async function fixture(t,{updates=true,custom=true,platform='win32',arch='x64'}={}){
+async function fixture(t,{updates=true,custom=true,cdc=false,platform='win32',arch='x64'}={}){
   const base=await fs.mkdtemp(path.join(os.tmpdir(),'fm1-server-contract-data-')),original=await fs.realpath(base),directory=path.join(base,'metadata'),store=createProjectStore({directory}),calls=[];let current=idle(),closed=0;
   const deviceService={
     async connect(args){calls.push({method:'connect',args});current={...idle(),connected:true,transport:args.transport,identity:args.transport==='stock-midi'?'FM-1_015':'FM1_FORGE_001'};return {...current};},
@@ -58,11 +58,12 @@ async function fixture(t,{updates=true,custom=true,platform='win32',arch='x64'}=
     async verifyBoot(args){customCalls.push({method:'verifyBoot',args});return {writing:true,attempt:customAttempt,review:null};},
     async reviewLoaderEntry(args){customCalls.push({method:'reviewLoaderEntry',args});return {review:{...customReview,operation:'loader-entry'}};},
   }:undefined;
-  const server=await serverModule.createDesktopServer({deviceService,stockUpdateService,customUpdateService,uiHtml:panel,store,platform,arch});
+  const cdcCalls=[],cdcUpdateService=cdc?Object.fromEntries(['status','beginUpload','appendUpload','review','prepare','reviewInstall','reviewRecovery','start','verifyBoot','close'].map(method=>[method,async args=>{cdcCalls.push({method,args});return method==='status'?{supported:true,writing:false,attempt:null,review:null}:{accepted:true};}])):undefined;
+  const server=await serverModule.createDesktopServer({deviceService,stockUpdateService,customUpdateService,cdcUpdateService,uiHtml:panel,store,platform,arch});
   const revision='2025-11-25',client=new Client({name:'FM-1 desktop contract test',version:'1'},{capabilities:{},supportedProtocolVersions:[revision],versionNegotiation:{mode:'legacy'}});
   t.after(async()=>{try{await server.close();await client.close();}finally{assert.equal(await fs.realpath(base),original);assert.ok(path.basename(base).startsWith('fm1-server-contract-data-'));await fs.rm(base,{recursive:true,force:true});}});
   const [clientTransport,serverTransport]=InMemoryTransport.createLinkedPair();await server.connect(serverTransport);await client.connect(clientTransport);
-  return {server,client,store,calls,updateCalls,stockUpdateService,customCalls,customUpdateService,directory,deviceService,get closeCount(){return closed;},tool:async(name,args={})=>client.callTool({name,arguments:args})};
+  return {server,client,store,calls,updateCalls,stockUpdateService,customCalls,customUpdateService,cdcCalls,cdcUpdateService,directory,deviceService,get closeCount(){return closed;},tool:async(name,args={})=>client.callTool({name,arguments:args})};
 }
 async function refused(f,name,args){
   let response,failure;try{response=await f.tool(name,args);}catch(error){failure=error;}
@@ -72,14 +73,14 @@ async function refused(f,name,args){
 test('official SDK discovery, panel open and resource read are passive over the packaged legacy stdio protocol',async t=>{
     const f=await fixture(t);assert.deepEqual(f.calls,[]);
     const answer=await f.tool('open_fm1_library'),data=answer.structuredContent;
-    assert.deepEqual(data.desktop,{platform:'win32',protocolVersion:2,supportedTransports:transports,installationAvailable:false,stockUpdateAvailable:true,customUpdateAvailable:true});assert.equal(data.forge.gate.can_start_project,false);assert.deepEqual(data.forge.projects,[]);
+    assert.deepEqual(data.desktop,{platform:'win32',protocolVersion:2,supportedTransports:transports,installationAvailable:false,stockUpdateAvailable:true,customUpdateAvailable:true,cdcUpdateAvailable:false});assert.equal(data.forge.gate.can_start_project,false);assert.deepEqual(data.forge.projects,[]);
     const capabilities=f.client.getServerCapabilities();assert.equal(capabilities.extensions['openai/settings'].readTool,'settings.read');
     const resource=await f.client.readResource({uri:serverModule.RESOURCE_URI});assert.equal(resource.contents[0].mimeType,'text/html;profile=mcp-app');assert.match(resource.contents[0].text,/const desktopMode=true/);assert.deepEqual(f.calls,[]);
 });
 
 test('tool discovery separates app-only reviewed stock writes from connection tools and forbids raw MIDI',async t=>{
   const f=await fixture(t),listed=await f.client.listTools(),names=listed.tools.map(tool=>tool.name).sort();
-  assert.deepEqual(names,['verify_fm1_custom_boot','begin_fm1_custom_upload','append_fm1_custom_upload','review_fm1_custom_update','review_fm1_custom_recovery','review_fm1_custom_loader_entry','start_fm1_custom_update','get_fm1_custom_update_status','begin_fm1_stock_upload','append_fm1_stock_upload','review_fm1_stock_update','review_fm1_stock_recovery','start_fm1_stock_update','get_fm1_stock_update_status','configure_fm1_project','connect_fm1_device','disconnect_fm1_device','get_fm1_device_status','get_fm1_project','list_fm1_projects','open_fm1_library','open_fm1_project','save_fm1_project','search_mentions','settings.read','settings.update'].sort());
+  assert.deepEqual(names,['get_fm1_cdc_update_status','verify_fm1_cdc_boot','begin_fm1_cdc_upload','append_fm1_cdc_upload','review_fm1_cdc_update','prepare_fm1_cdc_update','review_fm1_cdc_install','review_fm1_cdc_recovery','start_fm1_cdc_update','verify_fm1_custom_boot','begin_fm1_custom_upload','append_fm1_custom_upload','review_fm1_custom_update','review_fm1_custom_recovery','review_fm1_custom_loader_entry','start_fm1_custom_update','get_fm1_custom_update_status','begin_fm1_stock_upload','append_fm1_stock_upload','review_fm1_stock_update','review_fm1_stock_recovery','start_fm1_stock_update','get_fm1_stock_update_status','configure_fm1_project','connect_fm1_device','disconnect_fm1_device','get_fm1_device_status','get_fm1_project','list_fm1_projects','open_fm1_library','open_fm1_project','save_fm1_project','search_mentions','settings.read','settings.update'].sort());
   for(const name of ['flash_fm1','send_sysex','send_midi','enter_uboot','reset_fm1','install_firmware'])await refused(f,name,{});
   const connection=listed.tools.find(tool=>tool.name==='connect_fm1_device');assert.deepEqual(connection.inputSchema.properties.transport.enum,transports);assert.equal(connection.annotations.destructiveHint,false);
   assert.deepEqual(listed.tools.find(tool=>tool.name==='open_fm1_project')._meta['openai/ui'].entrypoints,[{type:'file',extensions:['.fm1-forge.json']}]);
@@ -94,7 +95,19 @@ test('native connection arguments are validated before the device service and on
     const connected=await f.tool('connect_fm1_device',{transport});assert.equal(connected.structuredContent.connected,true);assert.equal(connected.structuredContent.transport,transport);assert.equal(connected.structuredContent.installationAvailable,false);
     assert.equal((await f.tool('get_fm1_device_status')).structuredContent.identity,connected.structuredContent.identity);assert.equal((await f.tool('disconnect_fm1_device')).structuredContent.connected,false);
   }
-  assert.deepEqual(f.calls.map(call=>call.method),['status','connect','status','disconnect','connect','status','disconnect']);
+  assert.deepEqual(f.calls.map(call=>call.method),['status','connect','status','disconnect','connect','status','disconnect','connect','status','disconnect']);
+});
+
+test('CDC tools separate passive proof, recovery preparation and reviewed programming with closed schemas',async t=>{
+  const f=await fixture(t,{cdc:true}),tools=(await f.client.listTools()).tools;
+  assert.equal((await f.tool('open_fm1_library')).structuredContent.desktop.cdcUpdateAvailable,true);
+  for(const name of ['get_fm1_cdc_update_status','verify_fm1_cdc_boot'])assert.equal(tools.find(tool=>tool.name===name)._meta?.ui?.visibility,undefined);
+  for(const name of ['begin_fm1_cdc_upload','append_fm1_cdc_upload','review_fm1_cdc_update','prepare_fm1_cdc_update','review_fm1_cdc_install','review_fm1_cdc_recovery','start_fm1_cdc_update'])assert.deepEqual(tools.find(tool=>tool.name===name)._meta.ui.visibility,['app']);
+  for(const name of ['prepare_fm1_cdc_update','start_fm1_cdc_update']){assert.equal(tools.find(tool=>tool.name===name).annotations.destructiveHint,true);for(const args of [{review_id:'a'.repeat(32)},{review_id:'a'.repeat(32),confirmed:false},{review_id:'a'.repeat(32),confirmed:true,port:'COM5'},{review_id:'a'.repeat(32),confirmed:true,sectors:[0x4000]}])await refused(f,name,args);}
+  await refused(f,'verify_fm1_cdc_boot',{job_id:'a'.repeat(32),buildSha256:'b'.repeat(64)});
+  assert.deepEqual(f.cdcCalls,[]);
+  await f.tool('get_fm1_cdc_update_status');await f.tool('review_fm1_cdc_install',{job_id:'a'.repeat(32)});await f.tool('prepare_fm1_cdc_update',{review_id:'b'.repeat(32),confirmed:true});await f.tool('start_fm1_cdc_update',{review_id:'c'.repeat(32),confirmed:true});await f.tool('verify_fm1_cdc_boot',{job_id:'a'.repeat(32)});
+  assert.deepEqual(f.cdcCalls.map(call=>call.method),['status','reviewInstall','prepare','start','verifyBoot']);assert.deepEqual(f.calls,[]);assert.deepEqual(f.updateCalls,[]);assert.deepEqual(f.customCalls,[]);
 });
 
 test('official native settings persist partial updates and malformed values cannot mutate local metadata',async t=>{
@@ -213,7 +226,7 @@ test('macOS editions advertise actual platform, native resource and passive tool
     assert.equal(f.client.getServerVersion().name,'FM-1 Forge macOS');
     const answer=(await f.tool('open_fm1_library')).structuredContent;
     assert.equal(answer.desktop.platform,'darwin');assert.equal(answer.desktop.protocolVersion,2);
-    assert.deepEqual(answer.desktop.supportedTransports,transports);assert.equal(answer.desktop.stockUpdateAvailable,true);assert.equal(answer.desktop.customUpdateAvailable,true);
+    assert.deepEqual(answer.desktop.supportedTransports,transports.slice(0,2));assert.equal(answer.desktop.stockUpdateAvailable,true);assert.equal(answer.desktop.customUpdateAvailable,true);
     assert.match(answer.forge.gate.message,/in the macOS panel/);
     const tools=(await f.client.listTools()).tools;
     assert.equal(tools.find(value=>value.name==='open_fm1_library').title,'FM-1 Forge macOS');

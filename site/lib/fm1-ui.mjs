@@ -6,6 +6,7 @@ import { moduleGraphHtml, moduleGraphCss } from './fm1-module-graph.mjs';
 import { libraryHtml, libraryCss } from './fm1-library-ui.mjs';
 import { directDevicesHtml, directDevicesCss } from './fm1-browser-devices-ui.mjs';
 import { customFwscHtml } from './fm1-desktop-custom-ui.mjs';
+import { cdcUpdateHtml } from './fm1-desktop-cdc-ui.mjs';
 import { commonDevicesHtml, commonDialogHtml } from './fm1-browser-common-ui.mjs';
 export const UI_HTML = String.raw`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FM-1 Forge</title><meta name="description" content="Install diagnostics, test your FM-1 and build your own firmware with Codex."><link rel="icon" href="${ICON_DATA_URI}">
@@ -272,8 +273,8 @@ ${libraryHtml}
   else{
     el('direct-context').textContent=(desktopPlatform==='darwin'?'macOS': 'Windows x64')+' · bundled runtime';
     el('direct-midi').textContent='Native MIDI · no browser permission';
-    el('direct-serial').textContent='Unavailable in this preview';
-    el('direct-usb').textContent='Unavailable in this preview';
+    el('direct-serial').textContent=desktopPlatform==='win32'?'Native tracker CDC · fixed commands':'Unavailable in this preview';
+    el('direct-usb').textContent=desktopPlatform==='win32'?'Native UBOOT · reviewed application plan':'Unavailable in this preview';
     el('direct-hardware-report').textContent=JSON.stringify({platform:desktopPlatform,transport:'plugin-stdio',browserDevicePermissions:false,installationAvailable:false});
   }
   if(directMode){
@@ -284,7 +285,7 @@ ${libraryHtml}
   async function start(){
     if(embedded){let pendingFile=null;nativeHost=new window.FM1PluginHost({onToolInput:input=>{fileEntrypoint=true;pendingFile=input;if(hostReady)clickAction(()=>extensionUI.fileInput(input));},onToolResult:answer=>{const output=answer.structuredContent;if(output?.file&&output.mode==='project_file'){fileEntrypoint=true;pendingFile={file:output.file};if(hostReady)clickAction(()=>extensionUI.fileInput(pendingFile));}if(output?.profiles){initialPayload=true;state={...output,_inventory_received_at:Date.now(),_input_received_at:Date.now()};render();}if(output?.action)try{if(extensionUI.formResult(output)){if(!initialPayload)formEntrypoint=true;initialPayload=true;if(output.forge&&typeof output.forge==='object')state={...state,forge:{...state.forge,...output.forge}};render();}}catch(error){tell(error.message);}},onTeardown:dispose,onContext:hostContext});const response=await nativeHost.connect();hostCapabilities=response.capabilities;hostReady=true;hostContext(response.context);if(pendingFile)await extensionUI.fileInput(pendingFile);await new Promise(resolve=>setTimeout(resolve,1000));if(!initialPayload&&!fileEntrypoint&&hostCapabilities.serverTools)await snapshot();}
     else{try{await snapshot();}finally{await registerSiteTools();}}
-    if(desktopMode&&directMode&&window.FM1DesktopDevicesUI?.mount){directDevices=window.FM1DesktopDevicesUI.mount({el,call,signal:lifecycle.signal,desktopPlatform,supportedTransports:['stock-midi','firmware-midi'],stockUpdateAvailable:true,customUpdateAvailable:true});await directDevices.ready;}
+    if(desktopMode&&directMode&&window.FM1DesktopDevicesUI?.mount){directDevices=window.FM1DesktopDevicesUI.mount({el,call,signal:lifecycle.signal,desktopPlatform,supportedTransports:['stock-midi','firmware-midi',...(desktopPlatform==='win32'?['usb-serial']:[])],stockUpdateAvailable:true,customUpdateAvailable:true,cdcUpdateAvailable:desktopPlatform==='win32'});await directDevices.ready;}
     if(!directMode&&!fileEntrypoint&&!formEntrypoint){
       const active=state.inventory?.engine?.active,stockWork=state.recent_requests?.find(item=>item.operation==='stock_sysex_update'&&(item.id===active||item.data?.id===active));
       if(!selectedWork&&/^[a-f0-9]{32}$/.test(active||'')&&stockWork)clickAction(()=>inspectJob(active,'stock'));
@@ -296,6 +297,6 @@ ${libraryHtml}
 </script></body></html>`;
 
 // The desktop edition keeps the same UI while routing device actions to its local MCP server.
-export const WINDOWS_UI_HTML=UI_HTML.replace(commonDevicesHtml,'').replace(commonDialogHtml,'').replace('Stock firmware · V15 SysEx update','Restore stock V15').replace('const desktopMode=false;', 'const desktopMode=true;').replace('The file stays in this panel.', 'The selected package stays on this computer and is sent to the bundled plugin for validation.').replace('Custom firmware installation uses a separate manual UBOOT workflow. Stock firmware uses the local file review in Connect FM-1.', 'Install a generated custom FWSC from stock V15 using the custom firmware section above. Use the stock section to restore the official V15 package.').replace('<!-- FM1_DESKTOP_CUSTOM -->',customFwscHtml);
+export const WINDOWS_UI_HTML=UI_HTML.replace(commonDevicesHtml,'').replace(commonDialogHtml,'').replace('Stock firmware · V15 SysEx update','Restore stock V15').replace('const desktopMode=false;', 'const desktopMode=true;').replace('The file stays in this panel.', 'The selected package stays on this computer and is sent to the bundled plugin for validation.').replace('Custom firmware installation uses a separate manual UBOOT workflow. Stock firmware uses the local file review in Connect FM-1.', 'Install a generated custom FWSC from stock V15 through SysEx, or update an installed tracker through USB serial after reviewing its live application-sector plan.').replace('<!-- FM1_DESKTOP_CUSTOM -->',customFwscHtml+cdcUpdateHtml);
 
-export const MACOS_UI_HTML=WINDOWS_UI_HTML.replace("const desktopPlatform='win32';", "const desktopPlatform='darwin';");
+export const MACOS_UI_HTML=WINDOWS_UI_HTML.replace(cdcUpdateHtml,'').replace("const desktopPlatform='win32';", "const desktopPlatform='darwin';").replace('Install a generated custom FWSC from stock V15 through SysEx, or update an installed tracker through USB serial after reviewing its live application-sector plan.','Install a generated custom FWSC from stock V15 through the reviewed SysEx route. Tracker CDC/UBOOT updates are available in the Windows edition.');

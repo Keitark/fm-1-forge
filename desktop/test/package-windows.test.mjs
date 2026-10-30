@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile, copyFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { assertFreshOutput, assertRuntimeDescription, collectNativeClosure, copyCommonUpdaterNotices, includeNativePackageFile, packageFileHashes, parseArguments, requireAbsoluteInput, resolveDependencyLicenseFiles, stageManifest, windowsMcpConfiguration, PACKAGE_VERSION, WINDOWS_MCP_SERVER_NAME } from '../scripts/build-windows.mjs';
+import { assertFreshOutput, assertRuntimeDescription, collectNativeClosure, copyCommonUpdaterNotices, copyCdcUbootSidecars, CDC_UBOOT_SIDECARS, includeNativePackageFile, packageFileHashes, parseArguments, requireAbsoluteInput, resolveDependencyLicenseFiles, stageManifest, windowsMcpConfiguration, PACKAGE_VERSION, WINDOWS_MCP_SERVER_NAME } from '../scripts/build-windows.mjs';
 
 async function fixture(t) {
   const directory = await mkdtemp(path.join(process.env.FM1_PACKAGE_TEST_TMP ?? os.tmpdir(), 'fm1-windows-package-test-'));
@@ -65,9 +65,9 @@ test('portable and compatibility metadata accurately scope reviewed stock writes
     const actual = legacy ? staged.interface : staged.extensions['com.openai'].interface;
     assert.match(staged.description, /Native Windows MIDI/);
     assert.match(staged.description, /reviewed stock and custom FWSC SysEx updates/);
-    assert.match(staged.description, /USB serial and UBOOT writes remain unavailable/);
+    assert.match(staged.description, /Tracker USB serial updates use a separately reviewed live UBOOT application-sector plan/);
     assert.match(actual.longDescription, /explicitly confirm the SysEx update/);
-    assert.match(actual.longDescription, /Raw MIDI commands, USB serial, UBOOT writes and compiler setup remain unavailable/);
+    assert.match(actual.longDescription, /Raw MIDI, arbitrary serial\/SCSI commands and compiler setup remain unavailable/);
     assert.match(actual.longDescription, /Physical update acceptance is pending/);
     assert.equal(actual.shortDescription, 'Windows MIDI and FWSC updates');
     assert.ok(actual.shortDescription.length <= 30);
@@ -154,4 +154,20 @@ test('common updater Apache license and notice are both copied without changing 
   for (const name of ['LICENSE', 'NOTICE']) assert.deepEqual(await readFile(path.join(output, 'LICENSES/fm1-common-updater', name)), await readFile(path.join(source, name)));
   await rm(path.join(source, 'NOTICE'));
   await assert.rejects(copyCommonUpdaterNotices(root, path.join(root, 'missing-notice')), /ENOENT/);
+});
+
+test('CDC sidecars use a closed source list and retain the exact pinned helper and notices',async t=>{
+  const directory=await fixture(t),root=fileURLToPath(new URL('../../',import.meta.url)),output=path.join(directory,'output');await mkdir(output);
+  const notice=await copyCdcUbootSidecars(root,output);
+  assert.deepEqual(CDC_UBOOT_SIDECARS,['windows-cdc-link.ps1','windows-cdc-server.ps1','windows-cdc-relay.ps1','FlashPolicy.cs','FlashEngine.cs','wl82loader.bin','LICENSE.jl-uboot-tool','PROVENANCE.md']);
+  for(const name of CDC_UBOOT_SIDECARS)assert.deepEqual(await readFile(path.join(output,'server/cdc-uboot',name)),await readFile(path.join(root,'tools/jieli-wl82/cdc-uboot',name)));
+  assert.equal(notice.license,'MIT');assert.ok(notice.files.includes('server/cdc-uboot/LICENSE.jl-uboot-tool'));assert.equal(notice.sourceFiles.length,8);
+  await assert.rejects(copyCdcUbootSidecars(root,output),{code:'EEXIST'});
+});
+
+test('changed CDC RAM helper is rejected before package copying',async t=>{
+  const directory=await fixture(t),root=fileURLToPath(new URL('../../',import.meta.url)),source=path.join(directory,'tools/jieli-wl82/cdc-uboot'),output=path.join(directory,'output');await mkdir(source,{recursive:true});await mkdir(output);
+  for(const name of CDC_UBOOT_SIDECARS)await copyFile(path.join(root,'tools/jieli-wl82/cdc-uboot',name),path.join(source,name));
+  const helper=await readFile(path.join(source,'wl82loader.bin'));helper[0]^=1;await writeFile(path.join(source,'wl82loader.bin'),helper);
+  await assert.rejects(copyCdcUbootSidecars(directory,output),/Pinned WL82 RAM helper changed/);
 });

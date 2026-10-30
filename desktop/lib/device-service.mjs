@@ -6,7 +6,14 @@ import { identityQuery as stockIdentityQuery, parseIdentity as parseStockIdentit
 import { canonicalName, candidatePairs } from '../../tools/jieli-wl82/stock-sysex/selection.mjs';
 import { WIRE, identityQuery as firmwareIdentityQuery, capabilityQuery, parseIdentity as parseFirmwareIdentity, parseCapabilities, decodeFrame } from '../../site/lib/browser-common/protocol.mjs';
 
-const TRANSPORTS = Object.freeze(['stock-midi', 'firmware-midi']);
+const TRANSPORTS = Object.freeze(['stock-midi', 'firmware-midi', 'usb-serial']);
+const defaultCdcInspector = async () => (await import('../../tools/jieli-wl82/cdc-uboot/transport.mjs')).inspectTrackerCdc();
+const cdcHash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) && value !== '0'.repeat(64);
+const cdcProof = value => {
+  if (value?.identity !== 'MOD-EDITOR/1' || value.transport !== 'cdc' || value.nonceVerified !== true || !['build_sha256','location_sha256','instance_sha256'].every(key => cdcHash(value[key]))) throw error('invalid_identity', 'A fresh exact tracker CDC proof and USB location are required.');
+  return Object.freeze(Object.fromEntries(['identity','transport','build_sha256','location_sha256','instance_sha256','nonceVerified'].map(key => [key,value[key]])));
+};
+const sameCdc = (a,b) => ['identity','transport','build_sha256','location_sha256','instance_sha256'].every(key => a?.[key] === b?.[key]);
 const NAMES = new Set(['fm-1', 'fm-1 midi', 'fm-1 forge', 'fm1_forge_001', 'ota-fm-1']);
 const realClock = { now: () => performance.now(), sleep: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)) };
 const error = (code, message) => new StockError(code, message);
@@ -44,13 +51,15 @@ function safeError(caught) {
   return { code, message };
 }
 
-export function createDeviceService({ backendFactory = createNativeMidiBackend, clock = realClock, directory = desktopDataDirectory(), ownerFactory = createDeviceOwner } = {}) {
+export function createDeviceService({ backendFactory = createNativeMidiBackend, clock = realClock, directory = desktopDataDirectory(), ownerFactory = createDeviceOwner, cdcInspector = defaultCdcInspector, platform = process.platform } = {}) {
   const owner = ownerFactory({ directory });
+  const supported = TRANSPORTS.filter(value => value !== 'usb-serial' || platform === 'win32');
+  let serialProof = null;
   let generation = 0, writer = null, endpointReview = null;
   const requireIdle = () => { if (writer) throw error('device_busy', 'A reviewed stock update owns the FM-1 connection.'); };
   let queue = Promise.resolve(), shutdown = false, epoch = 0, backend = null, link = null, pair = null;
   let state = { connected: false, transport: null, identity: null, loader: false, installationAvailable: false, lastError: null };
-  const snapshot = () => ({ ...state, lastError: state.lastError && { ...state.lastError }, supportedTransports: [...TRANSPORTS] });
+  const snapshot = () => ({ ...state, lastError: state.lastError && { ...state.lastError }, supportedTransports: [...supported] });
   const current = expected => { if (shutdown || epoch !== expected) throw error('service_closed', 'The native FM-1 service is closed.'); };
   const serialized = action => {
     const result = queue.then(async () => { current(epoch); return action(epoch); });
@@ -58,7 +67,7 @@ export function createDeviceService({ backendFactory = createNativeMidiBackend, 
   };
   const closeLink = async () => { const closing = link; link = null; if (closing) await closing.close(); };
   const closeBackend = async () => { const closing = backend; await closing?.close?.(); if (backend === closing) backend = null; };
-  const clear = failure => { generation++; endpointReview = null; pair = null; backend = null; state = { connected: false, transport: null, identity: null, loader: false, installationAvailable: false, lastError: failure ?? null }; };
+  const clear = failure => { generation++; endpointReview = null; pair = null; backend = null; serialProof = null; state = { connected: false, transport: null, identity: null, loader: false, installationAvailable: false, lastError: failure ?? null }; };
   const send = async (packet, expected) => { current(expected); if (await link.send(packet) === false) throw error('send_failed', 'MIDI query delivery failed.'); current(expected); };
   const receive = async (parse, command, expected, timeoutCode) => {
     const deadline = clock.now() + 1500;
@@ -97,10 +106,15 @@ export function createDeviceService({ backendFactory = createNativeMidiBackend, 
   const connected = async expected => { const result = await link.isConnected(); current(expected); return result; };
   const connect = input => serialized(async expected => {
     requireIdle();
-    if (!input || Object.keys(input).length !== 1 || !TRANSPORTS.includes(input.transport)) throw error('unsupported_transport', 'Choose stock MIDI or firmware MIDI. Native serial support is not available in this version.');
+    if (!input || Object.keys(input).length !== 1 || !supported.includes(input.transport)) throw error('unsupported_transport', 'Choose an available fixed FM-1 connection transport.');
     await closeLink(); await closeBackend(); current(expected); clear();
     try {
       await owner.acquire(); current(expected);
+      if (input.transport === 'usb-serial') {
+        const proof = cdcProof(await cdcInspector()); current(expected); serialProof = proof;
+        state = { connected: true, transport: 'usb-serial', identity: proof.identity, profile: 'protracker', loader: false, buildSha256: proof.build_sha256, generation, installationAvailable: false, lastError: null };
+        return snapshot();
+      }
       backend = await backendFactory(); current(expected);
       pair = selectedPair(await backend.enumerate()); current(expected);
       const opened = await backend.open(pair);
@@ -119,6 +133,11 @@ export function createDeviceService({ backendFactory = createNativeMidiBackend, 
   const getStatus = ({ refresh = true } = {}) => serialized(async expected => {
     if (writer || !state.connected || !refresh) return snapshot();
     try {
+      if (state.transport === 'usb-serial') {
+        const proof = cdcProof(await cdcInspector()); current(expected);
+        if (!sameCdc(proof, serialProof)) throw error('device_changed', 'The tracker CDC identity, build or physical USB location changed.');
+        state.lastError = null; return snapshot();
+      }
       if (!await connected(expected)) { await closeLink(); await closeBackend(); current(expected); clear({ code: 'disconnected', message: 'FM-1 was disconnected.' }); await owner.release(); return snapshot(); }
       const evidence = await identify(state.transport, expected);
       if (!await connected(expected)) { await closeLink(); await closeBackend(); current(expected); clear({ code: 'disconnected', message: 'FM-1 was disconnected.' }); await owner.release(); return snapshot(); }
@@ -189,6 +208,35 @@ export function createDeviceService({ backendFactory = createNativeMidiBackend, 
     await closeLink(); current(expected); writer = session; endpointReview = null;
     return session;
   });
+  const reviewCdcEndpoint = () => serialized(async expected => {
+    requireIdle();
+    if (!state.connected || state.transport !== 'usb-serial' || !serialProof) throw error('cdc_connection_required', 'Connect and identify the tracker through USB serial before review.');
+    const proof = cdcProof(await cdcInspector()); current(expected);
+    if (!sameCdc(proof, serialProof)) throw error('device_changed', 'The tracker source build or USB identity changed.');
+    endpointReview = { kind: 'cdc-uboot', token: randomUUID(), generation, source: { ...proof } };
+    return JSON.parse(JSON.stringify(endpointReview));
+  });
+  const acquireCdcWriter = reviewed => serialized(async expected => {
+    requireIdle();
+    if (!reviewed || !endpointReview || reviewed.kind !== 'cdc-uboot' || reviewed.token !== endpointReview.token || reviewed.generation !== generation || !state.connected || state.transport !== 'usb-serial' || !sameCdc(reviewed.source, endpointReview.source)) throw error('device_changed', 'Reconnect and review the intended tracker source again.');
+    const proof = cdcProof(await cdcInspector()); current(expected);
+    if (!sameCdc(proof, serialProof) || !sameCdc(proof, reviewed.source)) throw error('device_changed', 'The tracker source build or physical USB identity changed after review.');
+    let released = false, releasing = null, retained = false;
+    const session = { retain() { retained = true; }, source: { ...proof }, release() {
+      if (retained) return Promise.reject(error('close_failed', 'The original protected worker may still own the device.'));
+      if (releasing) return releasing;
+      releasing = (async () => { if (released) return; released = true; if (writer === session) { await owner.release(); writer = null; clear(); } })();
+      return releasing;
+    } };
+    writer = session; endpointReview = null;
+    return session;
+  });
+  const acquireCdcObservation = () => serialized(async expected => {
+    requireIdle();await closeLink();await closeBackend();current(expected);clear();await owner.acquire();current(expected);
+    let releasing = null;
+    const session = { release() { return releasing ??= (async () => { if (writer === session) { await owner.release();writer=null;clear(); } })(); } };
+    writer=session;return session;
+  });
   const close = async () => {
     if (!shutdown) { shutdown = true; epoch++; }
     // Stop the owned process before waiting on an in-flight native open/read.
@@ -196,6 +244,6 @@ export function createDeviceService({ backendFactory = createNativeMidiBackend, 
     try { await closeBackend(); await writer?.release(); await closeLink(); await queue; } finally { if (!writer && backend === null) { clear(); await owner.release(); } }
   };
   const api = { connect, getStatus, disconnect, close };
-  Object.defineProperties(api, { reviewStockEndpoint: { value: reviewStockEndpoint }, acquireStockWriter: { value: acquireStockWriter } });
+  Object.defineProperties(api, { reviewStockEndpoint: { value: reviewStockEndpoint }, acquireStockWriter: { value: acquireStockWriter }, reviewCdcEndpoint: { value: reviewCdcEndpoint }, acquireCdcWriter: { value: acquireCdcWriter }, acquireCdcObservation: { value: acquireCdcObservation } });
   return Object.freeze(api);
 }

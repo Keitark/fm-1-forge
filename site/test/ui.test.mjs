@@ -997,7 +997,7 @@ test('automatic metadata preserves job progress, firmware drafts, theme, selecte
 });
 test('manual Refresh shares a slow automatic observation and preserves a selected job result',async()=>{
   let release;const held=new Promise(done=>{release=done;});const p=await panel({embedded:true,nativeControls:true,beforeCall:name=>name==='get_fm1_status'?held:undefined,jobData:({name,defaultJob})=>name==='get_fm1_status'?disconnectedInventory():['plan_fm1_app','get_fm1_job'].includes(name)?progressJob(defaultJob.id,'succeeded',96):defaultJob});
-  p.node('plan-nes').onclick();await until(()=>p.node('progress-bar').value===96);const id=p.node('active-operation').dataset.jobId;const detail=p.node('active-status').textContent,message=p.node('message').textContent;
+  p.node('plan-nes').onclick();await until(()=>p.node('progress-bar').value===96&&p.node('active-status').textContent==='Completed');const id=p.node('active-operation').dataset.jobId;const detail=p.node('active-status').textContent,message=p.node('message').textContent;
   await p.advancePoll(1500);p.node('refresh').onclick();await tick();assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);release();await until(()=>p.requests.includes('list_fm1_apps'));await tick();
   assert.equal(p.requests.filter(name=>name==='get_fm1_status').length,1);assert.equal(p.node('active-operation').dataset.jobId,id);assert.equal(p.node('active-status').textContent,detail);assert.equal(p.node('message').textContent,message);assert.equal(p.node('progress-bar').value,96);p.dispose();
 });
@@ -1094,25 +1094,25 @@ test('Windows native panel mounts its fixed MCP transport without browser permis
   assert.match(markup,/<h2>Custom firmware update · SysEx<\/h2>/);
   assert.match(markup,/id="direct-connect-common"/);
   let connected=false;
-  const status=()=>({connected,transport:connected?'stock-midi':null,identity:connected?'FM-1_015':null,loader:false,installationAvailable:false,supportedTransports:['stock-midi','firmware-midi'],lastError:null});
+  const status=()=>({connected,transport:connected?'stock-midi':null,identity:connected?'FM-1_015':null,loader:false,installationAvailable:false,supportedTransports:['stock-midi','firmware-midi','usb-serial'],lastError:null});
   const p=await panel({html:WINDOWS_UI_HTML,embedded:true,preserveDirectMode:true,backendOverride:async(name,args)=>{
     if(name==='connect_fm1_device'){assert.equal(args.transport,'stock-midi');connected=true;return status();}
     if(name==='get_fm1_device_status')return status();
-    if(name==='get_fm1_stock_update_status'||name==='get_fm1_custom_update_status')return {supported:true,writing:false,attempt:null,review:null};
+    if(name==='get_fm1_stock_update_status'||name==='get_fm1_custom_update_status'||name==='get_fm1_cdc_update_status')return {supported:true,writing:false,attempt:null,review:null};
     if(name==='disconnect_fm1_device'){connected=false;return status();}
     assert.fail('Unexpected desktop tool '+name);
   }});
   try{
-    await until(()=>p.requests.includes('get_fm1_custom_update_status')&&!p.node('direct-connect-midi').disabled);
+    await until(()=>p.requests.includes('get_fm1_cdc_update_status')&&!p.node('direct-connect-midi').disabled);
     assert.equal(typeof p.window.FM1DesktopDevicesUI?.mount,'function');
     assert.equal(p.node('surface-label').textContent,'FM-1 Forge Windows plugin');
     assert.equal(p.node('device-heading').textContent,'FM-1 disconnected');
     assert.equal(p.node('direct-midi').textContent,'Native MIDI · no browser permission');
-    assert.equal(p.node('direct-connect-serial').disabled,true);
+    assert.equal(p.node('direct-connect-serial').disabled,false);
     assert.equal(p.node('direct-connect-midi').disabled,false);
     assert.equal(p.node('direct-connect-common').disabled,false);
-    assert.deepEqual(p.requests,['get_fm1_stock_update_status','get_fm1_custom_update_status']);
-    p.node('direct-connect-midi').onclick({isTrusted:false});await tick();assert.deepEqual(p.requests,['get_fm1_stock_update_status','get_fm1_custom_update_status']);
+    assert.deepEqual(p.requests,['get_fm1_stock_update_status','get_fm1_custom_update_status','get_fm1_cdc_update_status']);
+    p.node('direct-connect-midi').onclick({isTrusted:false});await tick();assert.deepEqual(p.requests,['get_fm1_stock_update_status','get_fm1_custom_update_status','get_fm1_cdc_update_status']);
     p.node('direct-connect-midi').onclick({isTrusted:true});
     await until(()=>p.node('device-heading').textContent.includes('FM-1_015'));
     assert.equal(p.node('connection-label').textContent,'Device connected');

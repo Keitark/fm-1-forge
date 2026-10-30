@@ -66,6 +66,10 @@ blocked; no automatic write retries, fallback transports or resets.
 
 Explicit recovery uses only the original immutable job and verifies the full
 current image against its recorded verified prefix and next uncertain sector.
+Within the same live handle, a recorded erase/program intent permits rewriting
+that one whole erase sector from the immutable original candidate, including
+restoring preserved configuration bytes sharing that sector. Every other byte
+must match its recorded baseline or verified candidate before recovery proceeds.
 An unprovable cold/RAM-loader state must fail closed rather than re-upload a
 helper blindly. Provide a truthful bounded recovery handoff when the original
 worker session cannot be safely re-established.
