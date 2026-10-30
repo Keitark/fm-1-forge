@@ -2,11 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FM1 App Library",
-  description: "Choose an FM1 app, review its exact package, and follow verified job progress through your private bench connection.",
-  other: {
-    "codex-preview": "development",
-  },
+  title: "FM-1 Forge",
+  description: "Install diagnostics, test FM-1 hardware, and configure your own firmware project with Codex.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

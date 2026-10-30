@@ -16,9 +16,9 @@ function assertReadable(theme){
   assert.ok(contrast(v['--button-ink'],v['--accent'])>=4.5,`Button label on ${theme.accent}`);
 }
 
-test('every FM1 preset has readable text, controls and accent labels',()=>{
-  assert.equal(PRESETS.length,12);
-  assert.equal(new Set(PRESETS.map(p=>p.id)).size,12);
+test('every FM-1 preset has readable text, controls and accent labels',()=>{
+  assert.equal(PRESETS.length,13);
+  assert.equal(new Set(PRESETS.map(p=>p.id)).size,13);
   for(const preset of PRESETS){const theme=resolveAppearance({preset:preset.id});assert.equal(theme.scheme,preset.scheme);assert.equal(theme.preset,preset.id);assertReadable(theme);}
 });
 

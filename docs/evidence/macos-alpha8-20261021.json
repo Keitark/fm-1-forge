@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "version": "3.4.0-alpha.8",
+  "supported_native_targets": [
+    "win32-x64",
+    "darwin-arm64",
+    "darwin-x64"
+  ],
+  "local_desktop_tests": {
+    "passed": 124,
+    "skip_reason": "POSIX execute-bit check requires native POSIX host",
+    "failed": 0,
+    "skipped": 1
+  },
+  "local_site_tests": {
+    "passed": 502,
+    "failed": 0,
+    "skipped": 0
+  },
+  "windows_package_files": 127,
+  "windows_native_addon_loaded_without_enumeration": true,
+  "windows_mcp_revisions": [
+    "2026-07-28",
+    "2025-11-25",
+    "2024-11-05"
+  ],
+  "macos_ci": "Native architecture-specific receipts are included in the matching CI artifacts; consult that run for acceptance.",
+  "physical_macos_device_acceptance": "not performed",
+  "firmware_written": false,
+  "existing_windows_installation": "retained alpha7",
+  "linux_supported": false
+}

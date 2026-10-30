@@ -14,6 +14,7 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 import time
 from typing import Any
@@ -31,8 +32,8 @@ MAX_METADATA_BYTES = 58_000
 ID = re.compile(r"[0-9a-f]{32}\Z")
 SHA = re.compile(r"[0-9a-f]{64}\Z")
 SLUG = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
-OPERATIONS = frozenset({"status", "catalog", "plan_app", "job", "switch_app", "official_updater"})
-JOB_OPERATIONS = frozenset({"plan_app", "switch_app", "official_updater"})
+OPERATIONS = frozenset({"status", "input_snapshot", "catalog", "plan_app", "job", "switch_app", "official_updater", "stock_sysex_update", "open_local_import"})
+JOB_OPERATIONS = frozenset({"plan_app", "switch_app", "official_updater", "stock_sysex_update"})
 JOB_STATUSES = frozenset({"queued", "running", "succeeded", "failed", "unknown"})
 SENSITIVE_KEY = re.compile(
     r"(^|_)(image|firmware|token|secret|credential|password|payload|request|raw|"
@@ -95,16 +96,21 @@ def validate_token(token: Any) -> str:
     return token
 
 
-def _no_symlinks(path: Path) -> None:
+def _no_symlinks(path: Path) -> os.stat_result | None:
     # Windows junctions/reparse points are also rejected when Python exposes
-    # FILE_ATTRIBUTE_REPARSE_POINT through stat(). No private state is followed.
+    # FILE_ATTRIBUTE_REPARSE_POINT through lstat(). Inspect each path component
+    # on every call, reusing only this call's verified leaf metadata.
+    leaf_info = None
     for candidate in (path, *path.parents):
         try:
             info = candidate.lstat()
         except FileNotFoundError:
             continue
-        if candidate.is_symlink() or getattr(info, "st_file_attributes", 0) & 0x400:
+        if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
             raise RelayError("unsafe_private_path")
+        if candidate == path:
+            leaf_info = info
+    return leaf_info
 
 
 def load_token(env_name: str, token_file: Path | None) -> str:
@@ -163,6 +169,7 @@ def normalize_task(value: Any) -> dict[str, Any]:
                 {"catalog_id", "entry_method", "expected_sha256", "approval_expires"}
                 if operation == "switch_app" else
                 {"expected_sha256", "approval_expires"} if operation == "official_updater" else
+                {'expected_sha256', 'expected_stock_pair', 'endpoint_review_id', 'approval_expires'} if operation == 'stock_sysex_update' else
                 {"job_id"} if operation == "job" else set())
     if set(args) != expected:
         raise RelayError("invalid_task")
@@ -180,6 +187,14 @@ def normalize_task(value: Any) -> dict[str, Any]:
     if "approval_expires" in args and (type(args["approval_expires"]) is not int
                                        or not 0 < args["approval_expires"] < 2 ** 53):
         raise RelayError("invalid_task")
+    if operation == 'stock_sysex_update':
+        from update_mode import validate_stock_pair
+        try:
+            validate_stock_pair(args['expected_stock_pair'])
+        except ValueError:
+            raise RelayError('invalid_task') from None
+        if args['endpoint_review_id'] != value['id']:
+            raise RelayError('invalid_task')
     return {"id": value["id"], "operation": operation, "arguments": dict(args)}
 
 
@@ -195,6 +210,11 @@ def metadata_only(value: Any, secrets: tuple[str, ...] = (), depth: int = 0,
                     any(secret in key for secret in secrets)):
                 continue
             compact = re.sub(r"[^a-z0-9]", "", key.lower())
+            if key == 'firmware' and item in ('FM1-FORGE/1', 'MOD-EDITOR/1', None):
+                # A normalized protocol identity is descriptive metadata. All
+                # other firmware/payload fields retain the existing scrubber.
+                result[key] = item
+                continue
             # Inventory can contain a unit's persistent physical identity even
             # when the value is plain text rather than a detectable local path.
             # Match whole normalized field names so port/model/readiness data
@@ -224,7 +244,7 @@ def metadata_only(value: Any, secrets: tuple[str, ...] = (), depth: int = 0,
                     compact[key] = result[key]
             if type(result.get("engine")) is dict:
                 compact["engine"] = {key: field for key, field in result["engine"].items()
-                                     if key in {"active", "blocked_unknown", "updater_handoff", "storage_fault", "jobs"}
+                                     if key in {"active", "blocked_unknown", "updater_handoff", "stock_baseline_invalidated", "storage_fault", "jobs"}
                                      and len(json_bytes(field)) <= 4096}
             return compact
         return result
@@ -350,7 +370,7 @@ def atomic_json(path: Path, value: Any) -> None:
 
 class Relay:
     def __init__(self, state_dir: Path, site: Any, bridge: Any,
-                 *, allow_switch: bool = False, allow_official_update: bool = False,
+                 *, allow_switch: bool = False, allow_official_update: bool = False, allow_stock_update: bool = False,
                  secrets: tuple[str, ...] = ()):
         state_dir = Path(state_dir).absolute()
         _no_symlinks(state_dir)
@@ -362,6 +382,7 @@ class Relay:
         self.site, self.bridge = site, bridge
         self.allow_switch, self.secrets = bool(allow_switch), secrets
         self.allow_official_update = bool(allow_official_update)
+        self.allow_stock_update = bool(allow_stock_update)
         self.tasks_dir = state_dir / "tasks"
         try:
             _no_symlinks(self.tasks_dir)
@@ -386,11 +407,11 @@ class Relay:
 
     def _load(self, identifier: str) -> dict[str, Any] | None:
         path = self._path(identifier)
-        _no_symlinks(path)
-        if not path.exists():
+        info = _no_symlinks(path)
+        if info is None:
             return None
         try:
-            if path.stat().st_size > MAX_JSON_BYTES:
+            if info.st_size > MAX_JSON_BYTES:
                 raise RelayError("invalid_relay_state")
             record = parse_json(path.read_bytes())
             if (type(record) is not dict or set(record) != {"version", "task", "phase", "result", "reported"}
@@ -423,6 +444,20 @@ class Relay:
             raise RelayError("invalid_bridge_response")
         return metadata_only(data, self.secrets)
 
+    def _local_import_receipt(self, method: str, identifier: str) -> dict[str, Any]:
+        route = "/v1/library/open" + ("/" + identifier if method == "GET" else "")
+        data = self._bridge_data(method, route, {"id": identifier} if method == "POST" else None)
+        # A browser launch receipt cannot grant another operation or expose the
+        # local URL. Keep its contract separate from bridge firmware job status.
+        if (data.get("id") != identifier or type(data.get("opened")) is not bool
+                or data.get("device_io") is not False
+                or type(data.get("expires_in")) is not int
+                or not 0 <= data["expires_in"] <= 300
+                or ("error" in data and (not isinstance(data["error"], str)
+                    or not re.fullmatch(r"[a-z_]{1,80}", data["error"])))):
+            raise RelayError("invalid_bridge_response")
+        return {key: data[key] for key in ("id", "opened", "device_io", "expires_in", "error") if key in data}
+
     def _execute(self, task: dict[str, Any], *, resumed: bool) -> dict[str, Any]:
         identifier, operation, args = task["id"], task["operation"], task["arguments"]
         result = {"id": identifier, "status": "succeeded"}
@@ -430,7 +465,30 @@ class Relay:
             return {"id": identifier, "status": "failed", "error": "switch_disabled"}
         if operation == "official_updater" and not resumed and not self.allow_official_update:
             return {"id": identifier, "status": "failed", "error": "official_update_disabled"}
+        if operation == 'stock_sysex_update' and not resumed and not self.allow_stock_update:
+            return {'id': identifier, 'status': 'failed', 'error': 'stock_update_disabled'}
         try:
+            if operation == "open_local_import":
+                if resumed:
+                    try:
+                        result["data"] = self._local_import_receipt("GET", identifier)
+                    except RelayError:
+                        return {"id": identifier, "status": "unknown", "error": "local_import_outcome_unknown"}
+                else:
+                    try:
+                        result["data"] = self._local_import_receipt("POST", identifier)
+                    except RelayError as error:
+                        if error.status is not None and error.status not in {301, 302, 303, 307, 308}:
+                            return {"id": identifier, "status": "failed", "error": "bridge_request_rejected"}
+                        # A timeout, redirect or malformed reply never justifies
+                        # opening another window. Inspect the first launch ID.
+                        try:
+                            result["data"] = self._local_import_receipt("GET", identifier)
+                        except RelayError:
+                            return {"id": identifier, "status": "unknown", "error": "local_import_outcome_unknown"}
+                if result["data"]["opened"] is not True or "error" in result["data"]:
+                    result["status"] = "unknown" if result["data"].get("error") == "local_import_launch_unknown" else "failed"
+                return result
             if operation in JOB_OPERATIONS:
                 # Once executing is committed, even a crash immediately before
                 # POST must be treated as ambiguous. Resume uses GET exclusively.
@@ -440,7 +498,7 @@ class Relay:
                     except RelayError:
                         return {"id": identifier, "status": "unknown", "error": "bridge_outcome_unknown"}
                 else:
-                    if operation in {"switch_app", "official_updater"} and time.time() >= args["approval_expires"]:
+                    if operation in {"switch_app", "official_updater", "stock_sysex_update"} and time.time() >= args["approval_expires"]:
                         return {"id": identifier, "status": "failed", "error": "approval_expired"}
                     if operation == "switch_app":
                         catalog = self._bridge_data("GET", "/v1/catalog")
@@ -456,13 +514,16 @@ class Relay:
                         if matches[0].get("ready") is not True:
                             return {"id": identifier, "status": "failed", "error": "catalog_not_ready"}
                     body = {"id": identifier, "operation": operation}
-                    if operation == "official_updater":
+                    if operation in {"official_updater", "stock_sysex_update"}:
                         body["expected_sha256"] = args["expected_sha256"]
                     else:
                         body["catalog_id"] = args["catalog_id"]
                     if operation == "switch_app":
                         body["entry_method"] = args["entry_method"]
-                    if operation in {"switch_app", "official_updater"}:
+                    if operation == 'stock_sysex_update':
+                        for key in ('expected_stock_pair', 'endpoint_review_id', 'approval_expires'):
+                            body[key] = args[key]
+                    if operation in {"switch_app", "official_updater", "stock_sysex_update"}:
                         if time.time() >= args["approval_expires"]:
                             return {"id": identifier, "status": "failed", "error": "approval_expired"}
                     try:
@@ -550,7 +611,8 @@ class Relay:
 
     def run_once(self) -> int:
         self.site.request("POST", "/relay/heartbeat", {"allow_switch": self.allow_switch,
-            "allow_official_update": self.allow_official_update})
+            "allow_official_update": self.allow_official_update,
+            **({'allow_stock_update': True} if self.allow_stock_update else {})})
         # Recover before asking for more work, including a lost Site result ack.
         for path in sorted(self.tasks_dir.glob("*.json")):
             record = self._load(path.stem)
@@ -581,6 +643,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bridge-token-file", type=Path)
     parser.add_argument("--allow-switch", action="store_true")
     parser.add_argument("--allow-official-update", action="store_true")
+    parser.add_argument('--allow-stock-update', action='store_true')
     parser.add_argument("--poll-seconds", type=float, default=3)
     parser.add_argument("--once", action="store_true", help="Run one poll cycle, then exit")
     args = parser.parse_args(argv)
@@ -598,6 +661,7 @@ def main(argv: list[str] | None = None) -> int:
         bridge = JsonClient(bridge_origin, {"Authorization": "Bearer " + bridge_token})
         relay = Relay(args.state_dir, site, bridge, allow_switch=args.allow_switch,
                       allow_official_update=args.allow_official_update,
+                      allow_stock_update=args.allow_stock_update,
                       secrets=(relay_token, sites_token, bridge_token))
         while True:
             try:

@@ -6,9 +6,9 @@ import { RESOURCE_URI } from '../lib/fm1-contract.mjs';
 import { database, connect, cacheInventory, digest } from './d1.mjs';
 
 for(const [era,revision] of [['modern','2026-07-28'],['legacy','2025-11-25']]){
-  test('real SDK '+era+' client discovers and uses the same private FM1 plugin',async()=>{
+  test('real SDK '+era+' client discovers and uses the same private FM-1 plugin',async()=>{
     const env=database(),requests=[];
-    const client=new Client({name:'FM1 compatibility test',version:'2.0.0'},{capabilities:{},
+    const client=new Client({name:'FM-1 compatibility test',version:'2.0.0'},{capabilities:{},
       versionNegotiation:{mode:era==='modern'?{pin:revision}:'legacy'},supportedProtocolVersions:[revision]});
     const transport=new StreamableHTTPClientTransport(new URL('https://fm1.test/mcp'),{
       requestInit:{headers:{'oai-authenticated-user-id':'alice'}},
@@ -19,23 +19,31 @@ for(const [era,revision] of [['modern','2026-07-28'],['legacy','2025-11-25']]){
       assert.equal(client.getProtocolEra(),era);
       assert.equal(client.getNegotiatedProtocolVersion(),revision);
       const tools=await client.listTools();
-      assert.equal(tools.tools.length,10);
+      assert.equal(tools.tools.length,22);
       const panel=tools.tools.find(tool=>tool.name==='open_fm1_library');
-      assert.equal(RESOURCE_URI,'ui://fm1/device-panel-v6.html');
+      assert.equal(RESOURCE_URI,'ui://fm1/forge-panel-v23.html');
       assert.equal(panel._meta.ui.resourceUri,RESOURCE_URI);
-      assert.ok(tools.tools.filter(tool=>tool._meta?.ui?.resourceUri).every(tool=>tool._meta.ui.resourceUri===RESOURCE_URI));
-      assert.deepEqual(panel._meta['openai/ui'].entrypoints,[{type:'global'},{type:'thread'}]);
+      const boundTools=tools.tools.filter(tool=>tool._meta?.ui?.resourceUri);
+      assert.deepEqual(boundTools.map(tool=>tool.name).sort(),['configure_fm1_project','open_fm1_library','open_fm1_project']);
+      assert.ok(boundTools.every(tool=>tool._meta.ui.resourceUri===RESOURCE_URI));
+      assert.deepEqual(panel._meta['openai/ui'].entrypoints.map(item=>item.type),['global','thread']);
+      assert.equal(panel._meta['openai/ui'].entrypoints[0].quickAction.target.name,'configure_fm1_project');
       assert.deepEqual(tools.tools.find(tool=>tool.name==='confirm_fm1_switch')._meta.ui.visibility,['app']);
       assert.deepEqual(tools.tools.find(tool=>tool.name==='confirm_fm1_official_update')._meta.ui.visibility,['app']);
+      const localImport=tools.tools.find(tool=>tool.name==='open_fm1_local_import');
+      assert.deepEqual(localImport._meta.ui.visibility,['app']);
+      assert.equal(localImport.annotations.readOnlyHint,false);
+      assert.equal(localImport.annotations.destructiveHint,false);
+      assert.deepEqual(localImport.inputSchema.properties,{});
       const resource=await client.readResource({uri:RESOURCE_URI});
       assert.equal(resource.contents[0].mimeType,'text/html;profile=mcp-app');
       assert.match(resource.contents[0].text,/FM1PluginHost/);
-      for(const uri of ['ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html']){
+      for(const uri of ['ui://fm1/forge-panel-v19.html','ui://fm1/forge-panel-v18.html','ui://fm1/forge-panel-v17.html','ui://fm1/forge-panel-v16.html','ui://fm1/forge-panel-v15.html','ui://fm1/forge-panel-v14.html','ui://fm1/forge-panel-v13.html','ui://fm1/forge-panel-v12.html','ui://fm1/forge-panel-v11.html','ui://fm1/forge-panel-v10.html','ui://fm1/forge-panel-v9.html','ui://fm1/forge-panel-v8.html','ui://fm1/forge-panel-v7.html','ui://fm1/forge-panel-v6.html','ui://fm1/forge-panel-v5.html','ui://fm1/forge-panel-v4.html','ui://fm1/forge-panel-v3.html','ui://fm1/forge-panel-v2.html','ui://fm1/forge-panel-v1.html','ui://fm1/app-library-v1.html','ui://fm1/device-panel-v2.html','ui://fm1/device-panel-v3.html','ui://fm1/device-panel-v4.html','ui://fm1/device-panel-v5.html','ui://fm1/device-panel-v6.html']){
         const previous=await client.readResource({uri});
         assert.deepEqual(previous.contents,[{...resource.contents[0],uri}]);
       }
       const library=await client.callTool({name:'open_fm1_library',arguments:{}});
-      assert.equal(library.structuredContent.profiles.length,5);
+      assert.equal(library.structuredContent.profiles.length,6);
       assert.equal(library.structuredContent.relay.connected,false);
       assert.equal(env.DB.sqlite.prepare('SELECT count(*) AS n FROM relay_tasks').get().n,0);
       const invalid=await client.callTool({name:'plan_fm1_app',arguments:{catalog_id:'../bad'}});
@@ -44,6 +52,16 @@ for(const [era,revision] of [['modern','2026-07-28'],['legacy','2025-11-25']]){
       assert.equal(requests.some(r=>r.method==='server/discover'),era==='modern');
       assert.equal(requests.some(r=>r.method==='initialize'),era==='legacy');
       connect(env,false,true);
+      const importer=await client.callTool({name:'open_fm1_local_import',arguments:{}});
+      assert.match(importer.structuredContent.request_id,/^[a-f0-9]{32}$/);
+      assert.equal(importer.structuredContent.delivery,'pending');
+      assert.equal(importer.structuredContent.job_id,undefined);
+      const launch=env.DB.sqlite.prepare("SELECT * FROM relay_tasks WHERE operation='open_local_import'").get();
+      assert.equal(launch.id,importer.structuredContent.request_id);
+      assert.equal(launch.arguments,'{}');
+      const unsafeImporter=await client.callTool({name:'open_fm1_local_import',arguments:{path:'F:\\private'}});
+      assert.equal(unsafeImporter.isError,true);
+      assert.equal(env.DB.sqlite.prepare("SELECT count(*) AS n FROM relay_tasks WHERE operation='open_local_import'").get().n,1);
       cacheInventory(env,'alice',{device:{official_update:{configured:true,available:true,sha256:digest},
         update_mode:{mode:'sysex',app_entry_method:null,official_available:true}}});
       const review=await client.callTool({name:'prepare_fm1_official_update',arguments:{}});
@@ -59,7 +77,7 @@ for(const [era,revision] of [['modern','2026-07-28'],['legacy','2025-11-25']]){
 const meta=(revision='2026-07-28')=>({
   'io.modelcontextprotocol/protocolVersion':revision,
   'io.modelcontextprotocol/clientCapabilities':{},
-  'io.modelcontextprotocol/clientInfo':{name:'FM1 wire test',version:'2.0.0'},
+  'io.modelcontextprotocol/clientInfo':{name:'FM-1 wire test',version:'2.0.0'},
 });
 async function modern(method,params={},extraHeaders={}){
   const response=await handleFm1Request(new Request('https://fm1.test/mcp',{method:'POST',
@@ -74,7 +92,7 @@ test('modern discovery has typed result, identity and private cache semantics',a
   const {status,value}=await modern('server/discover',{_meta:meta()});
   assert.equal(status,200);assert.equal(value.result.resultType,'complete');
   assert.ok(value.result.supportedVersions.includes('2026-07-28'));
-  assert.equal(value.result._meta['io.modelcontextprotocol/serverInfo'].version,'2.2.0');
+  assert.equal(value.result._meta['io.modelcontextprotocol/serverInfo'].version,'3.3.0');
   assert.equal(value.result.ttlMs,0);assert.equal(value.result.cacheScope,'private');
 });
 test('modern missing envelope, unsupported revision and mismatched routing header reject before work',async()=>{

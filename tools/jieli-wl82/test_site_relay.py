@@ -4,11 +4,13 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import uuid
@@ -37,6 +39,8 @@ class FakeBridge:
         self.post_error = None
         self.get_error = None
         self.jobs = {}
+        self.local_imports = {}
+        self.local_import_fields = {}
         self.post_status = "queued"
         self.post_fields = {}
         self.metadata = {"engine": {"blocked_unknown": True}, "device": {"device_io": False}}
@@ -49,12 +53,24 @@ class FakeBridge:
         if self.hook is not None:
             self.hook(method, route, body)
         if method == "POST":
+            if route == "/v1/library/open":
+                self.local_imports[body["id"]] = {"ok": True, "data": {
+                    "id": body["id"], "opened": True, "device_io": False,
+                    "expires_in": 300, **self.local_import_fields}}
+                if self.post_error is not None:
+                    raise self.post_error
+                return self.local_imports[body["id"]]
             self.jobs[body["id"]] = envelope(body["id"], self.post_status, **self.post_fields)
             if self.post_error is not None:
                 raise self.post_error
             return self.jobs[body["id"]]
         if self.get_error is not None:
             raise self.get_error
+        if route.startswith("/v1/library/open/"):
+            identifier = route.rsplit("/", 1)[-1]
+            if identifier not in self.local_imports:
+                raise relay.RelayError("http_rejected", 404)
+            return self.local_imports[identifier]
         if route.startswith("/v1/jobs/"):
             identifier = route.rsplit("/", 1)[-1]
             if identifier not in self.jobs:
@@ -149,12 +165,36 @@ def metadata_at_budget(sample, max_bytes=relay.MAX_METADATA_BYTES):
 
 
 class ValidationTests(unittest.TestCase):
+    def test_input_snapshot_accepts_no_cloud_port_or_command_arguments(self):
+        self.assertEqual(relay.normalize_task(task('input_snapshot'))['arguments'], {})
+        self.assertNotIn('input_snapshot', relay.JOB_OPERATIONS)
+        for arguments in ({'port': 'COM4'}, {'command': 'FORGE STOP'}, {'path': '/v1/status'},
+                          {'firmware': 'FM1-FORGE/1'}):
+            with self.subTest(arguments=arguments), self.assertRaises(relay.RelayError):
+                relay.normalize_task(task('input_snapshot', **arguments))
+
+    def test_normalized_firmware_identity_and_volume_value_survive_metadata_scrub(self):
+        value = {'firmware': 'FM1-FORGE/1', 'volume': {'value': 501, 'gain': 62},
+                 'keys': {'pressed': '0000000000000002'}, 'raw': 'private bytes',
+                 'firmware_image': 'private bytes'}
+        result = relay.metadata_only(value)
+        self.assertEqual(result['firmware'], 'FM1-FORGE/1')
+        self.assertEqual(result['volume']['value'], 501)
+        self.assertNotIn('raw', result)
+        self.assertNotIn('firmware_image', result)
+        self.assertEqual(relay.metadata_only({'firmware': 'MOD-EDITOR/1'})['firmware'], 'MOD-EDITOR/1')
+        self.assertIsNone(relay.metadata_only({'firmware': None})['firmware'])
+        self.assertNotIn('firmware', relay.metadata_only({'firmware': 'private firmware blob'}))
+
     def test_exact_task_schema_rejects_device_or_arbitrary_paths(self):
         bad = [task("reset"), task("read_firmware"), task("status", url="https://other.example"),
                task("status", path="/v1/baseline"), task("plan_app", catalog_id="../escape"),
                task("switch_app", catalog_id="nes-test", entry_method="guess"),
                task("switch_app", catalog_id="nes-test"), task("job", job_id="../escape"),
                task("catalog", command="rm"), task("status", identifier="A" * 32),
+               task("open_local_import", url="https://other.example"),
+               task("open_local_import", path="F:\\private"),
+               task("open_local_import", bundle={"image": "raw"}),
                dict(task(), payload={}), dict(task(), arguments=[])]
         for value in bad:
             with self.subTest(value=value), self.assertRaises(relay.RelayError):
@@ -256,7 +296,104 @@ class ValidationTests(unittest.TestCase):
                 self.assertLess(len(relay.json_bytes(projected)), relay.MAX_METADATA_BYTES)
 
 
+class PrivatePathTests(unittest.TestCase):
+    def setUp(self):
+        self.path = Path("synthetic-state/tasks/" + "a" * 32 + ".json").absolute()
+        self.components = (self.path, *self.path.parents)
+        self.leaf_info = SimpleNamespace(st_mode=stat.S_IFREG | 0o600,
+                                        st_size=128, st_file_attributes=0)
+        self.parent_info = SimpleNamespace(st_mode=stat.S_IFDIR | 0o700,
+                                          st_size=0, st_file_attributes=0)
+
+    def info(self, candidate):
+        return self.leaf_info if candidate == self.path else self.parent_info
+
+    def test_each_component_is_checked_once_and_verified_leaf_metadata_is_returned(self):
+        with patch.object(Path, "lstat", autospec=True, side_effect=self.info) as checked, \
+                patch.object(Path, "is_symlink", side_effect=AssertionError("second stat")), \
+                patch.object(Path, "stat", side_effect=AssertionError("follows path")):
+            self.assertIs(relay._no_symlinks(self.path), self.leaf_info)
+        self.assertEqual([call.args[0] for call in checked.call_args_list], list(self.components))
+
+    def test_symlink_mode_and_windows_reparse_attributes_are_rejected_on_any_component(self):
+        for unsafe in self.components:
+            for mode, attributes in ((stat.S_IFLNK, 0), (stat.S_IFDIR, 0x400)):
+                with self.subTest(component=unsafe, mode=mode, attributes=attributes):
+                    def info(candidate):
+                        return (SimpleNamespace(st_mode=mode, st_file_attributes=attributes)
+                                if candidate == unsafe else self.info(candidate))
+                    with patch.object(Path, "lstat", autospec=True, side_effect=info), \
+                            self.assertRaisesRegex(relay.RelayError, "unsafe_private_path"):
+                        relay._no_symlinks(self.path)
+
+    def test_missing_leaf_still_checks_all_ancestors(self):
+        def missing_leaf(candidate):
+            if candidate == self.path:
+                raise FileNotFoundError
+            return self.info(candidate)
+        with patch.object(Path, "lstat", autospec=True, side_effect=missing_leaf) as checked:
+            self.assertIsNone(relay._no_symlinks(self.path))
+        self.assertEqual([call.args[0] for call in checked.call_args_list], list(self.components))
+        def unsafe_parent(candidate):
+            if candidate == self.path:
+                raise FileNotFoundError
+            if candidate == self.path.parent:
+                return SimpleNamespace(st_mode=stat.S_IFDIR, st_file_attributes=0x400)
+            return self.info(candidate)
+        with patch.object(Path, "lstat", autospec=True, side_effect=unsafe_parent), \
+                self.assertRaisesRegex(relay.RelayError, "unsafe_private_path"):
+            relay._no_symlinks(self.path)
+
+    def test_path_metadata_is_not_cached_between_reads(self):
+        with patch.object(Path, "lstat", autospec=True, side_effect=self.info):
+            self.assertIs(relay._no_symlinks(self.path), self.leaf_info)
+        def changed_parent(candidate):
+            if candidate == self.path.parent:
+                return SimpleNamespace(st_mode=stat.S_IFLNK, st_file_attributes=0)
+            return self.info(candidate)
+        with patch.object(Path, "lstat", autospec=True, side_effect=changed_parent), \
+                self.assertRaisesRegex(relay.RelayError, "unsafe_private_path"):
+            relay._no_symlinks(self.path)
+
+
 class RelayTests(unittest.TestCase):
+    def stock_task(self, expires=9999999999):
+        value = task('stock_sysex_update', expected_sha256=EXPECTED_SHA,
+                     expected_stock_pair={'inputName': 'FM-1', 'outputName': 'FM-1'}, approval_expires=expires)
+        value['arguments']['endpoint_review_id'] = value['id']
+        return value
+
+    def test_stock_update_is_independently_disabled_and_invalid_routes_are_rejected(self):
+        value = self.stock_task()
+        self.assertEqual(self.relay.handle_task(value)['error'], 'stock_update_disabled')
+        self.assertFalse(self.bridge.calls)
+        value = self.stock_task()
+        value['arguments']['expected_stock_pair']['inputName'] = 'Another synth'
+        with self.assertRaises(relay.RelayError):
+            self.relay.handle_task(value)
+
+    def test_stock_one_use_expiry_and_lost_reply_never_retry_original_write(self):
+        self.restart(allow_stock_update=True)
+        expired = self.stock_task(expires=1)
+        self.assertEqual(self.relay.handle_task(expired)['error'], 'approval_expired')
+        self.assertFalse(self.bridge.calls)
+        value = self.stock_task()
+        self.bridge.post_error = relay.RelayError('network_unavailable')
+        first = self.relay.handle_task(value)
+        self.assertEqual(first['data']['id'], value['id'])
+        posts = [entry for entry in self.bridge.calls if entry[0] == 'POST']
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0][2]['expected_stock_pair'], value['arguments']['expected_stock_pair'])
+        self.restart()
+        self.assertEqual(self.relay.handle_task(value), first)
+        self.assertEqual(len([entry for entry in self.bridge.calls if entry[0] == 'POST']), 1)
+
+    def test_stock_heartbeat_capability_can_be_enabled_without_custom_switch_or_vendor_handoff(self):
+        self.restart(allow_stock_update=True)
+        self.relay.run_once()
+        self.assertEqual(self.site.calls[0], ('POST', '/relay/heartbeat', {
+            'allow_switch': False, 'allow_official_update': False, 'allow_stock_update': True}))
+
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.root = Path(self.folder.name) / "relay-state"
@@ -292,6 +429,109 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(self.bridge.calls, [("GET", "/v1/status", None), ("GET", "/v1/catalog", None),
                                             ("GET", "/v1/jobs/" + job_id, None)])
         self.assertEqual(result["data"]["status"], "unknown")
+
+    def test_input_snapshot_uses_fixed_get_and_saved_read_only_result(self):
+        value = task('input_snapshot')
+        self.bridge.metadata = {'state': 'unsupported', 'firmware': 'MOD-EDITOR/1',
+            'port': 'COM4', 'capabilities': {'keys': False, 'encoders': False, 'volume': True},
+            'keys': None, 'encoders': None,
+            'volume': {'value': 501, 'gain': 62, 'valid': True, 'samples': 5, 'errors': 0},
+            'observation': {'started_at': 100, 'completed_at': 101},
+            'message': 'This firmware exposes volume only; keys and encoders require Forge diagnostics.'}
+        first = self.relay.handle_task(value)
+        self.assertEqual(first['status'], 'succeeded')
+        self.assertEqual(first['data'], self.bridge.metadata)
+        self.assertEqual(self.bridge.calls, [('GET', '/v1/input_snapshot', None)])
+        self.assertEqual(self.relay.handle_task(value), first)
+        self.restart()
+        self.assertEqual(self.relay.handle_task(value), first)
+        self.assertEqual(len(self.bridge.calls), 1)
+        self.assertFalse(self.bridge.jobs)
+
+    def test_local_import_launch_is_saved_before_fixed_post_and_cached_across_restart(self):
+        value = task("open_local_import")
+        def inspect(method, route, body):
+            self.assertEqual(self.relay._load(value["id"])["phase"], "executing")
+            self.assertEqual((method, route, body), ("POST", "/v1/library/open", {"id": value["id"]}))
+        self.bridge.hook = inspect
+        first = self.relay.handle_task(value)
+        self.assertEqual(first, {"id": value["id"], "status": "succeeded", "data": {
+            "id": value["id"], "opened": True, "device_io": False, "expires_in": 300}})
+        self.assertEqual(self.relay.handle_task(value), first)
+        self.restart()
+        self.assertEqual(self.relay.handle_task(value), first)
+        self.assertEqual(len(self.bridge.calls), 1)
+        self.assertFalse(self.bridge.jobs)
+
+    def test_local_import_lost_reply_and_redirect_only_inspect_original_launch(self):
+        for error in (relay.RelayError("network_unavailable"), relay.RelayError("redirect_rejected", 302)):
+            with self.subTest(error=error.label):
+                self.bridge.calls.clear()
+                value = task("open_local_import")
+                self.bridge.post_error = error
+                result = self.relay.handle_task(value)
+                self.assertTrue(result["data"]["opened"])
+                self.assertEqual(self.bridge.calls, [("POST", "/v1/library/open", {"id": value["id"]}),
+                    ("GET", "/v1/library/open/" + value["id"], None)])
+
+    def test_local_import_missing_receipt_is_unknown_and_never_relaunches(self):
+        value = task("open_local_import")
+        self.bridge.post_error = relay.RelayError("network_unavailable")
+        self.bridge.get_error = relay.RelayError("http_rejected", 404)
+        result = self.relay.handle_task(value)
+        self.assertEqual(result, {"id": value["id"], "status": "unknown", "error": "local_import_outcome_unknown"})
+        self.restart()
+        self.assertEqual(self.relay.handle_task(value), result)
+        self.assertEqual(len(self.bridge.calls), 2)
+
+    def test_executing_local_import_recovers_by_get_only_even_without_receipt(self):
+        value = task("open_local_import")
+        record = self.relay._prepare(value)
+        record["phase"] = "executing"
+        relay.atomic_json(self.relay._path(value["id"]), record)
+        self.restart()
+        result = self.relay.handle_task(value)
+        self.assertEqual(result["status"], "unknown")
+        self.assertEqual(self.bridge.calls, [("GET", "/v1/library/open/" + value["id"], None)])
+
+    def test_local_import_receipt_is_metadata_allowlist_and_has_no_device_io(self):
+        self.bridge.local_import_fields = {"url": "http://127.0.0.1:9770/#private-token", "path": "F:\\private",
+            "token": BRIDGE_TOKEN, "image": "A" * 200, "request": {"payload": "bytes"}, "extra": "private"}
+        value = task("open_local_import")
+        result = self.relay.handle_task(value)
+        self.assertEqual(set(result["data"]), {"id", "opened", "device_io", "expires_in"})
+        for private in ("private", BRIDGE_TOKEN, "http://", "image", "payload"):
+            self.assertNotIn(private, self.relay._path(value["id"]).read_text())
+
+    def test_invalid_local_import_receipt_cannot_report_success(self):
+        for fields in ({"id": "f" * 32}, {"opened": "yes"}, {"device_io": True},
+                       {"expires_in": True}, {"expires_in": 301}, {"error": "arbitrary exception details"}):
+            with self.subTest(fields=fields):
+                self.bridge.local_import_fields = fields
+                result = self.relay.handle_task(task("open_local_import"))
+                self.assertEqual(result["status"], "unknown")
+        self.assertTrue(all(route.startswith("/v1/library/open") for _, route, _ in self.bridge.calls))
+
+    def test_local_import_known_failed_unknown_and_expired_receipts_remain_distinct(self):
+        for error, opened, status in (("local_import_launch_failed", False, "failed"),
+                ("local_import_launch_unknown", False, "unknown"), ("local_import_session_expired", True, "failed")):
+            with self.subTest(error=error):
+                self.bridge.local_import_fields = {"opened": opened, "error": error}
+                result = self.relay.handle_task(task("open_local_import"))
+                self.assertEqual(result["status"], status)
+                self.assertEqual(result["data"]["error"], error)
+
+    def test_catalog_set_metadata_survives_projection_without_local_package_material(self):
+        member = {"id": "nes-test", "profile": "nes", "title": "Local game", "variant": "personal",
+                  "sha256": EXPECTED_SHA, "image": "A" * 200, "path": "F:\\private\\game.json"}
+        self.bridge.catalog["sets"] = [{"id": "e" * 32, "name": "My apps", "members": [member],
+            "imported": 123, "device_io": False, "session_token": BRIDGE_TOKEN}]
+        result = self.relay.handle_task(task("catalog"))
+        self.assertEqual(result["data"]["apps"], self.bridge.catalog["apps"])
+        local_set = result["data"]["sets"][0]
+        self.assertEqual(local_set["name"], "My apps")
+        self.assertEqual(local_set["members"], [{key: value for key, value in member.items() if key not in {"image", "path"}}])
+        self.assertNotIn("session_token", local_set)
 
     def test_normalized_task_is_persisted_as_executing_before_submission(self):
         value = task("plan_app", catalog_id="nes-test")
@@ -881,6 +1121,39 @@ class RelayTests(unittest.TestCase):
         with self.assertRaisesRegex(relay.RelayError, "invalid_relay_state"):
             relay.Relay(self.root, self.site, self.bridge)
 
+    def test_reported_journal_is_validated_again_on_every_poll(self):
+        value = task("plan_app", catalog_id="nes-test")
+        self.site.tasks = [value]
+        self.relay.run_once()
+        self.assertTrue(self.relay._load(value["id"])["reported"])
+        self.bridge.calls.clear()
+        self.relay._path(value["id"]).write_text('{"broken":true}')
+        with self.assertRaisesRegex(relay.RelayError, "invalid_relay_state"):
+            self.relay.run_once()
+        self.assertFalse(self.bridge.calls)
+
+    def test_load_reuses_verified_leaf_stat_without_following_it_again(self):
+        value = task("plan_app", catalog_id="nes-test")
+        self.relay.handle_task(value)
+        path = self.relay._path(value["id"])
+        calls = []
+        def counted_lstat(candidate):
+            calls.append(candidate)
+            return os.lstat(candidate)
+        with patch.object(Path, "lstat", autospec=True, side_effect=counted_lstat), \
+                patch.object(Path, "exists", side_effect=AssertionError("extra existence stat")), \
+                patch.object(Path, "stat", side_effect=AssertionError("follows path")):
+            self.assertEqual(self.relay._load(value["id"])["task"], value)
+        self.assertEqual(calls, [path, *path.parents])
+
+    def test_oversized_journal_is_rejected_before_reading_contents(self):
+        value = task("plan_app", catalog_id="nes-test")
+        self.relay.handle_task(value)
+        self.relay._path(value["id"]).write_bytes(b" " * (relay.MAX_JSON_BYTES + 1))
+        with patch.object(Path, "read_bytes", side_effect=AssertionError("reads oversized state")), \
+                self.assertRaisesRegex(relay.RelayError, "invalid_relay_state"):
+            self.relay._load(value["id"])
+
     def test_another_process_cannot_own_same_state(self):
         script = ('import sys\nfrom pathlib import Path\nimport site_relay as r\n'
                   'try:\n x=r.Relay(Path(sys.argv[1]),None,None)\n'
@@ -912,6 +1185,9 @@ class HttpTransportTests(unittest.TestCase):
                     self.send_header("Location", "/credential-sink")
                 self.end_headers()
                 self.wfile.write(owner.payload)
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                self.do_GET()
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -940,6 +1216,13 @@ class HttpTransportTests(unittest.TestCase):
         with self.assertRaisesRegex(relay.RelayError, "redirect_rejected"):
             self.client.request("GET", "/v1/status")
         self.assertEqual(len(self.requests), 1)
+
+    def test_local_import_post_redirect_never_forwards_auth_or_launch_to_target(self):
+        self.code = 302
+        with self.assertRaisesRegex(relay.RelayError, "redirect_rejected"):
+            self.client.request("POST", "/v1/library/open", {"id": "a" * 32})
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(self.requests[0][0], "/v1/library/open")
 
     def test_response_bounds_type_duplicate_keys_and_nonfinite_numbers(self):
         for payload, content_type in ((b"x" * (relay.MAX_JSON_BYTES + 1), "application/json"),

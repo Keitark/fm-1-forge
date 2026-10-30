@@ -25,7 +25,7 @@ jobs:
       - name: Python contracts
         run: python -m unittest discover -s tools/jieli-wl82 -p 'test_*.py'
       - name: Browser store contracts
-        run: node --test tools/jieli-wl82/test_remote_store.cjs
+        run: node --test tools/jieli-wl82/test_remote_store.cjs tools/jieli-wl82/test_remote_library_ui.cjs
 
   site:
     name: Site contracts and build
@@ -47,3 +47,217 @@ jobs:
         run: npx --no-install tsc --noEmit
       - name: Build Site
         run: npm run build --prefix site
+
+  desktop:
+    name: Windows native package and updater contracts
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Preserve source bytes across native builds
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.22.2'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install pinned dependencies
+        run: |
+          npm ci --prefix site
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm ci --ignore-scripts --prefix tools/jieli-wl82/stock-sysex
+          exit $LASTEXITCODE
+      - name: Canonical native test storage
+        shell: pwsh
+        run: |
+          $canonicalTemp = node --input-type=module -e 'import {realpathSync} from "node:fs";console.log(realpathSync(process.env.RUNNER_TEMP))'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "TEMP=$canonicalTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$canonicalTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Native desktop and SysEx contracts
+        shell: pwsh
+        run: |
+          $desktopTests = Get-ChildItem desktop/test -Filter '*.test.mjs' | Select-Object -ExpandProperty FullName
+          node --test $desktopTests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $stockTests = Get-ChildItem tools/jieli-wl82/stock-sysex/test -Filter '*.test.mjs' | Select-Object -ExpandProperty FullName
+          node --test $stockTests
+          exit $LASTEXITCODE
+      - name: Fetch pinned official Windows runtime
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'node-v22.22.2-win-x64.zip'
+          Invoke-WebRequest -Uri 'https://nodejs.org/dist/v22.22.2/node-v22.22.2-win-x64.zip' -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7c93e9d92bf68c07182b471aa187e35ee6cd08ef0f24ab060dfff605fcc1c57c') { throw 'Windows runtime archive hash mismatch' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $env:RUNNER_TEMP
+          Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/nodejs/node/v22.22.2/LICENSE' -OutFile "$env:RUNNER_TEMP/Node-v22.22.2-LICENSE"
+      - name: Build Windows native payload
+        shell: pwsh
+        run: |
+          node site/scripts/build-fm1-panel.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Path 'tmp/native-win32-x64' -Force | Out-Null
+          node desktop/scripts/build-windows.mjs --out "$env:GITHUB_WORKSPACE/tmp/native-win32-x64/fm1-app-library" --node "$env:RUNNER_TEMP/node-v22.22.2-win-x64/node.exe" --node-license "$env:RUNNER_TEMP/Node-v22.22.2-LICENSE"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          tar -czf tmp/native-win32-x64.tar.gz -C tmp/native-win32-x64 fm1-app-library
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FM-1-Forge-native-win32-x64
+          path: tmp/native-win32-x64.tar.gz
+          if-no-files-found: error
+
+  macos:
+    name: macOS ${{ matrix.arch }} native package
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            node_sha256: db4b275b83736df67533529a18cc55de2549a8329ace6c7bcc68f8d22d3c9000
+          - runner: macos-15-intel
+            arch: x64
+            node_sha256: 12a6abb9c2902cf48a21120da13f87fde1ed1b71a13330712949e8db818708ba
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.2'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install pinned dependencies
+        run: |
+          npm ci --prefix site
+          npm ci --ignore-scripts --prefix tools/jieli-wl82/stock-sysex
+      - name: Canonical native test storage
+        run: |
+          canonical_temp="$(node --input-type=module -e 'import {realpathSync} from "node:fs";console.log(realpathSync(process.env.RUNNER_TEMP))')"
+          echo "TMPDIR=$canonical_temp" >> "$GITHUB_ENV"
+          echo "TEMP=$canonical_temp" >> "$GITHUB_ENV"
+          echo "TMP=$canonical_temp" >> "$GITHUB_ENV"
+      - name: Native desktop and SysEx contracts
+        run: |
+          node --test desktop/test/*.test.mjs
+          node --test tools/jieli-wl82/stock-sysex/test/*.test.mjs
+      - name: Fetch pinned official Mac runtime
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+          NODE_ARCHIVE_SHA256: ${{ matrix.node_sha256 }}
+        run: |
+          set -euo pipefail
+          test "$(node -p process.arch)" = "$TARGET_ARCH"
+          archive="node-v22.22.2-darwin-$TARGET_ARCH.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 "https://nodejs.org/dist/v22.22.2/$archive" --output "$RUNNER_TEMP/$archive"
+          printf '%s  %s\n' "$NODE_ARCHIVE_SHA256" "$RUNNER_TEMP/$archive" | shasum -a 256 --check
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+      - name: Build Mac native payload and passive acceptance
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          node site/scripts/build-fm1-panel.mjs
+          mkdir -p "tmp/fm1-forge-macos-$TARGET_ARCH/.agents/plugins"
+          node desktop/scripts/build-macos.mjs --arch "$TARGET_ARCH" --out "$GITHUB_WORKSPACE/tmp/fm1-forge-macos-$TARGET_ARCH/fm1-app-library" --node "$RUNNER_TEMP/node-v22.22.2-darwin-$TARGET_ARCH/bin/node" --node-license "$RUNNER_TEMP/node-v22.22.2-darwin-$TARGET_ARCH/LICENSE"
+          node desktop/scripts/stage-macos-marketplace.mjs "$GITHUB_WORKSPACE/tmp/fm1-forge-macos-$TARGET_ARCH"
+          node desktop/scripts/smoke-macos.mjs "$GITHUB_WORKSPACE/tmp/fm1-forge-macos-$TARGET_ARCH/fm1-app-library" "$TARGET_ARCH"
+          tar -czf "tmp/native-darwin-$TARGET_ARCH.tar.gz" -C "tmp/fm1-forge-macos-$TARGET_ARCH" fm1-app-library
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FM-1-Forge-native-darwin-${{ matrix.arch }}
+          path: tmp/native-darwin-*.tar.gz
+          if-no-files-found: error
+
+  universal:
+    name: Assemble one desktop plugin
+    needs: [desktop, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.2'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: FM-1-Forge-native-*
+          path: tmp/native-inputs
+          merge-multiple: true
+      - name: Verify and assemble all native payloads
+        run: |
+          set -euo pipefail
+          for target in win32-x64 darwin-arm64 darwin-x64; do
+            mkdir -p "tmp/native/$target"
+            tar -xzf "tmp/native-inputs/native-$target.tar.gz" -C "tmp/native/$target"
+          done
+          mkdir -p tmp/fm1-forge-desktop
+          node desktop/scripts/build-universal.mjs --out "$GITHUB_WORKSPACE/tmp/fm1-forge-desktop/fm1-app-library" --windows "$GITHUB_WORKSPACE/tmp/native/win32-x64/fm1-app-library" --macos-arm64 "$GITHUB_WORKSPACE/tmp/native/darwin-arm64/fm1-app-library" --macos-x64 "$GITHUB_WORKSPACE/tmp/native/darwin-x64/fm1-app-library" --source-revision "$GITHUB_SHA"
+          node desktop/scripts/stage-universal-marketplace.mjs "$GITHUB_WORKSPACE/tmp/fm1-forge-desktop"
+          tar -czf tmp/FM-1-Forge-Desktop-3.4.0-alpha.9.tar.gz -C tmp fm1-forge-desktop
+          (cd tmp && sha256sum FM-1-Forge-Desktop-3.4.0-alpha.9.tar.gz) > tmp/FM-1-Forge-Desktop-3.4.0-alpha.9.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FM-1-Forge-Desktop-3.4.0-alpha.9
+          path: |
+            tmp/FM-1-Forge-Desktop-3.4.0-alpha.9.tar.gz
+            tmp/FM-1-Forge-Desktop-3.4.0-alpha.9.tar.gz.sha256
+          if-no-files-found: error
+
+  universal-native:
+    name: One plugin install on ${{ matrix.target }}
+    needs: universal
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            target: win32-x64
+          - runner: macos-15
+            target: darwin-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.2'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - uses: actions/download-artifact@v4
+        with:
+          name: FM-1-Forge-Desktop-3.4.0-alpha.9
+          path: tmp/universal-archive
+      - name: Windows clean install and MCP acceptance
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm ci --prefix site
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm install --prefix "$env:RUNNER_TEMP/forge-codex" --ignore-scripts --no-audit --no-fund '@openai/codex@0.162.1'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $native = @(Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/forge-codex/node_modules" -Recurse -File -Filter codex.exe)
+          if ($native.Count -ne 1) { throw 'Expected exactly one native Codex executable' }
+          $env:CODEX_CLI_PATH = $native[0].FullName
+          tar -xzf tmp/universal-archive/FM-1-Forge-Desktop-3.4.0-alpha.9.tar.gz -C tmp
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node desktop/scripts/smoke-universal.mjs "$env:GITHUB_WORKSPACE/tmp/fm1-forge-desktop"
+          exit $LASTEXITCODE
+      - name: Mac clean install and MCP acceptance
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          npm ci --prefix site
+          npm install --prefix "$RUNNER_TEMP/forge-codex" --ignore-scripts --no-audit --no-fund '@openai/codex@0.162.1'
+          export CODEX_CLI_PATH="$(find "$RUNNER_TEMP/forge-codex/node_modules" -type f -name codex | head -n 1)"
+          test -x "$CODEX_CLI_PATH"
+          tar -xzf tmp/universal-archive/FM-1-Forge-Desktop-3.4.0-alpha.9.tar.gz -C tmp
+          node desktop/scripts/smoke-universal.mjs "$GITHUB_WORKSPACE/tmp/fm1-forge-desktop"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FM-1-Forge-Desktop-verification-${{ matrix.target }}
+          path: tmp/fm1-forge-desktop/UNIVERSAL-VERIFICATION-*.json
+          if-no-files-found: error

@@ -1,6 +1,173 @@
 # FM1 Codex integration handoff
 
-## Current implementation
+## Native tab artwork 3.1.4 (2026-10-12)
+
+The same private plugin ID now publishes 3.1.4 with separate transparent FM1
+tab artwork. Opening tools, server, quick actions and mentions advertise explicit
+light/dark PNG128 variants; packaged composer/logo paths use the same mark.
+The detailed header and favicon are retained. Site deployment
+`appgdep_6acc64a33c54819182291a9e30003ac9` succeeded with MCP enabled.
+
+Codex selects native local Apps tab icons from the service's exported entrypoints.
+The cached FM1 descriptor still has the older title/resource and SVG-any icon.
+A standalone package update does not prove the separate Sites App export has
+refreshed. A fresh native tab needs visual confirmation after metadata refresh.
+No cache edits, permission changes, replacement identities or hardware operations
+were used. See [verification](VERIFICATION.md#native-tab-artwork-314-2026-10-12).
+
+## Drag-and-drop module configuration (2026-10-12)
+
+Current UI resource: `ui://fm1/forge-panel-v6.html`; v5 and all earlier aliases
+remain served. The installed plugin package stays at 3.1.3; this Site update
+adds real drag/drop into USB, HAL, User module and Tweaks, with accessible
+Add/Remove/Replace controls. CDC and UBOOT helper are protected enabled defaults.
+Five user HAL access flags default true and round-trip through exports, drafts,
+native forms/files and context; strict v1 imports normalize into schema v2.
+The local firmware builder translates the flags into actual callback/input
+access controls while fixed diagnostics, recovery and master gain remain.
+Reopen an already loaded panel to obtain the graph; no device write is involved.
+
+
+## Native background contrast correction (2026-10-12)
+
+The current UI resource is `ui://fm1/forge-panel-v5.html`. An app-owned,
+full-viewport shell paints the selected opaque palette and pattern even when
+Codex makes html/body transparent. Standalone headings, Refresh, card gaps and
+footer use this surface. All 13 palettes and five patterns were checked against
+a white transparent-host fixture; package identity/version stays 3.1.3.
+Reopen an existing tab to load the updated UI; if registered entrypoints still
+select an older resource, refresh the existing connection metadata.
+The published model-tool native MCP App was checked with Codex's light host
+theme and an opaque black shell covering the viewport; see verification.
+
+## Native timer correction 3.1.3 (2026-10-12)
+
+The first real 3.1.2 native opening exposed **Illegal invocation** in the
+monitor's default clock. Native timer wrappers now preserve the Window receiver;
+the receiver-sensitive regression reproduces and checks this exact failure.
+The current release is 3.1.3. Codex still loaded cached 3.1.2 scripts after a
+reopen, so the canonical resource is now `ui://fm1/forge-panel-v4.html` while v3
+and older aliases remain available. Refresh the existing connection metadata
+if a new panel still selects v3. Native acceptance requires observing the new
+scripts and repeated automatic status checks, not just reopening a tab.
+The newly opened model-tool MCP App loaded the corrected scripts and refreshed
+to **FM1 disconnected** without a manual click; its checked age renewed on a
+later cycle. The existing native thread tab can still need reopening after its
+metadata refresh. Exact evidence is recorded in [verification](VERIFICATION.md).
+
+## Automatic connection refresh 3.1.2 (2026-10-12)
+
+The normal panel now refreshes passive FM1 presence while visible, on opening
+and on return/network recovery. Relay heartbeat and actual FM1 presence are
+separate. Inventory expires after 15 seconds; failed checks, old snapshots and
+delayed journal results cannot keep a COM port displayed as current. Hidden
+panels pause polling, teardown disposes it, and unresolved status requests are
+shared instead of resubmitted. Drafts, selected packages, approvals and progress
+remain intact. **Refresh** still reloads package metadata before a transfer.
+
+Reopen an already loaded native conversation tab once to load this release's
+code. Thereafter connection checks are automatic. See [the verification receipt](VERIFICATION.md)
+for exact publication and test evidence. The earlier native settings trusted-tool
+scope limitation and tab-icon acceptance remain separate outstanding items.
+No firmware write, official updater launch or helper elevation was performed.
+
+## Native panel patch 3.1.1 (2026-10-12)
+
+The current private account release is 3.1.1. ProTracker's special last-card
+span was removed and actual native DOM measurement confirmed all six cards
+equal. Native tab metadata now selects the existing 128×128 PNG explicitly;
+SVG remains in panel/logo assets. See the newest [verification receipt](VERIFICATION.md)
+for exact Site/plugin IDs and hashes, and [the opening guide](MCP_EXTENSIONS.md#conversation-tabs-and-icons).
+
+Use the conversation's New Tab → More tools… → Plugins and MCPs → FM1 Forge
+entrypoint to keep the plugin beside this chat. The global shortcut opens its
+own app view; expanded app-card tabs use another host icon path. The user
+confirmed that the native conversation tab stays open, but its icon still
+needed verification after the PNG patch. The trusted catalog still rejected
+`settings.read` in the settled native check. The initial snapshot label is not
+RPC acceptance. Refresh connection metadata and verify these before claiming
+complete native functionality. No transfer or helper elevation was performed.
+
+## FM1 Forge official SDK release 3.1.0 (2026-10-11)
+
+The current source integrates the official OpenAI MCP Extensions SDK 0.2.0,
+packaged from immutable upstream revision
+`0d606217705e0e71eb21fff009619b67b80611dc`. See [the extension guide](MCP_EXTENSIONS.md)
+and [package provenance](../site/vendor/openai-mcp-extensions.ORIGIN.md).
+The canonical resource is now `ui://fm1/forge-panel-v3.html`; all earlier aliases
+remain. The same plugin identity, private Site, bridge and saved transfers are
+retained. New migration `0003_equal_sage.sql` adds owner-scoped settings and
+configuration draft tables without changing existing job or proof data.
+
+Native settings, mentions, resources, extended forms, deep links, file editing,
+model context, current/new messages and drafts, file opening and onboarding are
+implemented with capability checks. Configuration drafts may be saved before
+hardware qualification; the existing firmware project handoff still requires
+the authoritative diagnostic baseline. No extension action bypasses the
+protected writer, approves a transfer or performs a hardware operation.
+
+Current release/deployment IDs, complete check results and actual native-host
+observations are recorded in the dated 3.1.0 entry in [VERIFICATION.md](VERIFICATION.md).
+The previous entries below are historical evidence.
+
+## FM1 Forge final release 3.0.1 (2026-10-11)
+
+The same owner-private plugin remains
+`plugins_6ac9ad3fc1c8819195580a4747c50052`, displayed as **FM1 Forge**.
+Final release `pluginrel_6acb15fe4ce88191bb211830c3425552` is version **3.0.1**.
+The Site URL and MCP endpoint remain
+`https://fm1-app-library.keitark.chatgpt.site/` and its `/mcp` endpoint.
+Final Site source `3e97b09eaa41515deda1401cd46d42397ee479ed` deployed as
+`appgdep_6acb15fa58908191bf74baadb8ab0b70`; deployment succeeded with MCP enabled.
+
+The current resource is `ui://fm1/forge-panel-v2.html`, retaining earlier
+aliases. It supplies the black/plain default, diagnostic onboarding,
+USB/system → HAL → user module designer, strict versioned project configuration
+and supported host message/copy fallback. Project creation uses durable
+per-owner diagnostic write/full-readback/startup proof; it remains available
+after recent-request history rotates. No browser preference or delivery
+snapshot can invent that proof, and uncertain jobs retain their original IDs.
+
+The final correction rejects `sdk-320` with either RGB444 LCD preset. The real
+SDK setter is `system_clock_set`; its 320 MHz table gives a 53 MHz LSB, while
+the 15/30 MHz RGB444 paths require 60 MHz. Stock DMA remains selectable with
+`sdk-320`; all LCD presets remain selectable with `sdk-default`.
+
+Full final Site tests, typechecking and production build passed. Integration
+verification passed 181 tests. The primary immutable-runtime suite ran 51
+tests with five skipped; its backend suite passed 35 tests. These checks do
+not qualify the firmware candidate or physical hardware.
+
+The newest native card has not yet been expanded; older expanded instances
+remain cached App Library UI. Native rendering and panel-to-conversation
+acceptance remain separate from publication. Runtime elevation was canceled:
+no new protected helper was started, no diagnostic installation occurred and
+no firmware write was performed. The ready protected-helper prerequisite and
+explicit transfer confirmation remain pending. See [VERIFICATION.md](VERIFICATION.md)
+and the current [Forge guide](FORGE_GUIDE.md).
+
+## Initial FM1 Forge 3.0.0 release (2026-10-11, historical)
+
+The existing private plugin was updated in place to **3.0.0**, displayed as FM1
+Forge. ID `plugins_6ac9ad3fc1c8819195580a4747c50052`, endpoint and privacy remain
+unchanged. Release `pluginrel_6acb135969b08191aafc2078dcbbc09f` was read back;
+the Codex plugin cache has version 3.0.0. The owner-private Site deployment
+`appgdep_6acb132eb06c8191b4dfc59c0b83ac18` succeeded with MCP enabled from pushed
+source `090cb049f4ad9c76d9484da7a162ef48d161f8d9`.
+
+Resource `ui://fm1/forge-panel-v1.html` adds opaque black/plain appearance,
+diagnostics onboarding, a graphical fixed USB/system → HAL → user module
+configuration and supported native message action/copy fallback. Previous
+resource aliases remain available. D1 records only exact terminal diagnostic
+write/full-readback/startup proof as a durable per-owner project gate.
+
+The live installed tool returns six profiles and `forge.diagnostic_baseline:null`;
+no diagnostic installation has been performed. Existing expanded App Library
+instances remain cached older UI, so native Forge rendering still needs the
+newest card expanded. This is distinct from the saved release and live service.
+The guide is [FORGE_GUIDE.md](FORGE_GUIDE.md).
+
+## Historical v6 implementation
 
 Site v6 is now published owner-private with MCP enabled. The installed Codex
 panel has loaded its **Appearance** controls and accepted Mint Light/Circuit
@@ -11,7 +178,7 @@ the host's trusted tool scope, and FM1 connector tools are absent from the
 current inventory despite Sites reporting an active MCP-ready v6. The cause
 is unconfirmed. The loaded Appearance controls still work; native reopening
 and current device tool availability require revalidation
-([issue #6](https://github.com/Keitark/fm1-marketplace-plugin/issues/6)). See the latest acceptance
+([issue #6](https://github.com/Keitark/fm-1-forge/issues/6)). See the latest acceptance
 in [VERIFICATION.md](VERIFICATION.md) and controls in [USER_GUIDE.md](USER_GUIDE.md).
 
 This repository now includes the FM1 Site adapter, MCP App panel, top-level

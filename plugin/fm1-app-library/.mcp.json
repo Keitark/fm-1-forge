@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "fm1-app-library": {
+      "type": "streamable-http",
+      "url": "https://fm1-app-library.keitark.chatgpt.site/mcp",
+      "headers": {}
+    }
+  }
+}

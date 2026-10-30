@@ -1,0 +1,9 @@
+{
+  "name": "fm1-stock-sysex-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22 <23" },
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "dependencies": { "@julusian/midi": "3.8.1" }
+}

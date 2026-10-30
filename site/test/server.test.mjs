@@ -15,11 +15,11 @@ async function request(env,path,value,{owner='alice',relay=false,origin,method='
   return {status:response.status,body:data?JSON.parse(data):null};
 }
 const api=(env,name,args={},options)=>request(env,'/api/fm1',{name,arguments:args},options);
-const rpc=(env,method,params={},options)=>request(env,'/mcp',{jsonrpc:'2.0',id:7,method,params:method==='initialize'?{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'FM1 test',version:'1'},...params}:params},options);
-test('generated migration creates expected durable storage',()=>{const env=database();assert.equal(env.DB.sqlite.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='table'").get().n,4);});
+const rpc=(env,method,params={},options)=>request(env,'/mcp',{jsonrpc:'2.0',id:7,method,params:method==='initialize'?{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'FM-1 test',version:'1'},...params}:params},options);
+test('generated migration creates expected durable storage',()=>{const env=database();assert.equal(env.DB.sqlite.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").get().n,7);});
 test('private user authentication is required for API and MCP tool execution',async()=>{const env=database();assert.equal((await api(env,'open_fm1_library',{}, {owner:null})).status,401);assert.equal((await rpc(env,'tools/call',{name:'open_fm1_library'},{owner:null})).status,401);});
 test('foreign origin is rejected on both transports',async()=>{const env=database();assert.equal((await api(env,'open_fm1_library',{}, {origin:'https://evil.test'})).status,403);assert.equal((await rpc(env,'initialize',{}, {origin:'https://evil.test'})).status,403);});
-test('disconnected library remains visible with all five profiles',async()=>{const env=database();const data=await callTool(env,'alice','open_fm1_library',{});assert.equal(data.profiles.length,5);assert.equal(data.relay.connected,false);assert.equal(data.catalog,null);});
+test('disconnected library shows diagnostics and five app profiles without an invented baseline',async()=>{const env=database();const data=await callTool(env,'alice','open_fm1_library',{});assert.equal(data.profiles.length,6);assert.equal(data.profiles[0].profile,'diagnostics');assert.equal(data.relay.connected,false);assert.equal(data.catalog,null);assert.equal(data.forge.diagnostic_baseline,null);});
 test('disconnected metadata requests are not queued',async()=>{const env=database();await assert.rejects(callTool(env,'alice','get_fm1_status',{}),/offline/);assert.equal(env.DB.sqlite.prepare('SELECT count(*) AS n FROM relay_tasks').get().n,0);});
 test('strict catalog IDs and arguments match bench contract',()=>{for(const id of ['NES','../nes','a'.repeat(65),''])assert.throws(()=>validate('plan_fm1_app',{catalog_id:id}));assert.deepEqual(validate('plan_fm1_app',{catalog_id:'nes-test'}),{catalog_id:'nes-test'});assert.throws(()=>validate('get_fm1_status',{path:'local'}));assert.throws(()=>validate('confirm_fm1_switch',{approval_id:'x'}));});
 test('relay requires separate bearer and valid heartbeat',async()=>{const env=database();assert.equal((await request(env,'/relay/heartbeat',{allow_switch:false})).status,401);assert.equal((await request(env,'/relay/heartbeat',{allow_switch:'yes'},{relay:true})).status,400);assert.equal((await request(env,'/relay/heartbeat',{allow_switch:false},{relay:true})).status,200);});
@@ -66,9 +66,284 @@ test('consumed approval retry survives expiry and offline relay',async()=>{const
 test('unconsumed expired approval remains unconsumed and unqueued',async()=>{const env=database();connect(env);cacheCatalog(env);const p=await callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'serial'});env.DB.sqlite.prepare('UPDATE switch_approvals SET expires=0').run();await assert.rejects(callTool(env,'alice','confirm_fm1_switch',{approval_id:p._approval}),/expired/);assert.equal(env.DB.sqlite.prepare('SELECT used FROM switch_approvals').get().used,0);});
 test('transaction deadline cannot consume approval without task',async()=>{const env=database();connect(env);cacheCatalog(env);const p=await callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'serial'});const prepare=env.DB.prepare.bind(env.DB);env.DB.prepare=sql=>{if(sql.startsWith('INSERT INTO relay_tasks')&&sql.includes('SELECT id,user_id'))env.DB.sqlite.prepare('UPDATE switch_approvals SET expires=0').run();return prepare(sql);};await assert.rejects(callTool(env,'alice','confirm_fm1_switch',{approval_id:p._approval}),/expired/);assert.equal(env.DB.sqlite.prepare('SELECT used FROM switch_approvals').get().used,0);assert.equal(env.DB.sqlite.prepare("SELECT count(*) AS n FROM relay_tasks WHERE operation='switch_app'").get().n,0);});
 test('changed digest and cross-user approval are rejected',async()=>{const env=database();connect(env);cacheCatalog(env);const p=await callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'serial'});await assert.rejects(callTool(env,'bob','confirm_fm1_switch',{approval_id:p._approval}),/not found/);const changed=structuredClone(catalog);changed.apps[0].variants[0].sha256='b'.repeat(64);cacheCatalog(env,'alice',changed);await assert.rejects(callTool(env,'alice','confirm_fm1_switch',{approval_id:p._approval}),/changed/);});
-test('MCP initialize, notifications, discovery and inline app resource',async()=>{const env=database();const init=await rpc(env,'initialize');assert.equal(init.body.id,7);assert.equal(init.body.result.protocolVersion,'2025-11-25');assert.ok(init.body.result.serverInfo.icons[0].src.startsWith('data:image/'));assert.equal((await request(env,'/mcp',{jsonrpc:'2.0',method:'notifications/initialized'})).status,202);const tools=(await rpc(env,'tools/list')).body.result.tools;assert.equal(tools.length,10);for(const name of ['confirm_fm1_switch','confirm_fm1_official_update'])assert.deepEqual(tools.find(t=>t.name===name)._meta.ui.visibility,['app']);const read=(await rpc(env,'resources/read',{uri:RESOURCE_URI})).body.result.contents[0];assert.equal(read.mimeType,'text/html;profile=mcp-app');assert.ok(read.text.includes('ui/resource-teardown'));assert.deepEqual(read._meta.ui.csp,{connectDomains:[],resourceDomains:[]});assert.equal((await request(env,'/mcp',null,{method:'GET'})).status,405);});
+test('MCP initialize, notifications, discovery and inline app resource',async()=>{const env=database();const init=await rpc(env,'initialize');assert.equal(init.body.id,7);assert.equal(init.body.result.protocolVersion,'2025-11-25');assert.ok(init.body.result.serverInfo.icons[0].src.startsWith('data:image/'));assert.equal((await request(env,'/mcp',{jsonrpc:'2.0',method:'notifications/initialized'})).status,202);const tools=(await rpc(env,'tools/list')).body.result.tools;assert.equal(tools.length,22);for(const name of ['confirm_fm1_switch','confirm_fm1_official_update','open_fm1_local_import'])assert.deepEqual(tools.find(t=>t.name===name)._meta.ui.visibility,['app']);const read=(await rpc(env,'resources/read',{uri:RESOURCE_URI})).body.result.contents[0];assert.equal(read.mimeType,'text/html;profile=mcp-app');assert.ok(read.text.includes('ui/resource-teardown'));assert.deepEqual(read._meta.ui.csp,{connectDomains:[],resourceDomains:[]});assert.equal((await request(env,'/mcp',null,{method:'GET'})).status,405);});
+
+test('local importer requires a connected bench and accepts no local path or payload',async()=>{
+  const env=database();await assert.rejects(callTool(env,'alice','open_fm1_local_import',{}),/offline/);
+  connect(env,false,false);
+  for(const args of [{path:'F:\\private'}, {url:'https://other.test'}, {bundles:[]}, {image:'raw'}])await assert.rejects(callTool(env,'alice','open_fm1_local_import',args),/arguments/);
+  assert.equal(env.DB.sqlite.prepare('SELECT count(*) AS n FROM relay_tasks').get().n,0);
+  assert.deepEqual(validate('open_fm1_local_import',{}),{});
+});
+test('local importer launch is owner scoped and coalesced without transfer approvals',async()=>{
+  const env=database();connect(env,false,false);
+  const [first,second]=await Promise.all([callTool(env,'alice','open_fm1_local_import',{}),callTool(env,'alice','open_fm1_local_import',{})]);
+  assert.equal(first.request_id,second.request_id);
+  const bob=await callTool(env,'bob','open_fm1_local_import',{});assert.notEqual(first.request_id,bob.request_id);
+  await assert.rejects(callTool(env,'bob','get_fm1_request',{request_id:first.request_id}),/not found/);
+  const tasks=env.DB.sqlite.prepare('SELECT * FROM relay_tasks ORDER BY rowid').all();assert.equal(tasks.length,2);
+  assert.ok(tasks.every(task=>task.operation==='open_local_import'&&task.arguments==='{}'));
+  for(const table of ['switch_approvals','official_update_approvals'])assert.equal(env.DB.sqlite.prepare('SELECT count(*) AS n FROM '+table).get().n,0);
+  const poll=await request(env,'/relay/poll',{}, {relay:true});assert.deepEqual(poll.body.tasks,[{id:first.request_id,operation:'open_local_import',arguments:{}}]);
+  env.DB.sqlite.prepare('UPDATE relay_tasks SET dispatched=? WHERE id=?').run(seconds()-16,first.request_id);
+  const retry=await request(env,'/relay/poll',{}, {relay:true});assert.deepEqual(retry.body.tasks,poll.body.tasks);
+});
+test('local importer receipt excludes local authority and preserves a saved uncertain outcome',async()=>{
+  const env=database();connect(env);const queued=await callTool(env,'alice','open_fm1_local_import',{});
+  await request(env,'/relay/poll',{}, {relay:true});
+  const report={id:queued.request_id,status:'unknown',data:{id:queued.request_id,opened:false,device_io:false,expires_in:300,error:'local_import_launch_unknown',
+    url:'http://127.0.0.1:9770/#secret',path:'F:\\private',token:'secret',image:'raw'}};
+  assert.deepEqual((await request(env,'/relay/result',report,{relay:true})).body,{saved:true});
+  const saved=await callTool(env,'alice','get_fm1_request',{request_id:queued.request_id});assert.equal(saved.state,'unknown');
+  assert.deepEqual(saved.data,{id:queued.request_id,opened:false,device_io:false,expires_in:300,error:'local_import_launch_unknown'});
+  assert.deepEqual((await request(env,'/relay/result',report,{relay:true})).body,{saved:true});
+  assert.equal((await request(env,'/relay/result',{...report,status:'succeeded'},{relay:true})).status,409);
+});
+test('local importer rejects a mismatched or unsafe bridge receipt',async()=>{
+  const env=database();connect(env);const queued=await callTool(env,'alice','open_fm1_local_import',{});
+  await request(env,'/relay/poll',{}, {relay:true});
+  const data={id:queued.request_id,opened:true,device_io:false,expires_in:300};
+  for(const fields of [{id:'f'.repeat(32)}, {opened:'yes'}, {device_io:true}, {expires_in:301}, {error:'C:\\private\\exception'}])assert.equal((await request(env,'/relay/result',{id:queued.request_id,status:'succeeded',data:{...data,...fields}},{relay:true})).status,400);
+  assert.equal(env.DB.sqlite.prepare('SELECT result FROM relay_tasks WHERE id=?').get(queued.request_id).result,null);
+});
+test('saved local sets remain metadata only, owner scoped and backward compatible',async()=>{
+  const env=database();connect(env);cacheCatalog(env);
+  assert.deepEqual((await callTool(env,'alice','open_fm1_library',{})).catalog.apps,catalog.apps);
+  const queued=await callTool(env,'alice','list_fm1_apps',{});await request(env,'/relay/poll',{}, {relay:true});
+  const sets=[{id:'a'.repeat(32),name:'My apps',members:[{id:'nes-test',profile:'nes',title:'NES',variant:'local',sha256:digest,path:'F:\\private',image:'raw'}],imported:seconds(),device_io:false,token:'secret'}];
+  await request(env,'/relay/result',{id:queued.request_id,status:'succeeded',data:{...catalog,sets}},{relay:true});
+  const library=await callTool(env,'alice','open_fm1_library',{});assert.deepEqual(library.catalog.apps,catalog.apps);
+  assert.equal(library.catalog.sets[0].name,'My apps');assert.equal(library.catalog.sets[0].members[0].sha256,digest);
+  assert.ok(!JSON.stringify(library.catalog).includes('secret'));assert.ok(!JSON.stringify(library.catalog).includes('private'));
+  assert.ok(!('image' in library.catalog.sets[0].members[0]));assert.equal((await callTool(env,'bob','open_fm1_library',{})).catalog,null);
+});
 test('unknown JSON-RPC method and tool input produce explicit errors',async()=>{const env=database();assert.equal((await rpc(env,'arbitrary/exec')).body.error.code,-32601);const answer=await rpc(env,'tools/call',{name:'plan_fm1_app',arguments:{catalog_id:'../'}});assert.equal(answer.body.result.isError,true);});
 test('server requires DB binding and never creates schema in requests',async()=>{const env=database();delete env.DB;assert.equal((await api(env,'open_fm1_library')).status,503);});
+
+const serialInventory={engine:{active:null,blocked_unknown:false,storage_fault:false},device:{serial_ports:[{port:'COM10'}],uboot_disks:[],midi_endpoints:[],update_mode:{mode:'serial',app_entry_method:'serial'}}};
+const absentInventory={engine:{active:null,blocked_unknown:false,storage_fault:false},device:{serial_ports:[],uboot_disks:[],midi_endpoints:[],update_mode:{mode:'disconnected',app_entry_method:null}}};
+async function statusReport(env,{owner='alice',status='succeeded',data=serialInventory}={}){
+  const queued=await callTool(env,owner,'get_fm1_status',{});
+  await request(env,'/relay/poll',{}, {relay:true});
+  const report={id:queued.request_id,status,...(status==='succeeded'?{data}:{error:'metadata unavailable'})};
+  assert.equal((await request(env,'/relay/result',report,{relay:true})).status,200);
+  return {queued,report};
+}
+
+test('inventory freshness is explicit and unavailable before the owner receives status metadata',async()=>{
+  const env=database();connect(env);
+  const snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.inventory,null);
+  assert.deepEqual(snapshot.inventory_status,{state:'unavailable',observed_at:null,age_seconds:null,max_age_seconds:15,request_id:null});
+  assert.equal(snapshot.relay.connected,true);
+});
+
+test('a successful status ACK stores its first Site receipt and retains the original queue age bound',async()=>{
+  const env=database();connect(env);
+  const queued=await callTool(env,'alice','get_fm1_status',{});
+  env.DB.sqlite.prepare('UPDATE relay_tasks SET created=? WHERE id=?').run(seconds()-5,queued.request_id);
+  await request(env,'/relay/poll',{}, {relay:true});
+  const before=seconds(),report={id:queued.request_id,status:'succeeded',data:serialInventory};
+  assert.equal((await request(env,'/relay/result',report,{relay:true})).status,200);
+  const snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.inventory_status.state,'fresh');assert.equal(snapshot.inventory_status.request_id,queued.request_id);
+  assert.ok(snapshot.inventory_status.observed_at>=before&&snapshot.inventory_status.observed_at<=seconds());assert.ok(snapshot.inventory_status.age_seconds>=5&&snapshot.inventory_status.age_seconds<=6);
+  assert.deepEqual(snapshot.inventory,serialInventory);
+  const saved=await callTool(env,'alice','get_fm1_request',{request_id:queued.request_id});
+  assert.ok(!Object.hasOwn(saved,'_site_inventory_observed_at'));assert.ok(!JSON.stringify(snapshot.recent_requests).includes('_site_inventory_observed_at'));
+});
+
+test('a newly acknowledged old relay outbox sample remains stale rather than renewing device presence',async()=>{
+  const env=database();connect(env);
+  const queued=await callTool(env,'alice','get_fm1_status',{});
+  // Claim promptly, sample the device, then model an hours-delayed Site ACK.
+  await request(env,'/relay/poll',{}, {relay:true});
+  env.DB.sqlite.prepare('UPDATE relay_tasks SET created=?,dispatched=? WHERE id=?').run(seconds()-7200,seconds(),queued.request_id);
+  const before=seconds();assert.equal((await request(env,'/relay/result',{id:queued.request_id,status:'succeeded',data:serialInventory},{relay:true})).status,200);
+  const snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.inventory_status.state,'stale');assert.ok(snapshot.inventory_status.observed_at>=before);assert.ok(snapshot.inventory_status.age_seconds>=7200);assert.equal(snapshot.inventory.device.serial_ports[0].port,'COM10');
+});
+
+const sampledInventory=(observation)=>({...serialInventory,device:{...serialInventory.device,observation}});
+
+test('a fresh local enumeration excludes thirty seconds of queue wait from inventory age',async t=>{
+  t.mock.method(Date,'now',()=>1000000);
+  const env=database();connect(env);
+  const queued=await callTool(env,'alice','get_fm1_status',{});
+  env.DB.sqlite.prepare('UPDATE relay_tasks SET created=? WHERE id=?').run(970,queued.request_id);
+  await request(env,'/relay/poll',{}, {relay:true});
+  const data=sampledInventory({started_at:997,completed_at:999});
+  assert.equal((await request(env,'/relay/result',{id:queued.request_id,status:'succeeded',data},{relay:true})).status,200);
+  const snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.inventory_status.state,'fresh');assert.equal(snapshot.inventory_status.age_seconds,3);
+  assert.equal(snapshot.inventory_status.observed_at,1000);assert.equal(snapshot.inventory_status.max_age_seconds,15);
+  assert.deepEqual(snapshot.inventory,data);
+});
+
+test('an upgraded observation delayed in an immutable outbox stays stale at its first Site receipt',async t=>{
+  let instant=970;t.mock.method(Date,'now',()=>instant*1000);
+  const env=database();connect(env);
+  const queued=await callTool(env,'alice','get_fm1_status',{});
+  instant=1000;connect(env);await request(env,'/relay/poll',{}, {relay:true});
+  const data=sampledInventory({started_at:997,completed_at:999});
+  instant=1060;connect(env);
+  assert.equal((await request(env,'/relay/result',{id:queued.request_id,status:'succeeded',data},{relay:true})).status,200);
+  const snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.inventory_status.state,'stale');assert.equal(snapshot.inventory_status.age_seconds,63);
+  assert.equal(snapshot.inventory_status.observed_at,1060);assert.equal(snapshot.inventory.device.serial_ports[0].port,'COM10');
+});
+
+test('malformed or impossible observation intervals fail closed without the legacy queue-age fallback',async t=>{
+  t.mock.method(Date,'now',()=>1000000);
+  const invalid=[null,[],{},true,{started_at:997},{started_at:'997',completed_at:999},
+    {started_at:0,completed_at:999},{started_at:997.5,completed_at:999},
+    {started_at:997,completed_at:Number.MAX_SAFE_INTEGER+1},
+    {started_at:1001,completed_at:1001},{started_at:997,completed_at:1001},
+    {started_at:999,completed_at:997},{started_at:996,completed_at:999},
+    {started_at:980,completed_at:999}];
+  for(const observation of invalid){
+    const env=database();connect(env);cacheCatalog(env);
+    const queued=await callTool(env,'alice','get_fm1_status',{});
+    env.DB.sqlite.prepare('UPDATE relay_tasks SET created=? WHERE id=?').run(997,queued.request_id);
+    await request(env,'/relay/poll',{}, {relay:true});
+    const data=sampledInventory(observation);
+    assert.equal((await request(env,'/relay/result',{id:queued.request_id,status:'succeeded',data},{relay:true})).status,200);
+    const snapshot=await callTool(env,'alice','open_fm1_library',{});
+    assert.equal(snapshot.inventory_status.state,'stale',JSON.stringify(observation));
+    assert.equal(snapshot.inventory_status.age_seconds,null,JSON.stringify(observation));
+    await assert.rejects(callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'auto'}),/fresh inventory/);
+  }
+});
+
+test('upgraded samples validate queue creation and first Site receipt as positive ordered safe integers',async t=>{
+  t.mock.method(Date,'now',()=>1000000);
+  for(const [created,observed] of [[0,1000],[998,1000],[997.5,1000],[997,0],[997,998],[997,1001],[997,1000.5]]){
+    const env=database();connect(env);
+    const data=sampledInventory({started_at:997,completed_at:999});
+    cacheInventory(env,'alice',data,{observedAt:observed});
+    env.DB.sqlite.prepare('UPDATE relay_tasks SET created=? WHERE id=?').run(created,'d'.repeat(32));
+    const snapshot=await callTool(env,'alice','open_fm1_library',{});
+    assert.equal(snapshot.inventory_status.state,'stale',JSON.stringify({created,observed}));
+    assert.equal(snapshot.inventory_status.age_seconds,null);
+  }
+});
+
+test('observation duration keeps the fifteen-second limit inclusive and rejects a longer enumeration',async t=>{
+  t.mock.method(Date,'now',()=>1000000);
+  for(const [started_at,state,age] of [[985,'fresh',15],[984,'stale',null]]){
+    const env=database();connect(env);
+    cacheInventory(env,'alice',sampledInventory({started_at,completed_at:1000}));
+    env.DB.sqlite.prepare('UPDATE relay_tasks SET created=? WHERE id=?').run(970,'d'.repeat(32));
+    const snapshot=await callTool(env,'alice','open_fm1_library',{});
+    assert.equal(snapshot.inventory_status.state,state);assert.equal(snapshot.inventory_status.age_seconds,age);
+    assert.equal(snapshot.inventory_status.max_age_seconds,15);
+  }
+});
+
+test('duplicate upgraded results preserve both the first receipt and original sample interval',async t=>{
+  let instant=1000;t.mock.method(Date,'now',()=>instant*1000);
+  const env=database();connect(env);
+  const queued=await callTool(env,'alice','get_fm1_status',{});
+  env.DB.sqlite.prepare('UPDATE relay_tasks SET created=? WHERE id=?').run(970,queued.request_id);
+  await request(env,'/relay/poll',{}, {relay:true});
+  const data=sampledInventory({started_at:997,completed_at:999}),report={id:queued.request_id,status:'succeeded',data};
+  assert.equal((await request(env,'/relay/result',report,{relay:true})).status,200);
+  const first=env.DB.sqlite.prepare('SELECT result FROM relay_tasks WHERE id=?').get(queued.request_id).result;
+  instant=1060;connect(env);
+  assert.equal((await request(env,'/relay/result',report,{relay:true})).status,200);
+  assert.equal(env.DB.sqlite.prepare('SELECT result FROM relay_tasks WHERE id=?').get(queued.request_id).result,first);
+  const snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.inventory_status.state,'stale');assert.equal(snapshot.inventory_status.age_seconds,63);
+  assert.equal(snapshot.inventory_status.observed_at,1000);
+  assert.equal((await request(env,'/relay/result',{...report,data:sampledInventory({started_at:1057,completed_at:1059})},{relay:true})).status,409);
+});
+
+test('duplicate status acknowledgments preserve the original observation and cannot renew stale inventory',async()=>{
+  const env=database();connect(env);const {queued,report}=await statusReport(env);
+  const row=env.DB.sqlite.prepare('SELECT result FROM relay_tasks WHERE id=?').get(queued.request_id),stored=JSON.parse(row.result);
+  const original=seconds()-60;stored._site_inventory_observed_at=original;
+  env.DB.sqlite.prepare('UPDATE relay_tasks SET result=? WHERE id=?').run(JSON.stringify(stored),queued.request_id);
+  assert.equal((await request(env,'/relay/result',report,{relay:true})).status,200);
+  const snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.inventory_status.state,'stale');assert.equal(snapshot.inventory_status.observed_at,original);assert.ok(snapshot.inventory_status.age_seconds>=60);
+  assert.equal(JSON.parse(env.DB.sqlite.prepare('SELECT result FROM relay_tasks WHERE id=?').get(queued.request_id).result)._site_inventory_observed_at,original);
+  assert.equal((await request(env,'/relay/result',{...report,data:absentInventory},{relay:true})).status,409);
+});
+
+test('legacy inventory without a receipt timestamp and expired observations remain saved but stale',async()=>{
+  for(const observedAt of [null,seconds()-16]){
+    const env=database();connect(env);cacheInventory(env,'alice',serialInventory,{observedAt});
+    const snapshot=await callTool(env,'alice','open_fm1_library',{});
+    assert.equal(snapshot.relay.connected,true);assert.equal(snapshot.inventory_status.state,'stale');assert.deepEqual(snapshot.inventory,serialInventory);
+    assert.equal(snapshot.inventory_status.observed_at,observedAt);assert.equal(snapshot.inventory_status.max_age_seconds,15);
+    if(observedAt===null)assert.equal(snapshot.inventory_status.age_seconds,null);
+  }
+});
+
+test('relay heartbeat health never renews inventory or claims that FM-1 is physically present',async()=>{
+  const env=database();connect(env);cacheInventory(env,'alice',serialInventory,{observedAt:seconds()-60});
+  assert.equal((await request(env,'/relay/heartbeat',{allow_switch:false},{relay:true})).status,200);
+  let snapshot=await callTool(env,'alice','open_fm1_library',{});assert.equal(snapshot.relay.connected,true);assert.equal(snapshot.inventory_status.state,'stale');
+  cacheInventory(env,'alice',serialInventory);
+  env.DB.sqlite.prepare('UPDATE relay_state SET last_seen=?').run(seconds()-31);
+  snapshot=await callTool(env,'alice','open_fm1_library',{});assert.equal(snapshot.relay.connected,false);assert.equal(snapshot.inventory_status.state,'stale');assert.ok(snapshot.inventory_status.age_seconds<=1);
+});
+
+test('new failed or unknown status invalidates the older success until a new successful observation',async()=>{
+  for(const status of ['failed','unknown']){
+    const env=database();connect(env);cacheInventory(env,'alice',serialInventory);
+    const failed=await statusReport(env,{status});
+    let snapshot=await callTool(env,'alice','open_fm1_library',{});
+    assert.equal(snapshot.inventory,null);assert.equal(snapshot.inventory_status.state,'error');assert.equal(snapshot.inventory_status.request_id,failed.queued.request_id);assert.equal(snapshot.inventory_status.observed_at,null);
+    assert.equal((await callTool(env,'alice','get_fm1_request',{request_id:'d'.repeat(32)})).data.device.serial_ports[0].port,'COM10');
+    const refreshed=await statusReport(env,{data:absentInventory});snapshot=await callTool(env,'alice','open_fm1_library',{});
+    assert.equal(snapshot.inventory_status.state,'fresh');assert.equal(snapshot.inventory_status.request_id,refreshed.queued.request_id);assert.deepEqual(snapshot.inventory.device.serial_ports,[]);assert.equal(snapshot.inventory.device.update_mode.mode,'disconnected');
+  }
+});
+
+test('a successful bridge response containing an enumeration error is unavailable rather than a fresh disconnect',async()=>{
+  const env=database();connect(env);
+  const failed=structuredClone(absentInventory);failed.device.inventory_error='Windows disk enumeration failed';failed.device.update_mode={mode:'unknown',app_entry_method:null};
+  await statusReport(env,{data:failed});
+  const snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.relay.connected,true);assert.equal(snapshot.inventory_status.state,'error');assert.equal(snapshot.inventory.device.inventory_error,'Windows disk enumeration failed');
+  cacheCatalog(env);await assert.rejects(callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'auto'}),/fresh inventory/);
+});
+
+test('pending refresh retains the last completed observation and each owner has isolated freshness',async()=>{
+  const env=database();connect(env);const alice=await statusReport(env);
+  const pending=await callTool(env,'alice','get_fm1_status',{});
+  let snapshot=await callTool(env,'alice','open_fm1_library',{});
+  assert.equal(snapshot.inventory_status.request_id,alice.queued.request_id);assert.equal(snapshot.inventory_status.state,'fresh');assert.equal(snapshot.recent_requests.find(item=>item.id===pending.request_id).state,'pending');
+  assert.equal((await callTool(env,'bob','open_fm1_library',{})).inventory_status.state,'unavailable');
+  // Complete the older pending Alice refresh before dispatching Bob's request.
+  await request(env,'/relay/poll',{}, {relay:true});await request(env,'/relay/result',{id:pending.request_id,status:'succeeded',data:serialInventory},{relay:true});
+  await statusReport(env,{owner:'bob',status:'failed'});
+  assert.equal((await callTool(env,'bob','open_fm1_library',{})).inventory_status.state,'error');
+  snapshot=await callTool(env,'alice','open_fm1_library',{});assert.equal(snapshot.inventory_status.state,'fresh');assert.equal(snapshot.inventory.device.serial_ports[0].port,'COM10');
+});
+
+test('automatic routing cannot stage from stale inventory while explicit routing preserves its contract',async()=>{
+  const env=database();connect(env);cacheCatalog(env);cacheInventory(env,'alice',serialInventory,{observedAt:seconds()-16});
+  await assert.rejects(callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'auto'}),/fresh inventory/);
+  assert.equal(env.DB.sqlite.prepare('SELECT count(*) AS n FROM switch_approvals').get().n,0);
+  assert.ok((await callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'serial'}))._approval);
+  cacheInventory(env,'alice',serialInventory);
+  assert.ok((await callTool(env,'alice','prepare_fm1_switch',{catalog_id:'nes-test',entry_method:'auto'}))._approval);
+});
+
+test('overlapping status refreshes share one owner request and do not coalesce across owners or operations',async()=>{
+  const env=database();connect(env);
+  const first=await Promise.all([callTool(env,'alice','get_fm1_status',{}),callTool(env,'alice','get_fm1_status',{})]);
+  assert.equal(first[0].request_id,first[1].request_id);assert.equal(env.DB.sqlite.prepare("SELECT count(*) AS n FROM relay_tasks WHERE operation='status'").get().n,1);
+  await request(env,'/relay/poll',{}, {relay:true});
+  assert.equal((await callTool(env,'alice','get_fm1_status',{})).request_id,first[0].request_id);
+  const bob=await callTool(env,'bob','get_fm1_status',{});assert.notEqual(bob.request_id,first[0].request_id);
+  const catalog=await Promise.all([callTool(env,'alice','list_fm1_apps',{}),callTool(env,'alice','list_fm1_apps',{})]);assert.notEqual(catalog[0].request_id,catalog[1].request_id);
+  await request(env,'/relay/result',{id:first[0].request_id,status:'succeeded',data:absentInventory},{relay:true});
+  const next=await callTool(env,'alice','get_fm1_status',{});assert.notEqual(next.request_id,first[0].request_id);
+  assert.equal(env.DB.sqlite.prepare("SELECT count(*) AS n FROM relay_tasks WHERE operation='status' AND user_id='alice'").get().n,2);
+});
 
 const officialInventory=(sha256=digest)=>({device:{
   update_mode:{mode:'sysex',app_entry_method:null,official_available:true},
@@ -76,6 +351,14 @@ const officialInventory=(sha256=digest)=>({device:{
 },engine:{active:null,blocked_unknown:false,updater_handoff:false}});
 function officialBench(){const env=database();connect(env,true,true);cacheInventory(env,'alice',officialInventory());return env;}
 const officialTasks=env=>env.DB.sqlite.prepare("SELECT count(*) AS n FROM relay_tasks WHERE operation='official_updater'").get().n;
+
+test('official review and confirmation require fresh observations and stale approvals remain unconsumed',async()=>{
+  const env=officialBench(),prepared=await callTool(env,'alice','prepare_fm1_official_update',{});
+  cacheInventory(env,'alice',officialInventory(),{observedAt:seconds()-16});
+  await assert.rejects(callTool(env,'alice','prepare_fm1_official_update',{}),/fresh/);
+  await assert.rejects(callTool(env,'alice','confirm_fm1_official_update',{approval_id:prepared._approval}),/fresh/);
+  assert.equal(env.DB.sqlite.prepare('SELECT used FROM official_update_approvals WHERE id=?').get(prepared._approval).used,0);assert.equal(officialTasks(env),0);
+});
 
 test('official tool input never accepts an executable, digest override or arbitrary operation',()=>{
   assert.deepEqual(validate('prepare_fm1_official_update',{}),{});
